@@ -1,0 +1,28 @@
+{
+  "name": "skbox",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm build:packages && pnpm --parallel dev",
+    "dev:web": "pnpm --filter web dev",
+    "dev:api": "pnpm build:packages && pnpm --filter api dev",
+    "build:packages": "pnpm --filter @skbox/shared build && pnpm --filter @skbox/db build",
+    "build": "pnpm build:packages && pnpm --filter web build && pnpm --filter api build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @skbox/db generate",
+    "db:migrate": "pnpm --filter @skbox/db migrate:dev",
+    "db:deploy": "pnpm --filter @skbox/db migrate:deploy",
+    "db:seed": "pnpm --filter @skbox/db seed",
+    "db:studio": "pnpm --filter @skbox/db studio",
+    "docker:up": "docker compose -f docker/docker-compose.yml up -d",
+    "docker:down": "docker compose -f docker/docker-compose.yml down"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

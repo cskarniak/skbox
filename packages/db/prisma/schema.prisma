@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Device {
+  id        String   @id @default(cuid())
+  name      String
+  protocol  String
+  type      String
+  status    String   @default("offline")
+  room      String?
+  state     String   @default("{}")
+  address   String?
+  lastSeen  DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events DeviceEvent[]
+
+  @@index([protocol])
+  @@index([room])
+}
+
+model DeviceEvent {
+  id        String   @id @default(cuid())
+  deviceId  String
+  event     String
+  data      String   @default("{}")
+  timestamp DateTime @default(now())
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId, timestamp])
+}
+
+model Room {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  icon      String?
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+}
