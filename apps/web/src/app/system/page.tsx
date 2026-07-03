@@ -27,6 +27,7 @@ import {
   IconThermometer,
   IconClock,
   IconWorldWww,
+  IconWind,
 } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
@@ -54,6 +55,7 @@ interface SystemHealth {
     governor: string | null;
   };
   temperatures: { label: string; celsius: number }[];
+  fans: { label: string; rpm: number; minRpm: number | null; maxRpm: number | null }[];
   memory: {
     totalMB: number;
     usedMB: number;
@@ -264,7 +266,7 @@ export default function SystemPage() {
               />
             </SimpleGrid>
 
-            <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="md">
+            <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="md">
               <Card shadow="sm" padding="lg" withBorder>
                 <Text size="sm" c="dimmed" mb="xs">
                   Températures
@@ -287,6 +289,33 @@ export default function SystemPage() {
                         </Badge>
                       </Group>
                     ))}
+                  </Stack>
+                )}
+              </Card>
+
+              <Card shadow="sm" padding="lg" withBorder>
+                <Text size="sm" c="dimmed" mb="xs">
+                  Ventilateur
+                </Text>
+                {health.fans.length === 0 ? (
+                  <Text size="sm" c="dimmed">
+                    Aucun ventilateur détecté
+                  </Text>
+                ) : (
+                  <Stack gap={6}>
+                    {health.fans.map((f) => (
+                      <Group justify="space-between" key={f.label}>
+                        <Text size="sm">{f.label}</Text>
+                        <Badge color="blue" variant="light" leftSection={<IconWind size={12} />}>
+                          {f.rpm} RPM
+                        </Badge>
+                      </Group>
+                    ))}
+                    {health.fans[0]?.minRpm !== null && health.fans[0]?.maxRpm !== null && (
+                      <Text size="xs" c="dimmed">
+                        Plage : {health.fans[0].minRpm} – {health.fans[0].maxRpm} RPM
+                      </Text>
+                    )}
                   </Stack>
                 )}
               </Card>

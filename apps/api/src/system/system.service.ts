@@ -26,6 +26,7 @@ export interface SystemHealth {
     governor: string | null;
   };
   temperatures: { label: string; celsius: number }[];
+  fans: { label: string; rpm: number; minRpm: number | null; maxRpm: number | null }[];
   memory: {
     totalMB: number;
     usedMB: number;
@@ -57,6 +58,7 @@ export class SystemService {
     const [
       governor,
       temperatures,
+      fans,
       disk,
       smart,
       docker,
@@ -64,6 +66,7 @@ export class SystemService {
     ] = await Promise.all([
       this.readGovernor(),
       this.readTemperatures(),
+      this.readFans(),
       this.readDisk(),
       this.readSmart(),
       this.readDocker(),
@@ -92,6 +95,7 @@ export class SystemService {
         governor,
       },
       temperatures,
+      fans,
       memory: {
         totalMB,
         usedMB,
@@ -133,10 +137,30 @@ export class SystemService {
     const lines = out.split('\n');
     for (const line of lines) {
       const match = line.match(
-        /^(Package id 0|Core \d+|Exhaust|TM0P|TA0P)\s*:\s*\+?(-?\d+(\.\d+)?)/,
+        /^(Package id 0|Core \d+|TM0P|TA0P)\s*:\s*\+?(-?\d+(\.\d+)?)/,
       );
       if (match) {
         result.push({ label: match[1], celsius: parseFloat(match[2]) });
+      }
+    }
+    return result;
+  }
+
+  private async readFans(): Promise<SystemHealth['fans']> {
+    const out = await this.run('sensors');
+    if (!out) return [];
+    const result: SystemHealth['fans'] = [];
+    for (const line of out.split('\n')) {
+      const match = line.match(
+        /^(\w+)\s*:\s*(\d+)\s*RPM\s*(?:\(min\s*=\s*(\d+)\s*RPM,\s*max\s*=\s*(\d+)\s*RPM\))?/,
+      );
+      if (match) {
+        result.push({
+          label: match[1],
+          rpm: parseInt(match[2], 10),
+          minRpm: match[3] ? parseInt(match[3], 10) : null,
+          maxRpm: match[4] ? parseInt(match[4], 10) : null,
+        });
       }
     }
     return result;
