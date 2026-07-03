@@ -38,6 +38,7 @@ import {
   IconLayoutGrid,
   IconGridDots,
   IconLayoutList,
+  IconServer,
 } from '@tabler/icons-react';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -358,7 +359,10 @@ export default function HomePage() {
           <Group gap="md">
             <Tabs
               value="devices"
-              onChange={(v) => v === 'scenarios' && router.push('/scenarios')}
+              onChange={(v) => {
+                if (v === 'scenarios') router.push('/scenarios');
+                if (v === 'system') router.push('/system');
+              }}
             >
               <Tabs.List>
                 <Tabs.Tab value="devices" leftSection={<IconSmartHome size={16} />}>
@@ -366,6 +370,9 @@ export default function HomePage() {
                 </Tabs.Tab>
                 <Tabs.Tab value="scenarios" leftSection={<IconScript size={16} />}>
                   Scénarios
+                </Tabs.Tab>
+                <Tabs.Tab value="system" leftSection={<IconServer size={16} />}>
+                  Système
                 </Tabs.Tab>
               </Tabs.List>
             </Tabs>

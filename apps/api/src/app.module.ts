@@ -6,6 +6,7 @@ import { RoomsModule } from './rooms/rooms.module';
 import { ZigbeeModule } from './zigbee/zigbee.module';
 import { RfxcomModule } from './rfxcom/rfxcom.module';
 import { ScenariosModule } from './scenarios/scenarios.module';
+import { SystemModule } from './system/system.module';
 import { PrismaModule } from './prisma.module';
 
 @Module({
@@ -18,6 +19,7 @@ import { PrismaModule } from './prisma.module';
     ZigbeeModule,
     RfxcomModule,
     ScenariosModule,
+    SystemModule,
   ],
 })
 export class AppModule {}

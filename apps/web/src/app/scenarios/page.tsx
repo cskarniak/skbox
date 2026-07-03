@@ -32,6 +32,7 @@ import {
   IconNetwork,
   IconClock,
   IconDeviceDesktop,
+  IconServer,
 } from '@tabler/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
@@ -739,7 +740,10 @@ export default function ScenariosPage() {
           <Group gap="md">
           <Tabs
             value="scenarios"
-            onChange={(v) => v === 'devices' && router.push('/')}
+            onChange={(v) => {
+              if (v === 'devices') router.push('/');
+              if (v === 'system') router.push('/system');
+            }}
           >
             <Tabs.List>
               <Tabs.Tab
@@ -753,6 +757,9 @@ export default function ScenariosPage() {
                 leftSection={<IconScript size={16} />}
               >
                 Scénarios
+              </Tabs.Tab>
+              <Tabs.Tab value="system" leftSection={<IconServer size={16} />}>
+                Système
               </Tabs.Tab>
             </Tabs.List>
           </Tabs>
