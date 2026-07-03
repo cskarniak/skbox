@@ -326,12 +326,14 @@ export default function HomePage() {
   const groups = useMemo(() => groupDevices(devices ?? []), [devices]);
 
   const [tileSize, setTileSize] = useState<TileSize>('medium');
+  const [hostname, setHostname] = useState('localhost');
 
   useEffect(() => {
     const saved = localStorage.getItem('skbox-tile-size') as TileSize | null;
     if (saved && ['small', 'medium', 'large'].includes(saved)) {
       setTileSize(saved);
     }
+    setHostname(window.location.hostname);
   }, []);
 
   const handleTileSizeChange = (value: string) => {
@@ -373,7 +375,7 @@ export default function HomePage() {
                 size="sm"
                 leftSection={<IconNetwork size={16} />}
                 component="a"
-                href={`http://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:8080`}
+                href={`http://${hostname}:8080`}
                 target="_blank"
               >
                 Z2M
@@ -385,7 +387,7 @@ export default function HomePage() {
                 size="sm"
                 leftSection={<IconAntenna size={16} />}
                 component="a"
-                href={`http://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:8891`}
+                href={`http://${hostname}:8891`}
                 target="_blank"
               >
                 RFXcom

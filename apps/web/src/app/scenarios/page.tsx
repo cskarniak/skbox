@@ -35,7 +35,7 @@ import {
 } from '@tabler/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 
 interface Trigger {
@@ -696,6 +696,11 @@ export default function ScenariosPage() {
   const [editingScenario, setEditingScenario] = useState<
     Scenario | undefined
   >();
+  const [hostname, setHostname] = useState('localhost');
+
+  useEffect(() => {
+    setHostname(window.location.hostname);
+  }, []);
 
   const { data: scenarios, isLoading } = useQuery<Scenario[]>({
     queryKey: ['scenarios'],
@@ -757,7 +762,7 @@ export default function ScenariosPage() {
               size="sm"
               leftSection={<IconNetwork size={16} />}
               component="a"
-              href={`http://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:8080`}
+              href={`http://${hostname}:8080`}
               target="_blank"
             >
               Z2M
