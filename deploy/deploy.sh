@@ -20,4 +20,5 @@ echo "5. Redémarrage des services..."
 sudo systemctl restart skbox-api skbox-web
 
 echo "=== Déploiement terminé ==="
-sudo systemctl status skbox-api skbox-web --no-pager -l | head -20
+sudo systemctl status skbox-api || true
+sudo systemctl status skbox-web || true
