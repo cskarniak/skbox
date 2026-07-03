@@ -1,0 +1,14 @@
+[Unit]
+Description=Skbox Web (Next.js)
+After=network.target skbox-api.service
+
+[Service]
+Type=simple
+User=christian
+WorkingDirectory=/home/christian/skbox/apps/web
+ExecStart=/home/christian/skbox/apps/web/node_modules/.bin/next start -p 3002
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

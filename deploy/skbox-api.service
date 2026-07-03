@@ -1,0 +1,14 @@
+[Unit]
+Description=Skbox API (NestJS)
+After=network.target
+
+[Service]
+Type=simple
+User=christian
+WorkingDirectory=/home/christian/skbox
+ExecStart=/usr/local/bin/node /home/christian/skbox/apps/api/dist/src/main.js
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
