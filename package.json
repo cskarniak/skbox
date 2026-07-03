@@ -7,7 +7,7 @@
     "pnpm": ">=9.0.0"
   },
   "scripts": {
-    "dev": "pnpm build:packages && pnpm --parallel dev",
+    "dev": "pnpm db:generate && pnpm build:packages && pnpm --parallel dev",
     "dev:web": "pnpm --filter web dev",
     "dev:api": "pnpm build:packages && pnpm --filter api dev",
     "build:packages": "pnpm --filter @skbox/shared build && pnpm --filter @skbox/db build",

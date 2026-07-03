@@ -54,12 +54,53 @@ export class DevicesController {
     const { command, payload } = deviceCommandSchema.parse(body);
     const device = await this.devices.findById(id);
 
-    this.mqtt.publish(
-      `skbox/${device.protocol}/${device.id}/command`,
-      JSON.stringify({ command, payload }),
-    );
+    if (device.protocol === 'zigbee' && device.mqttTopic) {
+      const z2mPayload = this.toZ2MPayload(command, payload);
+      this.mqtt.publish(`${device.mqttTopic}/set`, JSON.stringify(z2mPayload));
+    } else if (device.protocol === 'rf433' && device.rfxcomId) {
+      const rfxPayload = this.toRfxcomPayload(command, payload);
+      const [type] = device.rfxcomId.split('/');
+      this.mqtt.publish(`rfxcom2mqtt/send/${type}`, JSON.stringify({ id: device.rfxcomId, ...rfxPayload }));
+    } else {
+      this.mqtt.publish(
+        `skbox/${device.protocol}/${device.id}/command`,
+        JSON.stringify({ command, payload }),
+      );
+    }
 
     return { sent: true };
+  }
+
+  private toZ2MPayload(
+    command: string,
+    payload?: Record<string, unknown>,
+  ): Record<string, unknown> {
+    switch (command) {
+      case 'on':
+        return { state: 'ON', ...payload };
+      case 'off':
+        return { state: 'OFF', ...payload };
+      case 'toggle':
+        return { state: 'TOGGLE', ...payload };
+      case 'brightness':
+        return { brightness: payload?.value, ...payload };
+      default:
+        return { [command]: payload?.value ?? true, ...payload };
+    }
+  }
+
+  private toRfxcomPayload(
+    command: string,
+    payload?: Record<string, unknown>,
+  ): Record<string, unknown> {
+    switch (command) {
+      case 'on':
+        return { command: 'On', ...payload };
+      case 'off':
+        return { command: 'Off', ...payload };
+      default:
+        return { command, ...payload };
+    }
   }
 
   @Delete(':id')

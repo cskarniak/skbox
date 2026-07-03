@@ -1,0 +1,18 @@
+homeassistant: false
+
+permit_join: false
+
+mqtt:
+  base_topic: zigbee2mqtt
+  server: mqtt://localhost:1883
+
+serial:
+  port: /dev/cu.usbmodemDE24681561
+  adapter: deconz
+
+frontend:
+  port: 8080
+
+advanced:
+  log_level: info
+  channel: 25

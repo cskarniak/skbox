@@ -6,9 +6,15 @@ import * as mqtt from 'mqtt';
 export class MqttService implements OnModuleInit, OnModuleDestroy {
   private client!: mqtt.MqttClient;
   private readonly logger = new Logger(MqttService.name);
-  private readonly handlers = new Map<string, (topic: string, payload: string) => void>();
+  private readonly handlers = new Map<string, ((topic: string, payload: string) => void)[]>();
+  private readonly disconnectHandlers: (() => void)[] = [];
+  private connected = false;
 
   constructor(private readonly config: ConfigService) {}
+
+  get isConnected() {
+    return this.connected;
+  }
 
   async onModuleInit() {
     const url = this.config.get('MQTT_URL', 'mqtt://localhost:1883');
@@ -20,22 +26,35 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
 
     this.client.on('connect', () => {
       this.logger.log('Connected to MQTT broker');
+      this.connected = true;
       this.client.subscribe('skbox/#');
+      this.client.subscribe('zigbee2mqtt/#');
+      this.client.subscribe('rfxcom2mqtt/#');
     });
 
     this.client.on('message', (topic, message) => {
       const payload = message.toString();
       this.logger.debug(`${topic}: ${payload}`);
 
-      for (const [pattern, handler] of this.handlers) {
+      for (const [pattern, handlers] of this.handlers) {
         if (this.matchTopic(pattern, topic)) {
-          handler(topic, payload);
+          for (const handler of handlers) {
+            handler(topic, payload);
+          }
         }
       }
     });
 
     this.client.on('error', (err) => {
       this.logger.error(`MQTT error: ${err.message}`);
+    });
+
+    this.client.on('offline', () => {
+      this.logger.warn('MQTT broker disconnected');
+      this.connected = false;
+      for (const handler of this.disconnectHandlers) {
+        handler();
+      }
     });
   }
 
@@ -48,7 +67,13 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
   }
 
   subscribe(pattern: string, handler: (topic: string, payload: string) => void) {
-    this.handlers.set(pattern, handler);
+    const existing = this.handlers.get(pattern) ?? [];
+    existing.push(handler);
+    this.handlers.set(pattern, existing);
+  }
+
+  onDisconnect(handler: () => void) {
+    this.disconnectHandlers.push(handler);
   }
 
   private matchTopic(pattern: string, topic: string): boolean {

@@ -6,3 +6,10 @@ dist/
 .env
 .env.local
 .turbo
+zigbee2mqtt/node_modules/
+zigbee2mqtt/package.json
+zigbee2mqtt/package-lock.json
+zigbee2mqtt/coordinator_backup.json
+zigbee2mqtt/state.json
+zigbee2mqtt/database.db
+zigbee2mqtt/log/

@@ -2,6 +2,7 @@ export enum Protocol {
   ZIGBEE = 'zigbee',
   MATTER = 'matter',
   MQTT = 'mqtt',
+  RF433 = 'rf433',
 }
 
 export enum DeviceType {
@@ -11,8 +12,12 @@ export enum DeviceType {
   SENSOR_HUMIDITY = 'sensor_humidity',
   SENSOR_MOTION = 'sensor_motion',
   SENSOR_DOOR = 'sensor_door',
+  SENSOR_RAIN = 'sensor_rain',
+  SENSOR_WIND = 'sensor_wind',
+  SENSOR_UV = 'sensor_uv',
   THERMOSTAT = 'thermostat',
   PLUG = 'plug',
+  REMOTE = 'remote',
 }
 
 export enum DeviceStatus {

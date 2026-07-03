@@ -17,9 +17,10 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document);
 
-  await app.listen(3001);
-  console.log('Skbox API running on http://localhost:3001');
-  console.log('Swagger docs on http://localhost:3001/docs');
+  const port = process.env.PORT || 3001;
+  await app.listen(port);
+  console.log(`Skbox API running on http://localhost:${port}`);
+  console.log(`Swagger docs on http://localhost:${port}/docs`);
 }
 
 bootstrap();

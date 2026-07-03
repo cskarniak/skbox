@@ -8,22 +8,29 @@ datasource db {
 }
 
 model Device {
-  id        String   @id @default(cuid())
-  name      String
-  protocol  String
-  type      String
-  status    String   @default("offline")
-  room      String?
-  state     String   @default("{}")
-  address   String?
-  lastSeen  DateTime @default(now())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  name         String
+  protocol     String
+  type         String
+  status       String   @default("offline")
+  room         String?
+  state        String   @default("{}")
+  address      String?
+  ieeeAddress  String?  @unique
+  rfxcomId     String?  @unique
+  vendor       String?
+  model        String?
+  mqttTopic    String?
+  lastSeen     DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   events DeviceEvent[]
 
   @@index([protocol])
   @@index([room])
+  @@index([ieeeAddress])
+  @@index([rfxcomId])
 }
 
 model DeviceEvent {
@@ -36,6 +43,19 @@ model DeviceEvent {
   device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
 
   @@index([deviceId, timestamp])
+}
+
+model Scenario {
+  id         String    @id @default(cuid())
+  name       String
+  enabled    Boolean   @default(true)
+  trigger    String
+  conditions String    @default("[]")
+  actions    String    @default("[]")
+  lastRun    DateTime?
+  runCount   Int       @default(0)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 }
 
 model Room {
