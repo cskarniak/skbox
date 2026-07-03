@@ -757,7 +757,7 @@ export default function ScenariosPage() {
               size="sm"
               leftSection={<IconNetwork size={16} />}
               component="a"
-              href="http://localhost:8080"
+              href={`http://${typeof window !== 'undefined' ? window.location.hostname : 'localhost'}:8080`}
               target="_blank"
             >
               Z2M
