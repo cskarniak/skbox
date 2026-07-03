@@ -1,0 +1,15 @@
+[Unit]
+Description=Skbox rfxcom2mqtt
+After=network.target mosquitto.service
+
+[Service]
+Type=simple
+User=christian
+WorkingDirectory=/home/christian/rfxcom2mqtt
+Environment=RFXCOM2MQTT_DATA=/home/christian/rfxcom2mqtt/config/
+ExecStart=/home/christian/rfxcom2mqtt/node_modules/.bin/ts-node /home/christian/rfxcom2mqtt/src/index.ts
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

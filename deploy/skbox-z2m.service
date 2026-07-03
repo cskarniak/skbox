@@ -1,0 +1,15 @@
+[Unit]
+Description=Skbox Zigbee2MQTT
+After=network.target mosquitto.service
+
+[Service]
+Type=simple
+User=christian
+WorkingDirectory=/home/christian/zigbee2mqtt
+Environment=ZIGBEE2MQTT_DATA=/home/christian/zigbee2mqtt/data
+ExecStart=/usr/local/bin/node /home/christian/zigbee2mqtt/index.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
