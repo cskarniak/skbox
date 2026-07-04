@@ -141,7 +141,11 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
 
     for (const z2mDevice of devices) {
       if (z2mDevice.type === 'Coordinator') continue;
-      if (!z2mDevice.supported) continue;
+      // z2mDevice.supported reflects presence in Z2M's official device database, not
+      // usability — Z2M still auto-generates a working definition (with real exposes)
+      // for unrecognized devices like the Shelly's "automatically generated definition".
+      // Only skip devices Z2M genuinely couldn't expose anything for.
+      if (!z2mDevice.definition?.exposes?.length) continue;
 
       const deviceType = this.inferDeviceType(z2mDevice);
 
