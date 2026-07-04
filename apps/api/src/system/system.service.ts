@@ -187,8 +187,13 @@ export class SystemService {
       return { health: null, temperatureC: null, powerOnHours: null };
     }
     const healthMatch = health?.match(/test result:\s*(\w+)/i);
-    const tempMatch = attrs?.match(/Temperature_Celsius\s+.*?\s(\d+)(\s|$)/m);
-    const hoursMatch = attrs?.match(/Power_On_Hours\s+.*?\s(\d+)(\s|$)/m);
+    // SMART attribute lines are: ID# NAME FLAG VALUE WORST THRESH TYPE UPDATED WHEN_FAILED RAW_VALUE
+    // VALUE/WORST are normalized scores (e.g. temperature's VALUE is often ~100-raw°C
+    // and stays near 100), not the actual reading — skip to the RAW_VALUE column.
+    const rawValueRegex = (name: string) =>
+      new RegExp(`${name}\\s+\\S+\\s+\\d+\\s+\\d+\\s+\\d+\\s+\\S+\\s+\\S+\\s+\\S+\\s+(\\d+)`);
+    const tempMatch = attrs?.match(rawValueRegex('Temperature_Celsius'));
+    const hoursMatch = attrs?.match(rawValueRegex('Power_On_Hours'));
     return {
       health: healthMatch?.[1] ?? null,
       temperatureC: tempMatch ? parseInt(tempMatch[1], 10) : null,
