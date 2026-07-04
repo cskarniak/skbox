@@ -29,6 +29,7 @@ import {
   IconClock,
   IconWorldWww,
   IconWind,
+  IconShieldCheck,
 } from '@tabler/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
@@ -78,6 +79,12 @@ interface SystemHealth {
   };
   services: ServiceStatus[];
   network: string[];
+  thermalShutdown: {
+    active: boolean;
+    limitCelsius: number | null;
+    lastCheckAt: string | null;
+    lastTempCelsius: number | null;
+  };
 }
 
 type Level = 'good' | 'warning' | 'critical';
@@ -226,6 +233,24 @@ export default function SystemPage() {
     queryFn: () => api.get('/system/health').then((r) => r.data),
     refetchInterval: refreshInterval,
   });
+
+  const setThermalShutdown = useMutation({
+    mutationFn: (active: boolean) =>
+      api.put('/system/thermal-shutdown', { active }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['system-health'] }),
+  });
+
+  const handleThermalShutdownToggle = (active: boolean) => {
+    if (
+      !active &&
+      !window.confirm(
+        'Désactiver la protection thermique ? Le serveur ne s\'arrêtera plus automatiquement en cas de surchauffe.',
+      )
+    ) {
+      return;
+    }
+    setThermalShutdown.mutate(active);
+  };
 
   return (
     <AppShell header={{ height: 60 }} padding="md">
@@ -461,6 +486,46 @@ export default function SystemPage() {
                   </Badge>
                 ))}
               </Group>
+            </Card>
+
+            <Card shadow="sm" padding="lg" withBorder>
+              <Group justify="space-between" mb="xs">
+                <Text size="sm" c="dimmed">
+                  <IconShieldCheck size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                  Activation script de sécurité
+                </Text>
+                <StatusBadge active={health.thermalShutdown.active} />
+              </Group>
+              <Stack gap={6}>
+                <Group justify="space-between">
+                  <Text size="sm">Seuil d'arrêt</Text>
+                  <Text size="sm" c="dimmed">
+                    {health.thermalShutdown.limitCelsius !== null
+                      ? `${health.thermalShutdown.limitCelsius}°C`
+                      : '—'}
+                  </Text>
+                </Group>
+                <Group justify="space-between">
+                  <Text size="sm">Dernière vérification</Text>
+                  <Text size="sm" c="dimmed">
+                    {health.thermalShutdown.lastTempCelsius !== null
+                      ? `${health.thermalShutdown.lastTempCelsius}°C`
+                      : '—'}
+                    {health.thermalShutdown.lastCheckAt &&
+                      ` — ${new Date(health.thermalShutdown.lastCheckAt).toLocaleTimeString('fr-FR')}`}
+                  </Text>
+                </Group>
+                <Button
+                  size="xs"
+                  mt={4}
+                  color={health.thermalShutdown.active ? 'red' : 'teal'}
+                  variant="light"
+                  loading={setThermalShutdown.isPending}
+                  onClick={() => handleThermalShutdownToggle(!health.thermalShutdown.active)}
+                >
+                  {health.thermalShutdown.active ? 'Désactiver' : 'Activer'}
+                </Button>
+              </Stack>
             </Card>
 
             <Card shadow="sm" padding="lg" withBorder>

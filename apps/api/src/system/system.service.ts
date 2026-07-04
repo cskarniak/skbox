@@ -48,6 +48,12 @@ export interface SystemHealth {
   };
   services: ServiceStatus[];
   network: string[];
+  thermalShutdown: {
+    active: boolean;
+    limitCelsius: number | null;
+    lastCheckAt: string | null;
+    lastTempCelsius: number | null;
+  };
 }
 
 @Injectable()
@@ -63,6 +69,7 @@ export class SystemService {
       smart,
       docker,
       services,
+      thermalShutdown,
     ] = await Promise.all([
       this.readGovernor(),
       this.readTemperatures(),
@@ -70,13 +77,8 @@ export class SystemService {
       this.readDisk(),
       this.readSmart(),
       this.readDocker(),
-      this.readServices([
-        'mbpfan',
-        'thermald',
-        'thermal-shutdown.timer',
-        'docker',
-        'fstrim.timer',
-      ]),
+      this.readServices(['mbpfan', 'thermald', 'docker', 'fstrim.timer']),
+      this.readThermalShutdown(),
     ]);
 
     const cpus = os.cpus();
@@ -115,7 +117,13 @@ export class SystemService {
         .flat()
         .filter((i): i is os.NetworkInterfaceInfo => !!i && !i.internal && i.family === 'IPv4')
         .map((i) => i.address),
+      thermalShutdown,
     };
+  }
+
+  async setThermalShutdownActive(active: boolean): Promise<void> {
+    const action = active ? 'start' : 'stop';
+    await this.run(`sudo systemctl ${action} thermal-shutdown.timer`);
   }
 
   private async run(cmd: string): Promise<string | null> {
@@ -232,5 +240,25 @@ export class SystemService {
         return { name, active: out?.trim() === 'active' };
       }),
     );
+  }
+
+  private async readThermalShutdown(): Promise<SystemHealth['thermalShutdown']> {
+    const [activeOut, scriptOut, logMtime, logTail] = await Promise.all([
+      this.run('systemctl is-active thermal-shutdown.timer'),
+      this.run('cat /usr/local/sbin/thermal-shutdown.sh'),
+      this.run('stat -c %Y /var/log/thermal-shutdown.log'),
+      this.run('tail -1 /var/log/thermal-shutdown.log'),
+    ]);
+
+    const limitMatch = scriptOut?.match(/^LIMIT=(\d+)/m);
+    const tempMatch = logTail?.match(/Température CPU:\s*(-?\d+)/);
+    const mtime = logMtime ? parseInt(logMtime.trim(), 10) : NaN;
+
+    return {
+      active: activeOut?.trim() === 'active',
+      limitCelsius: limitMatch ? parseInt(limitMatch[1], 10) : null,
+      lastCheckAt: Number.isNaN(mtime) ? null : new Date(mtime * 1000).toISOString(),
+      lastTempCelsius: tempMatch ? parseInt(tempMatch[1], 10) : null,
+    };
   }
 }
