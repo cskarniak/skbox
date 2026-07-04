@@ -13,3 +13,7 @@ zigbee2mqtt/coordinator_backup.json
 zigbee2mqtt/state.json
 zigbee2mqtt/database.db
 zigbee2mqtt/log/
+backups/
+restored-deploy-*/
+*.db.backup-*
+.env.backup-*

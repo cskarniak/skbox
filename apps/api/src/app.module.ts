@@ -8,6 +8,7 @@ import { RfxcomModule } from './rfxcom/rfxcom.module';
 import { ScenariosModule } from './scenarios/scenarios.module';
 import { SystemModule } from './system/system.module';
 import { SettingsModule } from './settings/settings.module';
+import { BackupModule } from './backup/backup.module';
 import { PrismaModule } from './prisma.module';
 
 @Module({
@@ -22,6 +23,7 @@ import { PrismaModule } from './prisma.module';
     ScenariosModule,
     SystemModule,
     SettingsModule,
+    BackupModule,
   ],
 })
 export class AppModule {}

@@ -30,6 +30,7 @@ import {
   IconWorldWww,
   IconWind,
   IconShieldCheck,
+  IconDatabaseExport,
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -276,6 +277,7 @@ export default function SystemPage() {
               onChange={(v) => {
                 if (v === 'devices') router.push('/');
                 if (v === 'scenarios') router.push('/scenarios');
+                if (v === 'backup') router.push('/backup');
               }}
             >
               <Tabs.List>
@@ -287,6 +289,9 @@ export default function SystemPage() {
                 </Tabs.Tab>
                 <Tabs.Tab value="system" leftSection={<IconServer size={16} />}>
                   Système
+                </Tabs.Tab>
+                <Tabs.Tab value="backup" leftSection={<IconDatabaseExport size={16} />}>
+                  Sauvegarde
                 </Tabs.Tab>
               </Tabs.List>
             </Tabs>

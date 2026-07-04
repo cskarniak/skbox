@@ -33,6 +33,7 @@ import {
   IconClock,
   IconDeviceDesktop,
   IconServer,
+  IconDatabaseExport,
 } from '@tabler/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
@@ -743,6 +744,7 @@ export default function ScenariosPage() {
             onChange={(v) => {
               if (v === 'devices') router.push('/');
               if (v === 'system') router.push('/system');
+              if (v === 'backup') router.push('/backup');
             }}
           >
             <Tabs.List>
@@ -760,6 +762,9 @@ export default function ScenariosPage() {
               </Tabs.Tab>
               <Tabs.Tab value="system" leftSection={<IconServer size={16} />}>
                 Système
+              </Tabs.Tab>
+              <Tabs.Tab value="backup" leftSection={<IconDatabaseExport size={16} />}>
+                Sauvegarde
               </Tabs.Tab>
             </Tabs.List>
           </Tabs>

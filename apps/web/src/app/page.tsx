@@ -39,6 +39,7 @@ import {
   IconGridDots,
   IconLayoutList,
   IconServer,
+  IconDatabaseExport,
 } from '@tabler/icons-react';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -362,6 +363,7 @@ export default function HomePage() {
               onChange={(v) => {
                 if (v === 'scenarios') router.push('/scenarios');
                 if (v === 'system') router.push('/system');
+                if (v === 'backup') router.push('/backup');
               }}
             >
               <Tabs.List>
@@ -373,6 +375,9 @@ export default function HomePage() {
                 </Tabs.Tab>
                 <Tabs.Tab value="system" leftSection={<IconServer size={16} />}>
                   Système
+                </Tabs.Tab>
+                <Tabs.Tab value="backup" leftSection={<IconDatabaseExport size={16} />}>
+                  Sauvegarde
                 </Tabs.Tab>
               </Tabs.List>
             </Tabs>
