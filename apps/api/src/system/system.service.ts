@@ -70,7 +70,13 @@ export class SystemService {
       this.readDisk(),
       this.readSmart(),
       this.readDocker(),
-      this.readServices(['mbpfan', 'thermald', 'docker', 'fstrim.timer']),
+      this.readServices([
+        'mbpfan',
+        'thermald',
+        'thermal-shutdown.timer',
+        'docker',
+        'fstrim.timer',
+      ]),
     ]);
 
     const cpus = os.cpus();
