@@ -34,8 +34,9 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit() {
-    await this.markAllOffline();
-
+    // Enregistrement synchrone avant tout await : un message retenu peut être livré dès la
+    // connexion MQTT (souvent très rapide en local), et un await avant l'enregistrement
+    // (ex. l'accès Prisma de markAllOffline) laisse le temps à ce message d'être manqué.
     this.mqtt.subscribe('rfxcom2mqtt/bridge/status', (_, payload) => {
       this.lastMessageAt = Date.now();
       this.logger.log(`rfxcom2mqtt bridge: ${payload}`);
@@ -52,6 +53,8 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
       this.bridgeOnline = false;
       this.markAllOffline();
     });
+
+    await this.markAllOffline();
 
     this.watchdogTimer = setInterval(() => this.watchdog(), WATCHDOG_INTERVAL);
   }

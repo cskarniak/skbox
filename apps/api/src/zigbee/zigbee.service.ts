@@ -38,8 +38,10 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit() {
-    await this.markAllOffline();
-
+    // Les abonnements doivent être enregistrés de façon synchrone, avant tout await :
+    // le message retenu "bridge/devices" peut être livré dès la connexion MQTT (souvent
+    // très rapide en local), et un await avant l'enregistrement (ex. l'accès Prisma de
+    // markAllOffline) laisse largement le temps à ce message d'arriver et d'être manqué.
     this.mqtt.subscribe('zigbee2mqtt/bridge/devices', (_, payload) => {
       this.lastMessageAt = Date.now();
       this.handleDeviceList(payload);
@@ -71,11 +73,10 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
       this.markAllOffline();
     });
 
-    // Le message retenu "bridge/devices" livré à la connexion peut arriver avant que ce
-    // handler soit enregistré (aucune garantie d'ordre entre le bootstrap Nest et le
-    // callback 'connect' du client MQTT). On redemande donc explicitement la liste une
-    // fois notre propre abonnement en place, pour ne jamais dépendre de cette course.
+    // Filet de sécurité si malgré tout aucun message retenu n'a été livré à temps.
     this.mqtt.publish('zigbee2mqtt/bridge/request/devices', '');
+
+    await this.markAllOffline();
 
     this.healthcheckTimer = setInterval(() => this.healthcheck(), HEALTHCHECK_INTERVAL);
   }
