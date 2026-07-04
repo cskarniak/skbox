@@ -12,6 +12,7 @@ pnpm install
 
 echo "3. Migrations Prisma..."
 pnpm --filter @skbox/db exec prisma migrate deploy
+pnpm --filter @skbox/db exec prisma generate
 
 echo "4. Build..."
 pnpm build
