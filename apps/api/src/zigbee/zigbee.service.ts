@@ -71,6 +71,12 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
       this.markAllOffline();
     });
 
+    // Le message retenu "bridge/devices" livré à la connexion peut arriver avant que ce
+    // handler soit enregistré (aucune garantie d'ordre entre le bootstrap Nest et le
+    // callback 'connect' du client MQTT). On redemande donc explicitement la liste une
+    // fois notre propre abonnement en place, pour ne jamais dépendre de cette course.
+    this.mqtt.publish('zigbee2mqtt/bridge/request/devices', '');
+
     this.healthcheckTimer = setInterval(() => this.healthcheck(), HEALTHCHECK_INTERVAL);
   }
 
