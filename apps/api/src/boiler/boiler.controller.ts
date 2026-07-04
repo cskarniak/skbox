@@ -1,11 +1,16 @@
 import { Body, Controller, Delete, Get, Post, Put } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { BoilerConfig, BoilerService } from './boiler.service';
+import { BoilerConfig, BoilerService, LEVEL_LABELS, LevelKey } from './boiler.service';
 
 @ApiTags('boiler')
 @Controller('boiler')
 export class BoilerController {
   constructor(private readonly boiler: BoilerService) {}
+
+  @Get('levels')
+  getLevels() {
+    return LEVEL_LABELS;
+  }
 
   @Get('config')
   getConfig() {
@@ -23,8 +28,8 @@ export class BoilerController {
   }
 
   @Post('boost')
-  setBoost(@Body('mode') mode: 'on' | 'off', @Body('minutes') minutes: number) {
-    return this.boiler.setBoost(mode, minutes);
+  setBoost(@Body('level') level: LevelKey, @Body('minutes') minutes: number) {
+    return this.boiler.setBoost(level, minutes);
   }
 
   @Delete('boost')

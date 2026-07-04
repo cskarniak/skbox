@@ -10,20 +10,54 @@ import { PrismaClient } from '@skbox/db';
 import { MqttService } from '../mqtt/mqtt.service';
 import { SettingsService } from '../settings/settings.service';
 
-export interface BoilerSlot {
-  day: number; // 0 = lundi ... 6 = dimanche
+export type LevelKey = 'eco' | 'confort' | 'confort_plus' | 'vacances' | 'nuit';
+
+export const LEVEL_LABELS: Record<LevelKey, string> = {
+  eco: 'Éco',
+  confort: 'Confort',
+  confort_plus: 'Confort+',
+  vacances: 'Vacances',
+  nuit: 'Nuit',
+};
+
+const LEVEL_KEYS: LevelKey[] = ['eco', 'confort', 'confort_plus', 'vacances', 'nuit'];
+
+const DEFAULT_LEVEL_TEMPS: Record<LevelKey, number> = {
+  eco: 17,
+  confort: 19,
+  confort_plus: 21,
+  vacances: 12,
+  nuit: 16,
+};
+
+export interface ProgramSlot {
   from: string; // "HH:MM"
   to: string; // "HH:MM"
+  level: LevelKey;
 }
 
+export interface BoilerProgram {
+  id: string;
+  name: string;
+  slots: ProgramSlot[];
+}
+
+// jour de la semaine (0 = lundi ... 6 = dimanche) -> id de programme, ou null (niveau par défaut toute la journée)
+export type DayPrograms = Record<number, string | null>;
+
 export interface BoilerOverride {
-  mode: 'on' | 'off';
+  level: LevelKey;
   until: string; // ISO
 }
 
 interface BoilerState {
   deviceId: string | null;
-  schedule: BoilerSlot[];
+  temperatureSensorId: string | null;
+  hysteresis: number;
+  levels: Record<LevelKey, number>;
+  defaultLevel: LevelKey;
+  programs: BoilerProgram[];
+  dayPrograms: DayPrograms;
   minOnMinutes: number;
   minOffMinutes: number;
   override: BoilerOverride | null;
@@ -33,7 +67,12 @@ interface BoilerState {
 
 export interface BoilerConfig {
   deviceId: string | null;
-  schedule: BoilerSlot[];
+  temperatureSensorId: string | null;
+  hysteresis: number;
+  levels: Record<LevelKey, number>;
+  defaultLevel: LevelKey;
+  programs: BoilerProgram[];
+  dayPrograms: DayPrograms;
   minOnMinutes: number;
   minOffMinutes: number;
 }
@@ -44,6 +83,9 @@ export interface BoilerStatus {
   deviceOnline: boolean;
   commandedState: 'ON' | 'OFF' | null;
   desiredState: 'ON' | 'OFF';
+  activeLevel: LevelKey;
+  targetTemp: number;
+  currentTemp: number | null;
   scheduleActive: boolean;
   override: BoilerOverride | null;
   lastChangeAt: string | null;
@@ -54,7 +96,12 @@ const TICK_MS = 60_000;
 
 const DEFAULT_STATE: BoilerState = {
   deviceId: null,
-  schedule: [],
+  temperatureSensorId: null,
+  hysteresis: 0.3,
+  levels: { ...DEFAULT_LEVEL_TEMPS },
+  defaultLevel: 'eco',
+  programs: [],
+  dayPrograms: {},
   minOnMinutes: 10,
   minOffMinutes: 5,
   override: null,
@@ -84,11 +131,18 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
 
   private async loadState(): Promise<BoilerState> {
     const raw = await this.settings.get(STATE_KEY);
-    if (!raw) return { ...DEFAULT_STATE };
+    if (!raw) return { ...DEFAULT_STATE, levels: { ...DEFAULT_LEVEL_TEMPS } };
     try {
-      return { ...DEFAULT_STATE, ...JSON.parse(raw) };
+      const parsed = JSON.parse(raw);
+      return {
+        ...DEFAULT_STATE,
+        ...parsed,
+        levels: { ...DEFAULT_LEVEL_TEMPS, ...parsed.levels },
+        programs: Array.isArray(parsed.programs) ? parsed.programs : [],
+        dayPrograms: parsed.dayPrograms ?? {},
+      };
     } catch {
-      return { ...DEFAULT_STATE };
+      return { ...DEFAULT_STATE, levels: { ...DEFAULT_LEVEL_TEMPS } };
     }
   }
 
@@ -100,30 +154,70 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
     const state = await this.loadState();
     return {
       deviceId: state.deviceId,
-      schedule: state.schedule,
+      temperatureSensorId: state.temperatureSensorId,
+      hysteresis: state.hysteresis,
+      levels: state.levels,
+      defaultLevel: state.defaultLevel,
+      programs: state.programs,
+      dayPrograms: state.dayPrograms,
       minOnMinutes: state.minOnMinutes,
       minOffMinutes: state.minOffMinutes,
     };
   }
 
   async setConfig(config: BoilerConfig): Promise<BoilerConfig> {
-    for (const slot of config.schedule) {
-      if (!/^\d{2}:\d{2}$/.test(slot.from) || !/^\d{2}:\d{2}$/.test(slot.to)) {
-        throw new BadRequestException(`Créneau invalide: ${slot.from}-${slot.to}`);
+    const programIds = new Set<string>();
+    for (const program of config.programs) {
+      if (!program.id || !program.name.trim()) {
+        throw new BadRequestException('Un programme doit avoir un id et un nom');
       }
-      if (slot.day < 0 || slot.day > 6) {
-        throw new BadRequestException(`Jour invalide: ${slot.day}`);
+      if (programIds.has(program.id)) {
+        throw new BadRequestException(`Id de programme dupliqué: ${program.id}`);
+      }
+      programIds.add(program.id);
+      for (const slot of program.slots) {
+        if (!/^\d{2}:\d{2}$/.test(slot.from) || !/^\d{2}:\d{2}$/.test(slot.to)) {
+          throw new BadRequestException(`Créneau invalide dans "${program.name}": ${slot.from}-${slot.to}`);
+        }
+        if (!LEVEL_KEYS.includes(slot.level)) {
+          throw new BadRequestException(`Niveau invalide dans "${program.name}": ${slot.level}`);
+        }
+      }
+    }
+    for (const [day, programId] of Object.entries(config.dayPrograms)) {
+      const dayNum = Number(day);
+      if (dayNum < 0 || dayNum > 6) {
+        throw new BadRequestException(`Jour invalide: ${day}`);
+      }
+      if (programId !== null && !programIds.has(programId)) {
+        throw new BadRequestException(`Programme introuvable pour le jour ${day}: ${programId}`);
+      }
+    }
+    if (!LEVEL_KEYS.includes(config.defaultLevel)) {
+      throw new BadRequestException(`Niveau par défaut invalide: ${config.defaultLevel}`);
+    }
+    for (const key of LEVEL_KEYS) {
+      if (typeof config.levels[key] !== 'number' || Number.isNaN(config.levels[key])) {
+        throw new BadRequestException(`Température cible invalide pour le niveau ${key}`);
       }
     }
     if (config.minOnMinutes < 0 || config.minOffMinutes < 0) {
       throw new BadRequestException('Les durées minimales ne peuvent pas être négatives');
+    }
+    if (config.hysteresis < 0) {
+      throw new BadRequestException("L'hystérésis ne peut pas être négative");
     }
 
     const state = await this.loadState();
     const next: BoilerState = {
       ...state,
       deviceId: config.deviceId,
-      schedule: config.schedule,
+      temperatureSensorId: config.temperatureSensorId,
+      hysteresis: config.hysteresis,
+      levels: config.levels,
+      defaultLevel: config.defaultLevel,
+      programs: config.programs,
+      dayPrograms: config.dayPrograms,
       minOnMinutes: config.minOnMinutes,
       minOffMinutes: config.minOffMinutes,
     };
@@ -132,10 +226,11 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
     return this.getConfig();
   }
 
-  async setBoost(mode: 'on' | 'off', minutes: number): Promise<BoilerStatus> {
+  async setBoost(level: LevelKey, minutes: number): Promise<BoilerStatus> {
+    if (!LEVEL_KEYS.includes(level)) throw new BadRequestException(`Niveau invalide: ${level}`);
     const state = await this.loadState();
     const until = new Date(Date.now() + minutes * 60_000).toISOString();
-    await this.saveState({ ...state, override: { mode, until } });
+    await this.saveState({ ...state, override: { level, until } });
     await this.evaluate();
     return this.getStatus();
   }
@@ -152,55 +247,97 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
     const device = state.deviceId
       ? await this.prisma.device.findUnique({ where: { id: state.deviceId } })
       : null;
+    const currentTemp = await this.readCurrentTemp(state);
 
-    const activeOverride =
-      state.override && new Date(state.override.until).getTime() > Date.now()
-        ? state.override
-        : null;
+    const activeOverride = this.activeOverride(state);
+    const activeLevel = this.computeActiveLevel(state, activeOverride);
 
     return {
       deviceId: state.deviceId,
       deviceName: device?.name ?? null,
       deviceOnline: device?.status === 'online',
       commandedState: state.lastCommandedState,
-      desiredState: this.computeDesiredState(state, activeOverride),
-      scheduleActive: this.isWithinSchedule(state.schedule, new Date()),
+      desiredState: this.computeDesiredState(state, activeLevel, currentTemp),
+      activeLevel,
+      targetTemp: state.levels[activeLevel],
+      currentTemp,
+      scheduleActive: this.levelFromProgram(state, new Date()) !== null,
       override: activeOverride,
       lastChangeAt: state.lastChangeAt,
     };
   }
 
-  private computeDesiredState(state: BoilerState, activeOverride: BoilerOverride | null): 'ON' | 'OFF' {
-    if (activeOverride) return activeOverride.mode === 'on' ? 'ON' : 'OFF';
-    return this.isWithinSchedule(state.schedule, new Date()) ? 'ON' : 'OFF';
+  private activeOverride(state: BoilerState): BoilerOverride | null {
+    return state.override && new Date(state.override.until).getTime() > Date.now()
+      ? state.override
+      : null;
   }
 
-  private isWithinSchedule(schedule: BoilerSlot[], now: Date): boolean {
-    const day = (now.getDay() + 6) % 7; // JS: 0=dimanche -> 0=lundi..6=dimanche
-    const current = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  private computeActiveLevel(state: BoilerState, activeOverride: BoilerOverride | null): LevelKey {
+    if (activeOverride) return activeOverride.level;
+    return this.levelFromProgram(state, new Date()) ?? state.defaultLevel;
+  }
 
-    return schedule.some((slot) => {
-      if (slot.day !== day) return false;
-      if (slot.from <= slot.to) return current >= slot.from && current < slot.to;
-      return current >= slot.from || current < slot.to; // créneau traversant minuit
+  private levelFromProgram(state: BoilerState, now: Date): LevelKey | null {
+    const day = (now.getDay() + 6) % 7; // JS: 0=dimanche -> 0=lundi..6=dimanche
+    const programId = state.dayPrograms[day];
+    if (!programId) return null;
+    const program = state.programs.find((p) => p.id === programId);
+    if (!program) return null;
+
+    const current = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const slot = program.slots.find((s) => {
+      if (s.from <= s.to) return current >= s.from && current < s.to;
+      return current >= s.from || current < s.to; // créneau traversant minuit
     });
+    return slot?.level ?? null;
+  }
+
+  private async readCurrentTemp(state: BoilerState): Promise<number | null> {
+    if (!state.temperatureSensorId) return null;
+    const sensor = await this.prisma.device.findUnique({ where: { id: state.temperatureSensorId } });
+    if (!sensor) return null;
+    const parsed = JSON.parse(sensor.state || '{}');
+    const temp = Number(parsed.temperature);
+    return Number.isFinite(temp) ? temp : null;
+  }
+
+  /**
+   * Régulation par hystérésis : sous la cible - marge -> ON, au-dessus de la cible + marge -> OFF,
+   * entre les deux -> on garde l'état commandé courant (zone morte, évite l'oscillation).
+   */
+  private computeDesiredState(
+    state: BoilerState,
+    activeLevel: LevelKey,
+    currentTemp: number | null,
+  ): 'ON' | 'OFF' {
+    if (currentTemp === null) return state.lastCommandedState ?? 'OFF';
+
+    const target = state.levels[activeLevel];
+    if (currentTemp < target - state.hysteresis) return 'ON';
+    if (currentTemp > target + state.hysteresis) return 'OFF';
+    return state.lastCommandedState ?? 'OFF';
   }
 
   private async evaluate(): Promise<void> {
     const state = await this.loadState();
     if (!state.deviceId) return;
 
-    const activeOverride =
-      state.override && new Date(state.override.until).getTime() > Date.now()
-        ? state.override
-        : null;
+    const activeOverride = this.activeOverride(state);
     // Dérogation expirée : on l'efface pour revenir proprement au planning.
     if (state.override && !activeOverride) {
       state.override = null;
       await this.saveState(state);
     }
 
-    const desired = this.computeDesiredState(state, activeOverride);
+    const activeLevel = this.computeActiveLevel(state, activeOverride);
+    const currentTemp = await this.readCurrentTemp(state);
+    if (currentTemp === null) {
+      this.logger.warn('Chaudière : sonde de température indisponible, régulation en pause');
+      return;
+    }
+
+    const desired = this.computeDesiredState(state, activeLevel, currentTemp);
     const current = state.lastCommandedState;
 
     if (current === desired) return;
@@ -223,7 +360,9 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
     }
 
     this.mqtt.publish(`${device.mqttTopic}/set`, JSON.stringify({ state: desired }));
-    this.logger.log(`Chaudière : ${device.name} → ${desired}`);
+    this.logger.log(
+      `Chaudière : ${device.name} → ${desired} (niveau ${activeLevel}, cible ${state.levels[activeLevel]}°C, mesure ${currentTemp}°C)`,
+    );
 
     state.lastCommandedState = desired;
     state.lastChangeAt = new Date(now).toISOString();
