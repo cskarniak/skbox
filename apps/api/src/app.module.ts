@@ -9,6 +9,7 @@ import { ScenariosModule } from './scenarios/scenarios.module';
 import { SystemModule } from './system/system.module';
 import { SettingsModule } from './settings/settings.module';
 import { BackupModule } from './backup/backup.module';
+import { BoilerModule } from './boiler/boiler.module';
 import { PrismaModule } from './prisma.module';
 
 @Module({
@@ -24,6 +25,7 @@ import { PrismaModule } from './prisma.module';
     SystemModule,
     SettingsModule,
     BackupModule,
+    BoilerModule,
   ],
 })
 export class AppModule {}

@@ -31,6 +31,7 @@ import {
   IconWind,
   IconShieldCheck,
   IconDatabaseExport,
+  IconApps,
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -278,6 +279,7 @@ export default function SystemPage() {
                 if (v === 'devices') router.push('/');
                 if (v === 'scenarios') router.push('/scenarios');
                 if (v === 'backup') router.push('/backup');
+                if (v === 'modules') router.push('/modules');
               }}
             >
               <Tabs.List>
@@ -292,6 +294,9 @@ export default function SystemPage() {
                 </Tabs.Tab>
                 <Tabs.Tab value="backup" leftSection={<IconDatabaseExport size={16} />}>
                   Sauvegarde
+                </Tabs.Tab>
+                <Tabs.Tab value="modules" leftSection={<IconApps size={16} />}>
+                  Modules
                 </Tabs.Tab>
               </Tabs.List>
             </Tabs>

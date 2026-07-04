@@ -25,6 +25,7 @@ import {
   IconServer,
   IconNetwork,
   IconDatabaseExport,
+  IconApps,
   IconDownload,
   IconTrash,
   IconRestore,
@@ -186,6 +187,7 @@ export default function BackupPage() {
                 if (v === 'devices') router.push('/');
                 if (v === 'scenarios') router.push('/scenarios');
                 if (v === 'system') router.push('/system');
+                if (v === 'modules') router.push('/modules');
               }}
             >
               <Tabs.List>
@@ -200,6 +202,9 @@ export default function BackupPage() {
                 </Tabs.Tab>
                 <Tabs.Tab value="backup" leftSection={<IconDatabaseExport size={16} />}>
                   Sauvegarde
+                </Tabs.Tab>
+                <Tabs.Tab value="modules" leftSection={<IconApps size={16} />}>
+                  Modules
                 </Tabs.Tab>
               </Tabs.List>
             </Tabs>
