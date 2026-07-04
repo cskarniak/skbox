@@ -47,11 +47,14 @@ elif [ -x ./stop.sh ]; then
   ./stop.sh || true
 fi
 
+# cf. commentaire dans backup.sh : le fichier réel vit à packages/skbox.db
+DB_FILE="packages/skbox.db"
+
 echo "2. Base de données..."
 if [ -f "$WORK_DIR/skbox.db" ]; then
-  [ -f "packages/db/skbox.db" ] && cp "packages/db/skbox.db" "packages/db/skbox.db.backup-$STAMP"
-  cp "$WORK_DIR/skbox.db" "packages/db/skbox.db"
-  echo "   OK (ancienne DB conservée: packages/db/skbox.db.backup-$STAMP)"
+  [ -f "$DB_FILE" ] && cp "$DB_FILE" "$DB_FILE.backup-$STAMP"
+  cp "$WORK_DIR/skbox.db" "$DB_FILE"
+  echo "   OK (ancienne DB conservée: $DB_FILE.backup-$STAMP)"
 fi
 
 echo "3. Réseau Zigbee (Z2M)..."

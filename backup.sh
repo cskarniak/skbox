@@ -23,11 +23,15 @@ mkdir -p "$BACKUP_DIR"
 
 echo "=== Skbox — Sauvegarde ($MODE) ==="
 
+# DATABASE_URL="file:../../skbox.db" dans .env est résolu relativement à packages/db/prisma/,
+# donc le fichier réel vit à packages/skbox.db (et non packages/db/skbox.db).
+DB_FILE="packages/skbox.db"
+
 echo "1. Base de données..."
-if command -v sqlite3 >/dev/null 2>&1 && [ -f "packages/db/skbox.db" ]; then
-  sqlite3 "packages/db/skbox.db" ".backup '$WORK_DIR/skbox.db'"
+if command -v sqlite3 >/dev/null 2>&1 && [ -f "$DB_FILE" ]; then
+  sqlite3 "$DB_FILE" ".backup '$WORK_DIR/skbox.db'"
 else
-  cp "packages/db/skbox.db" "$WORK_DIR/skbox.db" 2>/dev/null || echo "   ⚠ packages/db/skbox.db introuvable"
+  cp "$DB_FILE" "$WORK_DIR/skbox.db" 2>/dev/null || echo "   ⚠ $DB_FILE introuvable"
 fi
 
 echo "2. Réseau Zigbee (Z2M)..."
