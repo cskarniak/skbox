@@ -103,6 +103,11 @@ interface BoilerStatus {
 
 const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
 
+// crypto.randomUUID() exige un contexte sécurisé (HTTPS/localhost) ; indisponible en HTTP sur le LAN.
+function generateId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export default function BoilerPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -206,7 +211,7 @@ export default function BoilerPage() {
   };
 
   const addProgram = () => {
-    const id = crypto.randomUUID();
+    const id = generateId();
     setPrograms((prev) => [...prev, { id, name: `Programme ${prev.length + 1}`, slots: [] }]);
   };
 
