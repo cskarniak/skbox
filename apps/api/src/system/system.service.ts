@@ -123,7 +123,17 @@ export class SystemService {
 
   async setThermalShutdownActive(active: boolean): Promise<void> {
     const action = active ? 'start' : 'stop';
-    await this.run(`sudo systemctl ${action} thermal-shutdown.timer`);
+    await this.runOrThrow(`sudo systemctl ${action} thermal-shutdown.timer`);
+  }
+
+  private async runOrThrow(cmd: string): Promise<string> {
+    try {
+      const { stdout } = await execAsync(cmd, { timeout: 5000 });
+      return stdout;
+    } catch (err: any) {
+      const message = err?.stderr?.trim() || err?.message || 'Unknown error';
+      throw new Error(message);
+    }
   }
 
   private async run(cmd: string): Promise<string | null> {

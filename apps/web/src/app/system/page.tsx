@@ -31,6 +31,7 @@ import {
   IconWind,
   IconShieldCheck,
 } from '@tabler/icons-react';
+import { notifications } from '@mantine/notifications';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -238,6 +239,15 @@ export default function SystemPage() {
     mutationFn: (active: boolean) =>
       api.put('/system/thermal-shutdown', { active }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['system-health'] }),
+    onError: (error: any) => {
+      notifications.show({
+        color: 'red',
+        title: 'Échec de la commande',
+        message:
+          error?.response?.data?.message ??
+          "La commande sudo a échoué sur le serveur (règle sudoers manquante ?)",
+      });
+    },
   });
 
   const handleThermalShutdownToggle = (active: boolean) => {

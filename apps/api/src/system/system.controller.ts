@@ -1,4 +1,10 @@
-import { Body, Controller, Get, Put } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Put,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SystemService } from './system.service';
 
@@ -14,7 +20,11 @@ export class SystemController {
 
   @Put('thermal-shutdown')
   async setThermalShutdown(@Body('active') active: boolean) {
-    await this.system.setThermalShutdownActive(active);
+    try {
+      await this.system.setThermalShutdownActive(active);
+    } catch (err: any) {
+      throw new BadRequestException(err.message);
+    }
     return this.system.getHealth();
   }
 }
