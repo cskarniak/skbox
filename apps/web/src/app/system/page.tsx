@@ -16,6 +16,7 @@ import {
   SimpleGrid,
   RingProgress,
   Table,
+  Select,
 } from '@mantine/core';
 import {
   IconSmartHome,
@@ -172,18 +173,36 @@ function formatUptime(seconds: number): string {
   return parts.join(' ');
 }
 
+const REFRESH_OPTIONS = [
+  { value: '5000', label: '5 s' },
+  { value: '10000', label: '10 s' },
+  { value: '30000', label: '30 s' },
+  { value: '60000', label: '1 min' },
+];
+
 export default function SystemPage() {
   const router = useRouter();
   const [hostname, setHostname] = useState('localhost');
+  const [refreshInterval, setRefreshInterval] = useState(10000);
 
   useEffect(() => {
     setHostname(window.location.hostname);
+    const saved = localStorage.getItem('skbox-system-refresh-interval');
+    if (saved && REFRESH_OPTIONS.some((o) => o.value === saved)) {
+      setRefreshInterval(parseInt(saved, 10));
+    }
   }, []);
+
+  const handleRefreshIntervalChange = (value: string | null) => {
+    if (!value) return;
+    setRefreshInterval(parseInt(value, 10));
+    localStorage.setItem('skbox-system-refresh-interval', value);
+  };
 
   const { data: health, isLoading } = useQuery<SystemHealth>({
     queryKey: ['system-health'],
     queryFn: () => api.get('/system/health').then((r) => r.data),
-    refetchInterval: 10000,
+    refetchInterval: refreshInterval,
   });
 
   return (
@@ -233,11 +252,22 @@ export default function SystemPage() {
       <AppShell.Main>
         <Group justify="space-between" mb="md">
           <Title order={4}>Santé du serveur</Title>
-          {health && (
-            <Text size="xs" c="dimmed">
-              {health.hostname} — mis à jour {new Date(health.timestamp).toLocaleTimeString('fr-FR')}
-            </Text>
-          )}
+          <Group gap="md">
+            {health && (
+              <Text size="xs" c="dimmed">
+                {health.hostname} — mis à jour {new Date(health.timestamp).toLocaleTimeString('fr-FR')}
+              </Text>
+            )}
+            <Select
+              size="xs"
+              w={100}
+              label={null}
+              value={String(refreshInterval)}
+              onChange={handleRefreshIntervalChange}
+              data={REFRESH_OPTIONS}
+              allowDeselect={false}
+            />
+          </Group>
         </Group>
 
         {isLoading || !health ? (
