@@ -30,7 +30,7 @@ import {
   IconWorldWww,
   IconWind,
 } from '@tabler/icons-react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
@@ -180,23 +180,45 @@ const REFRESH_OPTIONS = [
   { value: '60000', label: '1 min' },
 ];
 
+const REFRESH_SETTING_KEY = 'system-refresh-interval';
+
 export default function SystemPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [hostname, setHostname] = useState('localhost');
   const [refreshInterval, setRefreshInterval] = useState(10000);
 
   useEffect(() => {
     setHostname(window.location.hostname);
-    const saved = localStorage.getItem('skbox-system-refresh-interval');
-    if (saved && REFRESH_OPTIONS.some((o) => o.value === saved)) {
-      setRefreshInterval(parseInt(saved, 10));
-    }
   }, []);
+
+  const { data: refreshSetting } = useQuery<{ value: string | null }>({
+    queryKey: ['settings', REFRESH_SETTING_KEY],
+    queryFn: () =>
+      api.get(`/settings/${REFRESH_SETTING_KEY}`).then((r) => r.data),
+    staleTime: Infinity,
+  });
+
+  useEffect(() => {
+    if (
+      refreshSetting?.value &&
+      REFRESH_OPTIONS.some((o) => o.value === refreshSetting.value)
+    ) {
+      setRefreshInterval(parseInt(refreshSetting.value, 10));
+    }
+  }, [refreshSetting]);
+
+  const updateRefreshInterval = useMutation({
+    mutationFn: (value: string) =>
+      api.put(`/settings/${REFRESH_SETTING_KEY}`, { value }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['settings', REFRESH_SETTING_KEY] }),
+  });
 
   const handleRefreshIntervalChange = (value: string | null) => {
     if (!value) return;
     setRefreshInterval(parseInt(value, 10));
-    localStorage.setItem('skbox-system-refresh-interval', value);
+    updateRefreshInterval.mutate(value);
   };
 
   const { data: health, isLoading } = useQuery<SystemHealth>({
