@@ -59,6 +59,12 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
       this.handleDeviceState(name, payload);
     });
 
+    this.mqtt.subscribe('zigbee2mqtt/+/availability', (topic, payload) => {
+      this.lastMessageAt = Date.now();
+      const name = topic.split('/')[1];
+      this.handleAvailability(name, payload);
+    });
+
     this.mqtt.subscribe('zigbee2mqtt/bridge/event', (_, payload) => {
       this.lastMessageAt = Date.now();
       this.handleBridgeEvent(payload);
@@ -214,6 +220,27 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
         data: JSON.stringify(state),
       },
     });
+  }
+
+  private async handleAvailability(friendlyName: string, payload: string) {
+    let state: string;
+    try {
+      state = (JSON.parse(payload) as { state: string }).state;
+    } catch {
+      state = payload;
+    }
+    if (state !== 'online' && state !== 'offline') return;
+
+    const device = await this.prisma.device.findFirst({
+      where: { mqttTopic: `zigbee2mqtt/${friendlyName}` },
+    });
+    if (!device) return;
+
+    await this.prisma.device.update({
+      where: { id: device.id },
+      data: { status: state },
+    });
+    this.logger.log(`Device ${friendlyName} is now ${state} (availability)`);
   }
 
   private handleBridgeEvent(payload: string) {
