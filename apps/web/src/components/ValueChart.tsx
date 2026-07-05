@@ -61,7 +61,7 @@ export function ValueChart({
     <ResponsiveContainer width="100%" height={height}>
       {chartType === 'bar' ? (
         <BarChart data={series}>
-          <CartesianGrid strokeDasharray="0" stroke="var(--mantine-color-dark-4)" vertical={false} />
+          <CartesianGrid strokeDasharray="0" stroke="var(--mantine-color-dark-4)" />
           <XAxis dataKey="time" type="number" domain={['dataMin', 'dataMax']} ticks={xTicks} tickFormatter={formatDate} tick={{ fontSize: 11 }} />
           <YAxis tick={{ fontSize: 11 }} width={48} tickFormatter={formatValue} {...yAxisProps} />
           <RechartsTooltip labelFormatter={(v) => formatTime(v as number)} formatter={(v) => [formatValue(v as number), '']} />
@@ -76,7 +76,7 @@ export function ValueChart({
               <stop offset="95%" stopColor={color} stopOpacity={0.02} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="0" stroke="var(--mantine-color-dark-4)" vertical={false} />
+          <CartesianGrid strokeDasharray="0" stroke="var(--mantine-color-dark-4)" />
           <XAxis dataKey="time" type="number" domain={['dataMin', 'dataMax']} ticks={xTicks} tickFormatter={formatDate} tick={{ fontSize: 11 }} />
           <YAxis tick={{ fontSize: 11 }} width={48} tickFormatter={formatValue} {...yAxisProps} />
           <RechartsTooltip labelFormatter={(v) => formatTime(v as number)} formatter={(v) => [formatValue(v as number), '']} />
@@ -85,7 +85,7 @@ export function ValueChart({
         </AreaChart>
       ) : (
         <LineChart data={series}>
-          <CartesianGrid strokeDasharray="0" stroke="var(--mantine-color-dark-4)" vertical={false} />
+          <CartesianGrid strokeDasharray="0" stroke="var(--mantine-color-dark-4)" />
           <XAxis dataKey="time" type="number" domain={['dataMin', 'dataMax']} ticks={xTicks} tickFormatter={formatDate} tick={{ fontSize: 11 }} />
           <YAxis tick={{ fontSize: 11 }} width={48} tickFormatter={formatValue} {...yAxisProps} />
           <RechartsTooltip labelFormatter={(v) => formatTime(v as number)} formatter={(v) => [formatValue(v as number), '']} />
