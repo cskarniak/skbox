@@ -70,6 +70,29 @@ export function formatTime(ms: number) {
   });
 }
 
+export function formatDate(ms: number) {
+  return new Date(ms).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+}
+
+// Graduations régulières sur l'axe du temps, espacées de `stepMs`, plutôt que le
+// pas variable calculé automatiquement par la librairie de graphiques.
+export function buildTimeTicks(minMs: number, maxMs: number, stepMs: number): number[] {
+  if (!Number.isFinite(minMs) || !Number.isFinite(maxMs) || maxMs <= minMs) return [minMs];
+  const ticks: number[] = [];
+  for (let t = minMs; t < maxMs; t += stepMs) ticks.push(t);
+  ticks.push(maxMs);
+  return ticks;
+}
+
+// Graduations régulières sur l'axe des valeurs, espacées de `step` (ex: 5°C).
+export function buildStepTicks(minVal: number, maxVal: number, step: number): { ticks: number[]; domain: [number, number] } {
+  const lo = Math.floor(minVal / step) * step;
+  const hi = Math.ceil(maxVal / step) * step;
+  const ticks: number[] = [];
+  for (let v = lo; v <= hi; v += step) ticks.push(v);
+  return { ticks, domain: [lo, hi] };
+}
+
 const VALUE_META: Record<string, { label: string; unit: string }> = {
   temperature: { label: 'Température', unit: '°C' },
   humidity: { label: 'Humidité', unit: '%' },
