@@ -133,7 +133,10 @@ function DeviceHistoryModal({ device, opened, onClose }: { device: Device; opene
   const [rangeHours, setRangeHours] = useState('168');
   const [valueKey, setValueKey] = useState<string | null>(null);
 
-  const fromIso = rangeHours ? new Date(Date.now() - parseInt(rangeHours, 10) * 3600_000).toISOString() : undefined;
+  const fromIso = useMemo(
+    () => (rangeHours ? new Date(Date.now() - parseInt(rangeHours, 10) * 3600_000).toISOString() : undefined),
+    [rangeHours],
+  );
 
   const { data: history, isLoading } = useQuery<DeviceEvent[]>({
     queryKey: ['device-history', device.id, fromIso],

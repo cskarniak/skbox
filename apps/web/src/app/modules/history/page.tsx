@@ -17,12 +17,12 @@ import {
 } from '@mantine/core';
 import { IconSmartHome, IconNetwork, IconChevronLeft, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { AppNav } from '@/components/AppNav';
 import { ValueChart, ChartType } from '@/components/ValueChart';
-import { CHART_COLORS, DeviceEvent, extractValueKeys, buildSeries } from '@/lib/history';
+import { CHART_COLORS, DeviceEvent, extractValueKeys, buildSeries, generateId } from '@/lib/history';
 
 interface Device {
   id: string;
@@ -144,7 +144,7 @@ export default function HistoryModulePage() {
   const [hostname, setHostname] = useState('localhost');
   const [rangeHours, setRangeHours] = useState('168');
   const [panels, setPanels] = useState<PanelConfig[]>([
-    { id: crypto.randomUUID(), deviceId: null, valueKey: null, chartType: 'line' },
+    { id: generateId(), deviceId: null, valueKey: null, chartType: 'line' },
   ]);
 
   useEffect(() => {
@@ -158,10 +158,13 @@ export default function HistoryModulePage() {
 
   const trackedDevices = (devices ?? []).filter((d) => d.trackHistory);
 
-  const fromIso = rangeHours ? new Date(Date.now() - parseInt(rangeHours, 10) * 3600_000).toISOString() : undefined;
+  const fromIso = useMemo(
+    () => (rangeHours ? new Date(Date.now() - parseInt(rangeHours, 10) * 3600_000).toISOString() : undefined),
+    [rangeHours],
+  );
 
   const addPanel = () => {
-    setPanels((prev) => [...prev, { id: crypto.randomUUID(), deviceId: null, valueKey: null, chartType: 'line' }]);
+    setPanels((prev) => [...prev, { id: generateId(), deviceId: null, valueKey: null, chartType: 'line' }]);
   };
 
   const updatePanel = (id: string, next: Partial<PanelConfig>) => {

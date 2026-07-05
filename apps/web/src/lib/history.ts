@@ -1,3 +1,8 @@
+// crypto.randomUUID() exige un contexte sécurisé (HTTPS/localhost) ; indisponible en HTTP sur le LAN.
+export function generateId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export interface DeviceEvent {
   id: string;
   data: string;
