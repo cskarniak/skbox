@@ -22,7 +22,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { AppNav } from '@/components/AppNav';
 import { ValueChart, ChartType } from '@/components/ValueChart';
-import { CHART_COLORS, DeviceEvent, extractValueKeys, buildSeries, generateId } from '@/lib/history';
+import { CHART_COLORS, DeviceEvent, extractValueKeys, buildSeries, generateId, formatValueLabel } from '@/lib/history';
 
 interface Device {
   id: string;
@@ -89,11 +89,11 @@ function ChartPanel({
           <Select
             size="xs"
             placeholder="Valeur"
-            data={valueKeys.map((k) => ({ value: k, label: k }))}
+            data={valueKeys.map((k) => ({ value: k, label: formatValueLabel(k) }))}
             value={panel.valueKey}
             onChange={(value) => onChange({ valueKey: value })}
             disabled={!panel.deviceId}
-            w={160}
+            w={200}
           />
           <SegmentedControl
             size="xs"
@@ -130,9 +130,9 @@ function ChartPanel({
       ) : (
         <Stack gap={4}>
           <Text size="xs" c="dimmed">
-            {device?.name} · {panel.valueKey}
+            {device?.name} · {formatValueLabel(panel.valueKey)}
           </Text>
-          <ValueChart series={series} chartType={panel.chartType} color={color} />
+          <ValueChart series={series} chartType={panel.chartType} color={color} valueKey={panel.valueKey} />
         </Stack>
       )}
     </Card>

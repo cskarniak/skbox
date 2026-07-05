@@ -48,7 +48,7 @@ import { api } from '@/lib/api';
 import { useMemo } from 'react';
 import { AppNav } from '@/components/AppNav';
 import { ValueChart } from '@/components/ValueChart';
-import { CHART_COLORS, DeviceEvent, extractValueKeys, buildSeries } from '@/lib/history';
+import { CHART_COLORS, DeviceEvent, extractValueKeys, buildSeries, formatValueLabel } from '@/lib/history';
 
 interface Device {
   id: string;
@@ -149,17 +149,22 @@ function DeviceHistoryModal({ device, opened, onClose }: { device: Device; opene
   const series = history && activeKey ? buildSeries(history, activeKey) : [];
 
   return (
-    <Modal opened={opened} onClose={onClose} title={`Historique — ${device.name}`} size="lg">
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={`Historique — ${device.name}${activeKey ? ` · ${formatValueLabel(activeKey)}` : ''}`}
+      size="lg"
+    >
       <Stack gap="md">
         <Group justify="space-between">
           <SegmentedControl size="xs" value={rangeHours} onChange={setRangeHours} data={HISTORY_RANGE_OPTIONS} />
           <Select
             size="xs"
             placeholder="Valeur"
-            data={valueKeys.map((k) => ({ value: k, label: k }))}
+            data={valueKeys.map((k) => ({ value: k, label: formatValueLabel(k) }))}
             value={activeKey}
             onChange={setValueKey}
-            w={160}
+            w={200}
             disabled={valueKeys.length === 0}
           />
         </Group>
@@ -175,7 +180,7 @@ function DeviceHistoryModal({ device, opened, onClose }: { device: Device; opene
             </Text>
           </Center>
         ) : (
-          <ValueChart series={series} chartType="line" color={CHART_COLORS[0]} />
+          <ValueChart series={series} chartType="area" color={CHART_COLORS[0]} valueKey={activeKey} />
         )}
       </Stack>
     </Modal>

@@ -69,3 +69,29 @@ export function formatTime(ms: number) {
     minute: '2-digit',
   });
 }
+
+const VALUE_META: Record<string, { label: string; unit: string }> = {
+  temperature: { label: 'Température', unit: '°C' },
+  humidity: { label: 'Humidité', unit: '%' },
+  humidityStatus: { label: 'Statut humidité', unit: '' },
+  battery: { label: 'Batterie', unit: '%' },
+  linkquality: { label: 'Qualité de liaison', unit: '' },
+  rssi: { label: 'RSSI', unit: 'dBm' },
+  power: { label: 'Puissance', unit: 'W' },
+  energy: { label: 'Énergie', unit: 'kWh' },
+  voltage: { label: 'Tension', unit: 'V' },
+  current: { label: 'Courant', unit: 'A' },
+  brightness: { label: 'Luminosité', unit: '' },
+  state: { label: 'État', unit: '' },
+  occupancy: { label: 'Présence', unit: '' },
+  contact: { label: 'Contact', unit: '' },
+};
+
+export function getValueMeta(key: string): { label: string; unit: string } {
+  return VALUE_META[key] ?? { label: key, unit: '' };
+}
+
+export function formatValueLabel(key: string): string {
+  const meta = getValueMeta(key);
+  return meta.unit ? `${meta.label} (${meta.unit})` : meta.label;
+}
