@@ -15,7 +15,6 @@ import {
   Tooltip,
   Slider,
   Button,
-  Tabs,
   TextInput,
   SegmentedControl,
 } from '@mantine/core';
@@ -30,7 +29,6 @@ import {
   IconAdjustments,
   IconToggleLeft,
   IconDevicesPc,
-  IconScript,
   IconNetwork,
   IconAntenna,
   IconEdit,
@@ -38,15 +36,12 @@ import {
   IconLayoutGrid,
   IconGridDots,
   IconLayoutList,
-  IconServer,
-  IconDatabaseExport,
-  IconApps,
 } from '@tabler/icons-react';
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useMemo } from 'react';
+import { AppNav } from '@/components/AppNav';
 
 interface Device {
   id: string;
@@ -317,7 +312,6 @@ function DeviceCard({ device }: { device: Device }) {
 }
 
 export default function HomePage() {
-  const router = useRouter();
   const queryClient = useQueryClient();
 
   const { data: devices, isLoading } = useQuery<Device[]>({
@@ -359,33 +353,7 @@ export default function HomePage() {
             <Title order={3}>Skbox</Title>
           </Group>
           <Group gap="md">
-            <Tabs
-              value="devices"
-              onChange={(v) => {
-                if (v === 'scenarios') router.push('/scenarios');
-                if (v === 'system') router.push('/system');
-                if (v === 'backup') router.push('/backup');
-                if (v === 'modules') router.push('/modules');
-              }}
-            >
-              <Tabs.List>
-                <Tabs.Tab value="devices" leftSection={<IconSmartHome size={16} />}>
-                  Appareils
-                </Tabs.Tab>
-                <Tabs.Tab value="scenarios" leftSection={<IconScript size={16} />}>
-                  Scénarios
-                </Tabs.Tab>
-                <Tabs.Tab value="system" leftSection={<IconServer size={16} />}>
-                  Système
-                </Tabs.Tab>
-                <Tabs.Tab value="backup" leftSection={<IconDatabaseExport size={16} />}>
-                  Sauvegarde
-                </Tabs.Tab>
-                <Tabs.Tab value="modules" leftSection={<IconApps size={16} />}>
-                  Modules
-                </Tabs.Tab>
-              </Tabs.List>
-            </Tabs>
+            <AppNav active="devices" />
             <Tooltip label="Ouvrir Zigbee2MQTT">
               <Button
                 variant="subtle"

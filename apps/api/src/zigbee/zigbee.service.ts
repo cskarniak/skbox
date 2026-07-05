@@ -1,9 +1,10 @@
 import { Inject, Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@skbox/db';
 import { MqttService } from '../mqtt/mqtt.service';
+import { SettingsService } from '../settings/settings.service';
 
-const HEALTHCHECK_INTERVAL = 60_000;
-const HEALTHCHECK_TIMEOUT = 120_000;
+const DEFAULT_HEALTHCHECK_INTERVAL_SEC = 60;
+const DEFAULT_HEALTHCHECK_TIMEOUT_SEC = 120;
 
 interface Z2MDevice {
   ieee_address: string;
@@ -35,7 +36,14 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
   constructor(
     @Inject('PRISMA') private readonly prisma: PrismaClient,
     private readonly mqtt: MqttService,
+    private readonly settings: SettingsService,
   ) {}
+
+  private async getHealthcheckTimeoutMs(): Promise<number> {
+    const value = await this.settings.get('zigbee.healthcheckTimeoutSec');
+    const seconds = value ? parseInt(value, 10) : NaN;
+    return (Number.isFinite(seconds) && seconds > 0 ? seconds : DEFAULT_HEALTHCHECK_TIMEOUT_SEC) * 1000;
+  }
 
   async onModuleInit() {
     // Les abonnements doivent être enregistrés de façon synchrone, avant tout await :
@@ -84,7 +92,12 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
 
     await this.markAllOffline();
 
-    this.healthcheckTimer = setInterval(() => this.healthcheck(), HEALTHCHECK_INTERVAL);
+    const intervalValue = await this.settings.get('zigbee.healthcheckIntervalSec');
+    const intervalSec = intervalValue ? parseInt(intervalValue, 10) : NaN;
+    const intervalMs =
+      (Number.isFinite(intervalSec) && intervalSec > 0 ? intervalSec : DEFAULT_HEALTHCHECK_INTERVAL_SEC) * 1000;
+
+    this.healthcheckTimer = setInterval(() => this.healthcheck(), intervalMs);
   }
 
   onModuleDestroy() {
@@ -99,13 +112,14 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    const timeoutMs = await this.getHealthcheckTimeoutMs();
     const elapsed = Date.now() - this.lastMessageAt;
-    if (elapsed > HEALTHCHECK_TIMEOUT) {
+    if (elapsed > timeoutMs) {
       this.logger.warn(`No Zigbee2MQTT message for ${Math.round(elapsed / 1000)}s — sending health check`);
       this.mqtt.publish('zigbee2mqtt/bridge/request/health_check', '');
 
       setTimeout(async () => {
-        if (Date.now() - this.lastMessageAt > HEALTHCHECK_TIMEOUT) {
+        if (Date.now() - this.lastMessageAt > timeoutMs) {
           this.logger.warn('Zigbee2MQTT health check timeout — marking devices offline');
           this.bridgeOnline = false;
           await this.markAllOffline();

@@ -36,8 +36,15 @@
 - Protocols: Zigbee (via Zigbee2MQTT), RF433 (via rfxcom2mqtt + RFXtrx433E), Matter, MQTT
 - API routes prefixed with `/api`
 - MQTT topics: `skbox/{protocol}/{deviceId}/{command|state}`
-- Zigbee2MQTT topics: `zigbee2mqtt/{friendlyName}` (state), `zigbee2mqtt/{friendlyName}/set` (command)
+- Zigbee2MQTT topics: `zigbee2mqtt/{friendlyName}` (state), `zigbee2mqtt/{friendlyName}/set` (command), `zigbee2mqtt/{friendlyName}/availability` (online/offline)
 - rfxcom2mqtt topics: `rfxcom2mqtt/receive/{type}` (state), `rfxcom2mqtt/send/{type}` (command)
 - Auto-discovery: ZigbeeService listens to `zigbee2mqtt/bridge/devices`, RfxcomService listens to `rfxcom2mqtt/receive/+`
+- Device online/offline status for Zigbee devices comes from Z2M's per-device availability ping, not just from the last state message — a device that stops responding gets marked offline even if the Z2M bridge itself stays connected. Required in `configuration.yaml` on every Z2M install/server:
+  ```yaml
+  availability:
+    active:
+      timeout: 5
+  ```
+  Timeout is set to 5min (Z2M default is 10min) so that critical devices (e.g. the boiler-control Shelly relay) are detected offline promptly, without polling so aggressively it strains the network.
 - Swagger docs at http://localhost:3001/docs
 - Zigbee2MQTT UI at http://localhost:8080

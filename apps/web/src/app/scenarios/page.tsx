@@ -11,7 +11,6 @@ import {
   Center,
   Button,
   Switch,
-  Tabs,
   Tooltip,
   Table,
   ActionIcon,
@@ -32,14 +31,11 @@ import {
   IconNetwork,
   IconClock,
   IconDeviceDesktop,
-  IconServer,
-  IconDatabaseExport,
-  IconApps,
 } from '@tabler/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
+import { AppNav } from '@/components/AppNav';
 
 interface Trigger {
   type: string;
@@ -693,7 +689,6 @@ function TestButton({
 }
 
 export default function ScenariosPage() {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const [formOpened, setFormOpened] = useState(false);
   const [editingScenario, setEditingScenario] = useState<
@@ -740,39 +735,7 @@ export default function ScenariosPage() {
             <Title order={3}>Skbox</Title>
           </Group>
           <Group gap="md">
-          <Tabs
-            value="scenarios"
-            onChange={(v) => {
-              if (v === 'devices') router.push('/');
-              if (v === 'system') router.push('/system');
-              if (v === 'backup') router.push('/backup');
-              if (v === 'modules') router.push('/modules');
-            }}
-          >
-            <Tabs.List>
-              <Tabs.Tab
-                value="devices"
-                leftSection={<IconSmartHome size={16} />}
-              >
-                Appareils
-              </Tabs.Tab>
-              <Tabs.Tab
-                value="scenarios"
-                leftSection={<IconScript size={16} />}
-              >
-                Scénarios
-              </Tabs.Tab>
-              <Tabs.Tab value="system" leftSection={<IconServer size={16} />}>
-                Système
-              </Tabs.Tab>
-              <Tabs.Tab value="backup" leftSection={<IconDatabaseExport size={16} />}>
-                Sauvegarde
-              </Tabs.Tab>
-              <Tabs.Tab value="modules" leftSection={<IconApps size={16} />}>
-                Modules
-              </Tabs.Tab>
-            </Tabs.List>
-          </Tabs>
+          <AppNav active="scenarios" />
           <Tooltip label="Ouvrir Zigbee2MQTT">
             <Button
               variant="subtle"

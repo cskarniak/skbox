@@ -1,9 +1,10 @@
 import { Inject, Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@skbox/db';
 import { MqttService } from '../mqtt/mqtt.service';
+import { SettingsService } from '../settings/settings.service';
 
-const WATCHDOG_INTERVAL = 60_000;
-const WATCHDOG_TIMEOUT = 120_000;
+const DEFAULT_WATCHDOG_INTERVAL_SEC = 60;
+const DEFAULT_WATCHDOG_TIMEOUT_SEC = 120;
 
 interface RfxcomPayload {
   id: string;
@@ -31,7 +32,14 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
   constructor(
     @Inject('PRISMA') private readonly prisma: PrismaClient,
     private readonly mqtt: MqttService,
+    private readonly settings: SettingsService,
   ) {}
+
+  private async getWatchdogTimeoutMs(): Promise<number> {
+    const value = await this.settings.get('rfxcom.watchdogTimeoutSec');
+    const seconds = value ? parseInt(value, 10) : NaN;
+    return (Number.isFinite(seconds) && seconds > 0 ? seconds : DEFAULT_WATCHDOG_TIMEOUT_SEC) * 1000;
+  }
 
   async onModuleInit() {
     // Enregistrement synchrone avant tout await : un message retenu peut être livré dès la
@@ -56,7 +64,12 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
 
     await this.markAllOffline();
 
-    this.watchdogTimer = setInterval(() => this.watchdog(), WATCHDOG_INTERVAL);
+    const intervalValue = await this.settings.get('rfxcom.watchdogIntervalSec');
+    const intervalSec = intervalValue ? parseInt(intervalValue, 10) : NaN;
+    const intervalMs =
+      (Number.isFinite(intervalSec) && intervalSec > 0 ? intervalSec : DEFAULT_WATCHDOG_INTERVAL_SEC) * 1000;
+
+    this.watchdogTimer = setInterval(() => this.watchdog(), intervalMs);
   }
 
   onModuleDestroy() {
@@ -66,8 +79,9 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
   private async watchdog() {
     if (!this.mqtt.isConnected || !this.bridgeOnline) return;
 
+    const timeoutMs = await this.getWatchdogTimeoutMs();
     const elapsed = Date.now() - this.lastMessageAt;
-    if (elapsed > WATCHDOG_TIMEOUT) {
+    if (elapsed > timeoutMs) {
       this.logger.warn(`No rfxcom2mqtt message for ${Math.round(elapsed / 1000)}s — marking RF devices offline`);
       this.bridgeOnline = false;
       await this.markAllOffline();

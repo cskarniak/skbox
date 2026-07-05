@@ -7,7 +7,6 @@ import {
   Text,
   Stack,
   Button,
-  Tabs,
   Tooltip,
   Card,
   SimpleGrid,
@@ -16,16 +15,13 @@ import {
 } from '@mantine/core';
 import {
   IconSmartHome,
-  IconScript,
-  IconServer,
   IconNetwork,
-  IconDatabaseExport,
-  IconApps,
   IconFlame,
   IconChevronRight,
 } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
+import { AppNav } from '@/components/AppNav';
 
 interface ModuleEntry {
   key: string;
@@ -62,33 +58,7 @@ export default function ModulesPage() {
             <Title order={3}>Skbox</Title>
           </Group>
           <Group gap="md">
-            <Tabs
-              value="modules"
-              onChange={(v) => {
-                if (v === 'devices') router.push('/');
-                if (v === 'scenarios') router.push('/scenarios');
-                if (v === 'system') router.push('/system');
-                if (v === 'backup') router.push('/backup');
-              }}
-            >
-              <Tabs.List>
-                <Tabs.Tab value="devices" leftSection={<IconSmartHome size={16} />}>
-                  Appareils
-                </Tabs.Tab>
-                <Tabs.Tab value="scenarios" leftSection={<IconScript size={16} />}>
-                  Scénarios
-                </Tabs.Tab>
-                <Tabs.Tab value="system" leftSection={<IconServer size={16} />}>
-                  Système
-                </Tabs.Tab>
-                <Tabs.Tab value="backup" leftSection={<IconDatabaseExport size={16} />}>
-                  Sauvegarde
-                </Tabs.Tab>
-                <Tabs.Tab value="modules" leftSection={<IconApps size={16} />}>
-                  Modules
-                </Tabs.Tab>
-              </Tabs.List>
-            </Tabs>
+            <AppNav active="modules" />
             <Tooltip label="Ouvrir Zigbee2MQTT">
               <Button
                 variant="subtle"
