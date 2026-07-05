@@ -17,7 +17,10 @@ import {
   Button,
   TextInput,
   SegmentedControl,
+  Modal,
+  Select,
 } from '@mantine/core';
+import { useDisclosure } from '@mantine/hooks';
 import {
   IconSmartHome,
   IconBulb,
@@ -37,12 +40,15 @@ import {
   IconGridDots,
   IconLayoutList,
   IconCategory,
+  IconChartLine,
 } from '@tabler/icons-react';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useMemo } from 'react';
 import { AppNav } from '@/components/AppNav';
+import { ValueChart } from '@/components/ValueChart';
+import { CHART_COLORS, DeviceEvent, extractValueKeys, buildSeries } from '@/lib/history';
 
 interface Device {
   id: string;
@@ -58,6 +64,7 @@ interface Device {
   lastSeen: string;
   visible: boolean;
   active: boolean;
+  trackHistory: boolean;
 }
 
 interface Theme {
@@ -115,12 +122,70 @@ const tileSizeCols: Record<TileSize, Record<string, number>> = {
   large:  { base: 1, sm: 1, md: 2, lg: 3 },
 };
 
+const HISTORY_RANGE_OPTIONS = [
+  { value: '24', label: '24 h' },
+  { value: '168', label: '7 j' },
+  { value: '720', label: '30 j' },
+  { value: '', label: 'Tout' },
+];
+
+function DeviceHistoryModal({ device, opened, onClose }: { device: Device; opened: boolean; onClose: () => void }) {
+  const [rangeHours, setRangeHours] = useState('168');
+  const [valueKey, setValueKey] = useState<string | null>(null);
+
+  const fromIso = rangeHours ? new Date(Date.now() - parseInt(rangeHours, 10) * 3600_000).toISOString() : undefined;
+
+  const { data: history, isLoading } = useQuery<DeviceEvent[]>({
+    queryKey: ['device-history', device.id, fromIso],
+    queryFn: () => api.get(`/devices/${device.id}/history`, { params: { limit: 1000, from: fromIso } }).then((r) => r.data),
+    enabled: opened,
+  });
+
+  const valueKeys = history ? extractValueKeys(history) : [];
+  const activeKey = valueKey && valueKeys.includes(valueKey) ? valueKey : valueKeys[0] ?? null;
+  const series = history && activeKey ? buildSeries(history, activeKey) : [];
+
+  return (
+    <Modal opened={opened} onClose={onClose} title={`Historique — ${device.name}`} size="lg">
+      <Stack gap="md">
+        <Group justify="space-between">
+          <SegmentedControl size="xs" value={rangeHours} onChange={setRangeHours} data={HISTORY_RANGE_OPTIONS} />
+          <Select
+            size="xs"
+            placeholder="Valeur"
+            data={valueKeys.map((k) => ({ value: k, label: k }))}
+            value={activeKey}
+            onChange={setValueKey}
+            w={160}
+            disabled={valueKeys.length === 0}
+          />
+        </Group>
+
+        {isLoading ? (
+          <Center h={220}>
+            <Loader size="sm" />
+          </Center>
+        ) : !activeKey || series.length === 0 ? (
+          <Center h={220}>
+            <Text size="sm" c="dimmed">
+              Aucune donnée pour cette période.
+            </Text>
+          </Center>
+        ) : (
+          <ValueChart series={series} chartType="line" color={CHART_COLORS[0]} />
+        )}
+      </Stack>
+    </Modal>
+  );
+}
+
 function DeviceCard({ device }: { device: Device }) {
   const queryClient = useQueryClient();
   const state = JSON.parse(device.state || '{}');
   const isOn = state.state === 'ON' || state.on === true;
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(device.name);
+  const [historyOpened, { open: openHistory, close: closeHistory }] = useDisclosure(false);
 
   const sendCommand = useMutation({
     mutationFn: (command: string) =>
@@ -201,6 +266,16 @@ function DeviceCard({ device }: { device: Device }) {
           >
             {editing ? <IconCheck size={14} /> : <IconEdit size={14} />}
           </ActionIcon>
+          {device.trackHistory && (
+            <>
+              <Tooltip label="Voir l'historique">
+                <ActionIcon variant="subtle" size="sm" onClick={openHistory}>
+                  <IconChartLine size={14} />
+                </ActionIcon>
+              </Tooltip>
+              <DeviceHistoryModal device={device} opened={historyOpened} onClose={closeHistory} />
+            </>
+          )}
           <Badge color={statusColors[device.status] || 'gray'} variant="light">
             {device.status}
           </Badge>

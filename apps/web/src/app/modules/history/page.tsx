@@ -16,40 +16,19 @@ import {
   Loader,
 } from '@mantine/core';
 import { IconSmartHome, IconNetwork, IconChevronLeft, IconPlus, IconTrash } from '@tabler/icons-react';
-import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartsTooltip,
-  Brush,
-} from 'recharts';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { AppNav } from '@/components/AppNav';
+import { ValueChart, ChartType } from '@/components/ValueChart';
+import { CHART_COLORS, DeviceEvent, extractValueKeys, buildSeries } from '@/lib/history';
 
 interface Device {
   id: string;
   name: string;
   trackHistory: boolean;
 }
-
-interface DeviceEvent {
-  id: string;
-  data: string;
-  timestamp: string;
-}
-
-// Ordre catégoriel fixe (jamais cyclé au hasard) — palette validée CVD, variante dark.
-const CHART_COLORS = ['#3987e5', '#199e70', '#c98500', '#008300', '#9085e9', '#e66767', '#d55181', '#d95926'];
 
 const RANGE_OPTIONS = [
   { value: '1', label: '1 h' },
@@ -59,62 +38,11 @@ const RANGE_OPTIONS = [
   { value: '', label: 'Tout' },
 ];
 
-type ChartType = 'line' | 'bar' | 'area';
-
 interface PanelConfig {
   id: string;
   deviceId: string | null;
   valueKey: string | null;
   chartType: ChartType;
-}
-
-function isNumericKey(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
-}
-
-function coerceValue(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'boolean') return value ? 1 : 0;
-  if (typeof value === 'string') {
-    if (value === 'ON' || value === 'true') return 1;
-    if (value === 'OFF' || value === 'false') return 0;
-  }
-  return null;
-}
-
-function extractValueKeys(history: DeviceEvent[]): string[] {
-  const keys = new Set<string>();
-  for (const entry of history) {
-    try {
-      const parsed = JSON.parse(entry.data) as Record<string, unknown>;
-      for (const [key, value] of Object.entries(parsed)) {
-        if (coerceValue(value) !== null) keys.add(key);
-      }
-    } catch {
-      // ignore
-    }
-  }
-  return [...keys].sort();
-}
-
-function buildSeries(history: DeviceEvent[], valueKey: string) {
-  return history
-    .map((entry) => {
-      let value: number | null = null;
-      try {
-        const parsed = JSON.parse(entry.data) as Record<string, unknown>;
-        value = coerceValue(parsed[valueKey]);
-      } catch {
-        value = null;
-      }
-      return value === null ? null : { time: new Date(entry.timestamp).getTime(), value };
-    })
-    .filter((point): point is { time: number; value: number } => point !== null);
-}
-
-function formatTime(ms: number) {
-  const date = new Date(ms);
-  return date.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
 function ChartPanel({
@@ -204,36 +132,7 @@ function ChartPanel({
           <Text size="xs" c="dimmed">
             {device?.name} · {panel.valueKey}
           </Text>
-          <ResponsiveContainer width="100%" height={260}>
-            {panel.chartType === 'bar' ? (
-              <BarChart data={series}>
-                <CartesianGrid strokeDasharray="0" stroke="var(--mantine-color-dark-4)" vertical={false} />
-                <XAxis dataKey="time" type="number" domain={['dataMin', 'dataMax']} tickFormatter={formatTime} tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} width={40} />
-                <RechartsTooltip labelFormatter={(v) => formatTime(v as number)} />
-                <Bar dataKey="value" fill={color} radius={[4, 4, 0, 0]} maxBarSize={24} />
-                <Brush dataKey="time" height={20} tickFormatter={formatTime} travellerWidth={8} />
-              </BarChart>
-            ) : panel.chartType === 'area' ? (
-              <AreaChart data={series}>
-                <CartesianGrid strokeDasharray="0" stroke="var(--mantine-color-dark-4)" vertical={false} />
-                <XAxis dataKey="time" type="number" domain={['dataMin', 'dataMax']} tickFormatter={formatTime} tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} width={40} />
-                <RechartsTooltip labelFormatter={(v) => formatTime(v as number)} />
-                <Area type="monotone" dataKey="value" stroke={color} strokeWidth={2} fill={color} fillOpacity={0.1} />
-                <Brush dataKey="time" height={20} tickFormatter={formatTime} travellerWidth={8} />
-              </AreaChart>
-            ) : (
-              <LineChart data={series}>
-                <CartesianGrid strokeDasharray="0" stroke="var(--mantine-color-dark-4)" vertical={false} />
-                <XAxis dataKey="time" type="number" domain={['dataMin', 'dataMax']} tickFormatter={formatTime} tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} width={40} />
-                <RechartsTooltip labelFormatter={(v) => formatTime(v as number)} />
-                <Line type="monotone" dataKey="value" stroke={color} strokeWidth={2} dot={false} />
-                <Brush dataKey="time" height={20} tickFormatter={formatTime} travellerWidth={8} />
-              </LineChart>
-            )}
-          </ResponsiveContainer>
+          <ValueChart series={series} chartType={panel.chartType} color={color} />
         </Stack>
       )}
     </Card>
