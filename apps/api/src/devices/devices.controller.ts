@@ -59,9 +59,21 @@ export class DevicesController {
   }
 
   @Get(':id/history')
-  getHistory(@Param('id') id: string, @Query('limit') limit?: string) {
+  getHistory(
+    @Param('id') id: string,
+    @Query('limit') limit?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
     const parsed = limit ? parseInt(limit, 10) : NaN;
-    return this.devices.getHistory(id, Number.isFinite(parsed) && parsed > 0 ? parsed : 500);
+    const fromDate = from ? new Date(from) : undefined;
+    const toDate = to ? new Date(to) : undefined;
+    return this.devices.getHistory(id, Number.isFinite(parsed) && parsed > 0 ? parsed : 500, fromDate, toDate);
+  }
+
+  @Delete(':id/history')
+  clearHistory(@Param('id') id: string) {
+    return this.devices.clearHistory(id);
   }
 
   @Post(':id/command')

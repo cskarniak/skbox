@@ -18,6 +18,7 @@ import {
   IconNetwork,
   IconFlame,
   IconChevronRight,
+  IconChartLine,
 } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -38,6 +39,13 @@ const MODULES: ModuleEntry[] = [
     description: 'Planning hebdomadaire, dérogation manuelle et protection anti-cycle court pour le relais de la chaudière.',
     icon: <IconFlame size={24} />,
     href: '/modules/boiler',
+  },
+  {
+    key: 'history',
+    label: 'Historique',
+    description: "Graphiques des valeurs enregistrées pour les appareils historisés, dans le temps.",
+    icon: <IconChartLine size={24} />,
+    href: '/modules/history',
   },
 ];
 

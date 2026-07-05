@@ -49,11 +49,22 @@ export class DevicesService {
     });
   }
 
-  getHistory(id: string, limit: number) {
-    return this.prisma.deviceEvent.findMany({
-      where: { deviceId: id, event: 'state_update' },
-      orderBy: { timestamp: 'asc' },
+  async getHistory(id: string, limit: number, from?: Date, to?: Date) {
+    const events = await this.prisma.deviceEvent.findMany({
+      where: {
+        deviceId: id,
+        event: 'state_update',
+        timestamp: from || to ? { gte: from, lte: to } : undefined,
+      },
+      orderBy: { timestamp: 'desc' },
       take: limit,
+    });
+    return events.reverse();
+  }
+
+  clearHistory(id: string) {
+    return this.prisma.deviceEvent.deleteMany({
+      where: { deviceId: id, event: 'state_update' },
     });
   }
 

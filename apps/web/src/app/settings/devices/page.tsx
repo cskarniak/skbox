@@ -1,9 +1,10 @@
 'use client';
 
-import { Title, Text, Stack, Table, Switch, Badge, MultiSelect, ActionIcon, Modal, Tooltip, Center, Loader, ScrollArea } from '@mantine/core';
+import { Title, Text, Stack, Table, Switch, Badge, MultiSelect, ActionIcon, Modal, Tooltip, Center, Loader, ScrollArea, Button, TextInput, Group, Alert } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconHistory } from '@tabler/icons-react';
+import { IconHistory, IconTrash, IconAlertTriangle } from '@tabler/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { api } from '@/lib/api';
 
 interface Theme {
@@ -30,6 +31,78 @@ interface DeviceEvent {
   timestamp: string;
 }
 
+function ClearHistoryConfirm({ deviceId, onCleared }: { deviceId: string; onCleared: () => void }) {
+  const queryClient = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
+
+  const clearHistory = useMutation({
+    mutationFn: () => api.delete(`/devices/${deviceId}/history`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['device-history', deviceId] });
+      setConfirming(false);
+      setConfirmText('');
+      onCleared();
+    },
+  });
+
+  if (!confirming) {
+    return (
+      <Button
+        size="xs"
+        color="red"
+        variant="light"
+        leftSection={<IconTrash size={14} />}
+        onClick={() => setConfirming(true)}
+      >
+        Vider l'historique
+      </Button>
+    );
+  }
+
+  return (
+    <Alert color="red" icon={<IconAlertTriangle size={18} />} title="Suppression définitive">
+      <Stack gap="xs">
+        <Text size="sm">
+          Toutes les valeurs enregistrées pour cet appareil seront supprimées définitivement. Tapez{' '}
+          <Text span fw={700}>
+            OUI
+          </Text>{' '}
+          pour confirmer.
+        </Text>
+        <Group gap="xs">
+          <TextInput
+            size="xs"
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.currentTarget.value)}
+            placeholder="OUI"
+            w={120}
+          />
+          <Button
+            size="xs"
+            color="red"
+            disabled={confirmText !== 'OUI'}
+            loading={clearHistory.isPending}
+            onClick={() => clearHistory.mutate()}
+          >
+            Confirmer
+          </Button>
+          <Button
+            size="xs"
+            variant="subtle"
+            onClick={() => {
+              setConfirming(false);
+              setConfirmText('');
+            }}
+          >
+            Annuler
+          </Button>
+        </Group>
+      </Stack>
+    </Alert>
+  );
+}
+
 function HistoryModal({ device, opened, onClose }: { device: Device; opened: boolean; onClose: () => void }) {
   const { data: history, isLoading } = useQuery<DeviceEvent[]>({
     queryKey: ['device-history', device.id],
@@ -39,36 +112,44 @@ function HistoryModal({ device, opened, onClose }: { device: Device; opened: boo
 
   return (
     <Modal opened={opened} onClose={onClose} title={`Historique — ${device.name}`} size="lg">
-      {isLoading ? (
-        <Center h={150}>
-          <Loader size="sm" />
-        </Center>
-      ) : !history || history.length === 0 ? (
-        <Text size="sm" c="dimmed">
-          Aucune valeur enregistrée pour le moment.
-        </Text>
-      ) : (
-        <ScrollArea h={400}>
-          <Table striped highlightOnHover fz="xs">
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th w={140}>Date</Table.Th>
-                <Table.Th>Valeur</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {[...history].reverse().map((entry) => (
-                <Table.Tr key={entry.id}>
-                  <Table.Td>{new Date(entry.timestamp).toLocaleString('fr-FR')}</Table.Td>
-                  <Table.Td ff="monospace" style={{ wordBreak: 'break-all' }}>
-                    {entry.data}
-                  </Table.Td>
+      <Stack gap="md">
+        {history && history.length > 0 && (
+          <Group justify="flex-end">
+            <ClearHistoryConfirm deviceId={device.id} onCleared={() => {}} />
+          </Group>
+        )}
+
+        {isLoading ? (
+          <Center h={150}>
+            <Loader size="sm" />
+          </Center>
+        ) : !history || history.length === 0 ? (
+          <Text size="sm" c="dimmed">
+            Aucune valeur enregistrée pour le moment.
+          </Text>
+        ) : (
+          <ScrollArea h={400}>
+            <Table striped highlightOnHover fz="xs">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th w={140}>Date</Table.Th>
+                  <Table.Th>Valeur</Table.Th>
                 </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        </ScrollArea>
-      )}
+              </Table.Thead>
+              <Table.Tbody>
+                {[...history].reverse().map((entry) => (
+                  <Table.Tr key={entry.id}>
+                    <Table.Td>{new Date(entry.timestamp).toLocaleString('fr-FR')}</Table.Td>
+                    <Table.Td ff="monospace" style={{ wordBreak: 'break-all' }}>
+                      {entry.data}
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </ScrollArea>
+        )}
+      </Stack>
     </Modal>
   );
 }
