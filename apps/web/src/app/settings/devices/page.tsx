@@ -1,6 +1,8 @@
 'use client';
 
-import { Title, Text, Stack, Table, Switch, Badge, MultiSelect } from '@mantine/core';
+import { Title, Text, Stack, Table, Switch, Badge, MultiSelect, ActionIcon, Modal, Tooltip, Center, Loader, ScrollArea } from '@mantine/core';
+import { useDisclosure } from '@mantine/hooks';
+import { IconHistory } from '@tabler/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 
@@ -22,8 +24,58 @@ interface Device {
   trackHistory: boolean;
 }
 
+interface DeviceEvent {
+  id: string;
+  data: string;
+  timestamp: string;
+}
+
+function HistoryModal({ device, opened, onClose }: { device: Device; opened: boolean; onClose: () => void }) {
+  const { data: history, isLoading } = useQuery<DeviceEvent[]>({
+    queryKey: ['device-history', device.id],
+    queryFn: () => api.get(`/devices/${device.id}/history`, { params: { limit: 200 } }).then((r) => r.data),
+    enabled: opened,
+  });
+
+  return (
+    <Modal opened={opened} onClose={onClose} title={`Historique — ${device.name}`} size="lg">
+      {isLoading ? (
+        <Center h={150}>
+          <Loader size="sm" />
+        </Center>
+      ) : !history || history.length === 0 ? (
+        <Text size="sm" c="dimmed">
+          Aucune valeur enregistrée pour le moment.
+        </Text>
+      ) : (
+        <ScrollArea h={400}>
+          <Table striped highlightOnHover fz="xs">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th w={140}>Date</Table.Th>
+                <Table.Th>Valeur</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {[...history].reverse().map((entry) => (
+                <Table.Tr key={entry.id}>
+                  <Table.Td>{new Date(entry.timestamp).toLocaleString('fr-FR')}</Table.Td>
+                  <Table.Td ff="monospace" style={{ wordBreak: 'break-all' }}>
+                    {entry.data}
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </ScrollArea>
+      )}
+    </Modal>
+  );
+}
+
 function DeviceRow({ device, themes }: { device: Device; themes: Theme[] }) {
   const queryClient = useQueryClient();
+  const [historyOpened, { open: openHistory, close: closeHistory }] = useDisclosure(false);
 
   const patchDevice = useMutation({
     mutationFn: (data: Partial<Pick<Device, 'visible' | 'active' | 'trackHistory'>>) =>
@@ -86,6 +138,16 @@ function DeviceRow({ device, themes }: { device: Device; themes: Theme[] }) {
           w={220}
         />
       </Table.Td>
+      <Table.Td>
+        <Tooltip label={device.trackHistory ? 'Voir historique' : 'Activez "Historiser" pour enregistrer des valeurs'}>
+          <ActionIcon variant="subtle" disabled={!device.trackHistory} onClick={openHistory}>
+            <IconHistory size={16} />
+          </ActionIcon>
+        </Tooltip>
+        {device.trackHistory && (
+          <HistoryModal device={device} opened={historyOpened} onClose={closeHistory} />
+        )}
+      </Table.Td>
     </Table.Tr>
   );
 }
@@ -121,6 +183,7 @@ export default function SettingsDevicesPage() {
             <Table.Th>Actif</Table.Th>
             <Table.Th>Historiser</Table.Th>
             <Table.Th>Thèmes</Table.Th>
+            <Table.Th>Historique</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
