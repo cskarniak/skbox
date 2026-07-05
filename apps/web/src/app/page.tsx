@@ -123,10 +123,13 @@ const tileSizeCols: Record<TileSize, Record<string, number>> = {
 };
 
 const HISTORY_RANGE_OPTIONS = [
-  { value: '24', label: '24 h' },
-  { value: '168', label: '7 j' },
-  { value: '720', label: '30 j' },
-  { value: '', label: 'Tout' },
+  { value: '', label: 'Tous' },
+  { value: '0.5', label: '30 min' },
+  { value: '1', label: 'Heure' },
+  { value: '24', label: 'Jour' },
+  { value: '168', label: 'Semaine' },
+  { value: '720', label: 'Mois' },
+  { value: '8760', label: 'Année' },
 ];
 
 function DeviceHistoryModal({ device, opened, onClose }: { device: Device; opened: boolean; onClose: () => void }) {
@@ -134,7 +137,7 @@ function DeviceHistoryModal({ device, opened, onClose }: { device: Device; opene
   const [valueKey, setValueKey] = useState<string | null>(null);
 
   const fromIso = useMemo(
-    () => (rangeHours ? new Date(Date.now() - parseInt(rangeHours, 10) * 3600_000).toISOString() : undefined),
+    () => (rangeHours ? new Date(Date.now() - parseFloat(rangeHours) * 3600_000).toISOString() : undefined),
     [rangeHours],
   );
 

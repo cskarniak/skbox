@@ -15,14 +15,9 @@ import {
   Tooltip as RechartsTooltip,
   Brush,
 } from 'recharts';
-import { formatTime, formatDate, getValueMeta, buildTimeTicks, buildStepTicks } from '@/lib/history';
+import { formatTime, formatDate, getValueMeta, buildTimeTicks, buildValueTicks } from '@/lib/history';
 
 export type ChartType = 'line' | 'bar' | 'area';
-
-const X_TICK_STEP_MS = 2 * 24 * 3600_000; // graduation tous les 2 jours
-const Y_STEP_BY_KEY: Record<string, number> = {
-  temperature: 5,
-};
 
 export function ValueChart({
   series,
@@ -43,19 +38,15 @@ export function ValueChart({
 
   const xTicks = useMemo(() => {
     if (series.length === 0) return [];
-    return buildTimeTicks(series[0].time, series[series.length - 1].time, X_TICK_STEP_MS);
+    return buildTimeTicks(series[0].time, series[series.length - 1].time);
   }, [series]);
 
-  const yStep = Y_STEP_BY_KEY[valueKey];
-  const yTicksInfo = useMemo(() => {
-    if (!yStep || series.length === 0) return null;
+  const yAxisProps = useMemo(() => {
+    if (series.length === 0) return { domain: ['auto', 'auto'] as [string, string] };
     const values = series.map((p) => p.value);
-    return buildStepTicks(Math.min(...values), Math.max(...values), yStep);
-  }, [series, yStep]);
-
-  const yAxisProps = yTicksInfo
-    ? { ticks: yTicksInfo.ticks, domain: yTicksInfo.domain }
-    : { domain: ['auto', 'auto'] as [string, string] };
+    const { ticks, domain } = buildValueTicks(Math.min(...values), Math.max(...values));
+    return { ticks, domain };
+  }, [series]);
 
   return (
     <ResponsiveContainer width="100%" height={height}>
