@@ -1,13 +1,25 @@
 'use client';
 
 import { AppShell, Group, Title, Button, Tooltip, Tabs } from '@mantine/core';
-import { IconSmartHome, IconNetwork, IconAdjustments, IconServer, IconDatabaseExport } from '@tabler/icons-react';
+import {
+  IconSmartHome,
+  IconNetwork,
+  IconAdjustments,
+  IconServer,
+  IconDatabaseExport,
+  IconDevicesPc,
+  IconCategory,
+  IconLogs,
+} from '@tabler/icons-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { AppNav } from '@/components/AppNav';
 
 const SUB_TABS = [
   { value: 'preferences', label: 'Préférences', icon: <IconAdjustments size={16} />, href: '/settings/preferences' },
+  { value: 'devices', label: 'Appareils', icon: <IconDevicesPc size={16} />, href: '/settings/devices' },
+  { value: 'themes', label: 'Thèmes', icon: <IconCategory size={16} />, href: '/settings/themes' },
+  { value: 'mqtt-logs', label: 'Logs MQTT', icon: <IconLogs size={16} />, href: '/settings/mqtt-logs' },
   { value: 'system', label: 'Système', icon: <IconServer size={16} />, href: '/settings/system' },
   { value: 'backup', label: 'Sauvegardes', icon: <IconDatabaseExport size={16} />, href: '/settings/backup' },
 ];

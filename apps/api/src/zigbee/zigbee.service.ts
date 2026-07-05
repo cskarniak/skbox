@@ -216,7 +216,7 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
       where: { mqttTopic: `zigbee2mqtt/${friendlyName}` },
     });
 
-    if (!device) return;
+    if (!device || !device.active) return;
 
     await this.prisma.device.update({
       where: { id: device.id },
@@ -227,13 +227,15 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
       },
     });
 
-    await this.prisma.deviceEvent.create({
-      data: {
-        deviceId: device.id,
-        event: 'state_update',
-        data: JSON.stringify(state),
-      },
-    });
+    if (device.trackHistory) {
+      await this.prisma.deviceEvent.create({
+        data: {
+          deviceId: device.id,
+          event: 'state_update',
+          data: JSON.stringify(state),
+        },
+      });
+    }
   }
 
   private async handleAvailability(friendlyName: string, payload: string) {
@@ -248,7 +250,7 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
     const device = await this.prisma.device.findFirst({
       where: { mqttTopic: `zigbee2mqtt/${friendlyName}` },
     });
-    if (!device) return;
+    if (!device || !device.active) return;
 
     await this.prisma.device.update({
       where: { id: device.id },
@@ -277,6 +279,9 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
 
     if (!device?.mqttTopic) {
       throw new Error(`Device ${ieeeAddress} not found or has no MQTT topic`);
+    }
+    if (!device.active) {
+      throw new Error(`Device ${ieeeAddress} is inactive`);
     }
 
     this.mqtt.publish(`${device.mqttTopic}/set`, JSON.stringify(command));

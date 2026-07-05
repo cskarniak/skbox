@@ -21,11 +21,15 @@ model Device {
   vendor       String?
   model        String?
   mqttTopic    String?
+  visible      Boolean  @default(true)
+  active       Boolean  @default(true)
+  trackHistory Boolean  @default(false)
   lastSeen     DateTime @default(now())
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   events DeviceEvent[]
+  themes Theme[]
 
   @@index([protocol])
   @@index([room])
@@ -64,6 +68,16 @@ model Room {
   icon      String?
   order     Int      @default(0)
   createdAt DateTime @default(now())
+}
+
+model Theme {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  icon      String?
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  devices Device[]
 }
 
 model Setting {

@@ -2,12 +2,21 @@ import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import * as mqtt from 'mqtt';
 
+const LOG_BUFFER_SIZE = 500;
+
+export interface MqttLogEntry {
+  topic: string;
+  payload: string;
+  timestamp: number;
+}
+
 @Injectable()
 export class MqttService implements OnModuleInit, OnModuleDestroy {
   private client!: mqtt.MqttClient;
   private readonly logger = new Logger(MqttService.name);
   private readonly handlers = new Map<string, ((topic: string, payload: string) => void)[]>();
   private readonly disconnectHandlers: (() => void)[] = [];
+  private readonly logBuffer: MqttLogEntry[] = [];
   private connected = false;
 
   constructor(private readonly config: ConfigService) {}
@@ -35,6 +44,9 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     this.client.on('message', (topic, message) => {
       const payload = message.toString();
       this.logger.debug(`${topic}: ${payload}`);
+
+      this.logBuffer.push({ topic, payload, timestamp: Date.now() });
+      if (this.logBuffer.length > LOG_BUFFER_SIZE) this.logBuffer.shift();
 
       for (const [pattern, handlers] of this.handlers) {
         if (this.matchTopic(pattern, topic)) {
@@ -74,6 +86,13 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
 
   onDisconnect(handler: () => void) {
     this.disconnectHandlers.push(handler);
+  }
+
+  getRecentMessages(topicFilter?: string): MqttLogEntry[] {
+    const entries = topicFilter
+      ? this.logBuffer.filter((entry) => this.matchTopic(topicFilter, entry.topic))
+      : this.logBuffer;
+    return [...entries].reverse();
   }
 
   private matchTopic(pattern: string, topic: string): boolean {

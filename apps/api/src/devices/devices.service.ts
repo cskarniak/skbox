@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { PrismaClient } from '@skbox/db';
-import { CreateDeviceDto, UpdateDeviceDto } from '@skbox/shared';
+import { CreateDeviceDto, UpdateDeviceDto, UpdateDeviceThemesDto } from '@skbox/shared';
 
 @Injectable()
 export class DevicesService {
@@ -38,6 +38,22 @@ export class DevicesService {
     return this.prisma.device.update({
       where: { id },
       data: dto,
+    });
+  }
+
+  updateThemes(id: string, dto: UpdateDeviceThemesDto) {
+    return this.prisma.device.update({
+      where: { id },
+      data: { themes: { set: dto.themeIds.map((themeId) => ({ id: themeId })) } },
+      include: { themes: true },
+    });
+  }
+
+  getHistory(id: string, limit: number) {
+    return this.prisma.deviceEvent.findMany({
+      where: { deviceId: id, event: 'state_update' },
+      orderBy: { timestamp: 'asc' },
+      take: limit,
     });
   }
 

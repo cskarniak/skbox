@@ -36,6 +36,7 @@ import {
   IconLayoutGrid,
   IconGridDots,
   IconLayoutList,
+  IconCategory,
 } from '@tabler/icons-react';
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -55,6 +56,15 @@ interface Device {
   model: string | null;
   ieeeAddress: string | null;
   lastSeen: string;
+  visible: boolean;
+  active: boolean;
+}
+
+interface Theme {
+  id: string;
+  name: string;
+  order: number;
+  devices: { id: string }[];
 }
 
 const deviceIcons: Record<string, React.ReactNode> = {
@@ -68,32 +78,24 @@ const deviceIcons: Record<string, React.ReactNode> = {
   thermostat: <IconAdjustments size={24} />,
 };
 
-const groupConfig: { key: string; label: string; icon: React.ReactNode; types: string[] }[] = [
-  { key: 'temperature', label: 'Température & Humidité', icon: <IconTemperature size={20} />, types: ['sensor_temperature', 'sensor_humidity'] },
-  { key: 'lights', label: 'Éclairage', icon: <IconBulb size={20} />, types: ['light'] },
-  { key: 'switches', label: 'Prises & Interrupteurs', icon: <IconPlug size={20} />, types: ['switch', 'plug'] },
-  { key: 'motion', label: 'Détection', icon: <IconWalk size={20} />, types: ['sensor_motion', 'sensor_door'] },
-  { key: 'climate', label: 'Climat', icon: <IconAdjustments size={20} />, types: ['thermostat', 'sensor_rain', 'sensor_wind', 'sensor_uv'] },
-  { key: 'other', label: 'Autres', icon: <IconSmartHome size={20} />, types: [] },
-];
-
-function groupDevices(devices: Device[]) {
+function groupDevices(devices: Device[], themes: Theme[]) {
+  const visibleDevices = devices.filter((d) => d.visible && d.active);
   const grouped: { key: string; label: string; icon: React.ReactNode; devices: Device[] }[] = [];
   const assigned = new Set<string>();
 
-  for (const group of groupConfig) {
-    if (group.key === 'other') continue;
-    const matching = devices.filter((d) => group.types.includes(d.type));
+  const sortedThemes = [...themes].sort((a, b) => a.order - b.order);
+  for (const theme of sortedThemes) {
+    const themeDeviceIds = new Set(theme.devices.map((d) => d.id));
+    const matching = visibleDevices.filter((d) => themeDeviceIds.has(d.id));
     if (matching.length > 0) {
-      grouped.push({ ...group, devices: matching });
+      grouped.push({ key: theme.id, label: theme.name, icon: <IconCategory size={20} />, devices: matching });
       matching.forEach((d) => assigned.add(d.id));
     }
   }
 
-  const remaining = devices.filter((d) => !assigned.has(d.id));
+  const remaining = visibleDevices.filter((d) => !assigned.has(d.id));
   if (remaining.length > 0) {
-    const other = groupConfig.find((g) => g.key === 'other')!;
-    grouped.push({ ...other, devices: remaining });
+    grouped.push({ key: 'other', label: 'Sans thème', icon: <IconSmartHome size={20} />, devices: remaining });
   }
 
   return grouped;
@@ -320,7 +322,12 @@ export default function HomePage() {
     refetchInterval: 5000,
   });
 
-  const groups = useMemo(() => groupDevices(devices ?? []), [devices]);
+  const { data: themes } = useQuery<Theme[]>({
+    queryKey: ['themes'],
+    queryFn: () => api.get('/themes').then((r) => r.data),
+  });
+
+  const groups = useMemo(() => groupDevices(devices ?? [], themes ?? []), [devices, themes]);
 
   const [tileSize, setTileSize] = useState<TileSize>('medium');
   const [hostname, setHostname] = useState('localhost');

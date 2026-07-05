@@ -121,6 +121,9 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
     const vendor = this.inferVendor(data);
     const modelName = this.formatDeviceName(data.deviceName);
 
+    const existing = await this.prisma.device.findUnique({ where: { rfxcomId } });
+    if (existing && !existing.active) return;
+
     const stateData: Record<string, unknown> = {};
     if (data.temperature !== undefined) stateData.temperature = data.temperature;
     if (data.humidity !== undefined) stateData.humidity = data.humidity;
@@ -149,13 +152,15 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
       },
     });
 
-    await this.prisma.deviceEvent.create({
-      data: {
-        deviceId: device.id,
-        event: 'state_update',
-        data: JSON.stringify(stateData),
-      },
-    });
+    if (device.trackHistory) {
+      await this.prisma.deviceEvent.create({
+        data: {
+          deviceId: device.id,
+          event: 'state_update',
+          data: JSON.stringify(stateData),
+        },
+      });
+    }
   }
 
   private async handleBridgeStatus(payload: string) {
@@ -181,6 +186,9 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
 
     if (!device) {
       throw new Error(`RF device ${rfxcomId} not found`);
+    }
+    if (!device.active) {
+      throw new Error(`RF device ${rfxcomId} is inactive`);
     }
 
     const [type] = rfxcomId.split('/');

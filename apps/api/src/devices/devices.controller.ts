@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -6,12 +7,14 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { DevicesService } from './devices.service';
 import {
   createDeviceSchema,
   updateDeviceSchema,
+  updateDeviceThemesSchema,
   deviceCommandSchema,
   CreateDeviceDto,
   UpdateDeviceDto,
@@ -49,10 +52,26 @@ export class DevicesController {
     return this.devices.update(id, dto);
   }
 
+  @Patch(':id/themes')
+  updateThemes(@Param('id') id: string, @Body() body: unknown) {
+    const dto = updateDeviceThemesSchema.parse(body);
+    return this.devices.updateThemes(id, dto);
+  }
+
+  @Get(':id/history')
+  getHistory(@Param('id') id: string, @Query('limit') limit?: string) {
+    const parsed = limit ? parseInt(limit, 10) : NaN;
+    return this.devices.getHistory(id, Number.isFinite(parsed) && parsed > 0 ? parsed : 500);
+  }
+
   @Post(':id/command')
   async sendCommand(@Param('id') id: string, @Body() body: unknown) {
     const { command, payload } = deviceCommandSchema.parse(body);
     const device = await this.devices.findById(id);
+
+    if (!device.active) {
+      throw new BadRequestException('Appareil inactivé');
+    }
 
     if (device.protocol === 'zigbee' && device.mqttTopic) {
       const z2mPayload = this.toZ2MPayload(command, payload);
