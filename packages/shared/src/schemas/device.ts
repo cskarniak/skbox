@@ -20,6 +20,14 @@ export const updateDeviceThemesSchema = z.object({
   themeIds: z.array(z.string()),
 });
 
+export const devicePreferenceEntrySchema = z.object({
+  valueKey: z.string().min(1),
+  displayType: z.enum(['value', 'chart']),
+  chartType: z.enum(['line', 'bar', 'area']).optional(),
+});
+
+export const updateDisplayPreferencesSchema = z.array(devicePreferenceEntrySchema);
+
 export const deviceCommandSchema = z.object({
   command: z.string().min(1),
   payload: z.record(z.unknown()).optional(),
@@ -29,3 +37,5 @@ export type CreateDeviceDto = z.infer<typeof createDeviceSchema>;
 export type UpdateDeviceDto = z.infer<typeof updateDeviceSchema>;
 export type UpdateDeviceThemesDto = z.infer<typeof updateDeviceThemesSchema>;
 export type DeviceCommandDto = z.infer<typeof deviceCommandSchema>;
+export type DevicePreferenceEntry = z.infer<typeof devicePreferenceEntrySchema>;
+export type UpdateDisplayPreferencesDto = z.infer<typeof updateDisplayPreferencesSchema>;

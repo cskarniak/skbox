@@ -15,6 +15,7 @@ import {
   createDeviceSchema,
   updateDeviceSchema,
   updateDeviceThemesSchema,
+  updateDisplayPreferencesSchema,
   deviceCommandSchema,
   CreateDeviceDto,
   UpdateDeviceDto,
@@ -56,6 +57,12 @@ export class DevicesController {
   updateThemes(@Param('id') id: string, @Body() body: unknown) {
     const dto = updateDeviceThemesSchema.parse(body);
     return this.devices.updateThemes(id, dto);
+  }
+
+  @Patch(':id/display-preferences')
+  updateDisplayPreferences(@Param('id') id: string, @Body() body: unknown) {
+    const dto = updateDisplayPreferencesSchema.parse(body);
+    return this.devices.updateDisplayPreferences(id, dto);
   }
 
   @Get(':id/history')

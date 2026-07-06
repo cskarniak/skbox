@@ -1,11 +1,19 @@
 'use client';
 
-import { Title, Text, Stack, Table, Switch, Badge, MultiSelect, ActionIcon, Modal, Tooltip, Center, Loader, ScrollArea, Button, TextInput, Group, Alert } from '@mantine/core';
+import { Title, Text, Stack, Table, Switch, Badge, MultiSelect, ActionIcon, Modal, Tooltip, Center, Loader, ScrollArea, Button, TextInput, Group, Alert, Checkbox, SegmentedControl } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconHistory, IconTrash, IconAlertTriangle } from '@tabler/icons-react';
+import { IconHistory, IconTrash, IconAlertTriangle, IconAdjustments } from '@tabler/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '@/lib/api';
+import {
+  DisplayPreference,
+  DisplayType,
+  ChartType,
+  extractValueKeys,
+  formatValueLabel,
+  parseDisplayPreferences,
+} from '@/lib/history';
 
 interface Theme {
   id: string;
@@ -23,6 +31,7 @@ interface Device {
   visible: boolean;
   active: boolean;
   trackHistory: boolean;
+  displayPreferences: string;
 }
 
 interface DeviceEvent {
@@ -154,9 +163,109 @@ function HistoryModal({ device, opened, onClose }: { device: Device; opened: boo
   );
 }
 
+function PreferencesModal({ device, opened, onClose }: { device: Device; opened: boolean; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const { data: history, isLoading } = useQuery<DeviceEvent[]>({
+    queryKey: ['device-history', device.id, 'preferences'],
+    queryFn: () => api.get(`/devices/${device.id}/history`, { params: { limit: 500 } }).then((r) => r.data),
+    enabled: opened,
+  });
+
+  const [prefs, setPrefs] = useState<DisplayPreference[]>(() => parseDisplayPreferences(device.displayPreferences));
+
+  const savePrefs = useMutation({
+    mutationFn: (next: DisplayPreference[]) => api.patch(`/devices/${device.id}/display-preferences`, next),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['devices'] }),
+  });
+
+  const valueKeys = history ? extractValueKeys(history) : [];
+
+  const toggleKey = (valueKey: string, checked: boolean) => {
+    setPrefs((prev) =>
+      checked
+        ? [...prev, { valueKey, displayType: 'chart', chartType: 'line' }]
+        : prev.filter((p) => p.valueKey !== valueKey),
+    );
+  };
+
+  const updateKey = (valueKey: string, next: Partial<DisplayPreference>) => {
+    setPrefs((prev) => prev.map((p) => (p.valueKey === valueKey ? { ...p, ...next } : p)));
+  };
+
+  return (
+    <Modal opened={opened} onClose={onClose} title={`Historique par défaut — ${device.name}`} size="md">
+      {isLoading ? (
+        <Center h={150}>
+          <Loader size="sm" />
+        </Center>
+      ) : valueKeys.length === 0 ? (
+        <Text size="sm" c="dimmed">
+          Aucune valeur historisée pour le moment pour cet appareil.
+        </Text>
+      ) : (
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            Choisissez les valeurs affichées par défaut lorsque cet appareil est sélectionné dans le module
+            Historique, et leur forme (valeur ou graphique).
+          </Text>
+          <Stack gap="sm">
+            {valueKeys.map((key) => {
+              const pref = prefs.find((p) => p.valueKey === key);
+              return (
+                <Group key={key} justify="space-between" wrap="wrap">
+                  <Checkbox
+                    label={formatValueLabel(key)}
+                    checked={!!pref}
+                    onChange={(e) => toggleKey(key, e.currentTarget.checked)}
+                  />
+                  {pref && (
+                    <Group gap="xs">
+                      <SegmentedControl
+                        size="xs"
+                        value={pref.displayType}
+                        onChange={(value) => updateKey(key, { displayType: value as DisplayType })}
+                        data={[
+                          { label: 'Valeur', value: 'value' },
+                          { label: 'Graphique', value: 'chart' },
+                        ]}
+                      />
+                      {pref.displayType === 'chart' && (
+                        <SegmentedControl
+                          size="xs"
+                          value={pref.chartType ?? 'line'}
+                          onChange={(value) => updateKey(key, { chartType: value as ChartType })}
+                          data={[
+                            { label: 'Ligne', value: 'line' },
+                            { label: 'Barres', value: 'bar' },
+                            { label: 'Aire', value: 'area' },
+                          ]}
+                        />
+                      )}
+                    </Group>
+                  )}
+                </Group>
+              );
+            })}
+          </Stack>
+          <Group justify="flex-end">
+            <Button
+              size="xs"
+              loading={savePrefs.isPending}
+              onClick={() => savePrefs.mutate(prefs, { onSuccess: onClose })}
+            >
+              Enregistrer
+            </Button>
+          </Group>
+        </Stack>
+      )}
+    </Modal>
+  );
+}
+
 function DeviceRow({ device, themes }: { device: Device; themes: Theme[] }) {
   const queryClient = useQueryClient();
   const [historyOpened, { open: openHistory, close: closeHistory }] = useDisclosure(false);
+  const [prefsOpened, { open: openPrefs, close: closePrefs }] = useDisclosure(false);
 
   const patchDevice = useMutation({
     mutationFn: (data: Partial<Pick<Device, 'visible' | 'active' | 'trackHistory'>>) =>
@@ -220,13 +329,23 @@ function DeviceRow({ device, themes }: { device: Device; themes: Theme[] }) {
         />
       </Table.Td>
       <Table.Td>
-        <Tooltip label={device.trackHistory ? 'Voir historique' : 'Activez "Historiser" pour enregistrer des valeurs'}>
-          <ActionIcon variant="subtle" disabled={!device.trackHistory} onClick={openHistory}>
-            <IconHistory size={16} />
-          </ActionIcon>
-        </Tooltip>
+        <Group gap={4} wrap="nowrap">
+          <Tooltip label={device.trackHistory ? 'Voir historique' : 'Activez "Historiser" pour enregistrer des valeurs'}>
+            <ActionIcon variant="subtle" disabled={!device.trackHistory} onClick={openHistory}>
+              <IconHistory size={16} />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label={device.trackHistory ? 'Configurer les valeurs par défaut' : 'Activez "Historiser" pour configurer les valeurs par défaut'}>
+            <ActionIcon variant="subtle" disabled={!device.trackHistory} onClick={openPrefs}>
+              <IconAdjustments size={16} />
+            </ActionIcon>
+          </Tooltip>
+        </Group>
         {device.trackHistory && (
-          <HistoryModal device={device} opened={historyOpened} onClose={closeHistory} />
+          <>
+            <HistoryModal device={device} opened={historyOpened} onClose={closeHistory} />
+            <PreferencesModal device={device} opened={prefsOpened} onClose={closePrefs} />
+          </>
         )}
       </Table.Td>
     </Table.Tr>

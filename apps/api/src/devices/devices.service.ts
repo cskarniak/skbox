@@ -1,6 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { PrismaClient } from '@skbox/db';
-import { CreateDeviceDto, UpdateDeviceDto, UpdateDeviceThemesDto } from '@skbox/shared';
+import {
+  CreateDeviceDto,
+  UpdateDeviceDto,
+  UpdateDeviceThemesDto,
+  UpdateDisplayPreferencesDto,
+} from '@skbox/shared';
 
 @Injectable()
 export class DevicesService {
@@ -46,6 +51,13 @@ export class DevicesService {
       where: { id },
       data: { themes: { set: dto.themeIds.map((themeId) => ({ id: themeId })) } },
       include: { themes: true },
+    });
+  }
+
+  updateDisplayPreferences(id: string, preferences: UpdateDisplayPreferencesDto) {
+    return this.prisma.device.update({
+      where: { id },
+      data: { displayPreferences: JSON.stringify(preferences) },
     });
   }
 

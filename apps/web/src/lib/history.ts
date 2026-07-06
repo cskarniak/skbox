@@ -9,6 +9,38 @@ export interface DeviceEvent {
   timestamp: string;
 }
 
+export type DisplayType = 'value' | 'chart';
+export type ChartType = 'line' | 'bar' | 'area';
+
+export interface DisplayPreference {
+  valueKey: string;
+  displayType: DisplayType;
+  chartType?: ChartType;
+}
+
+export function parseDisplayPreferences(raw: string | null | undefined): DisplayPreference[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function latestValue(history: DeviceEvent[], valueKey: string): number | null {
+  for (let i = history.length - 1; i >= 0; i--) {
+    try {
+      const parsed = JSON.parse(history[i].data) as Record<string, unknown>;
+      const value = coerceValue(parsed[valueKey]);
+      if (value !== null) return value;
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
 // Ordre catégoriel fixe (jamais cyclé au hasard) — palette validée CVD, variante dark.
 export const CHART_COLORS = [
   '#3987e5',

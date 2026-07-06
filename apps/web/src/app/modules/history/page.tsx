@@ -22,12 +22,24 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { AppNav } from '@/components/AppNav';
 import { ValueChart, ChartType } from '@/components/ValueChart';
-import { CHART_COLORS, DeviceEvent, extractValueKeys, buildSeries, generateId, formatValueLabel } from '@/lib/history';
+import { LatestValue } from '@/components/LatestValue';
+import {
+  CHART_COLORS,
+  DeviceEvent,
+  DisplayType,
+  extractValueKeys,
+  buildSeries,
+  generateId,
+  formatValueLabel,
+  latestValue,
+  parseDisplayPreferences,
+} from '@/lib/history';
 
 interface Device {
   id: string;
   name: string;
   trackHistory: boolean;
+  displayPreferences: string;
 }
 
 const RANGE_OPTIONS = [
@@ -44,7 +56,12 @@ interface PanelConfig {
   id: string;
   deviceId: string | null;
   valueKey: string | null;
+  displayType: DisplayType;
   chartType: ChartType;
+}
+
+function emptyPanel(): PanelConfig {
+  return { id: generateId(), deviceId: null, valueKey: null, displayType: 'chart', chartType: 'line' };
 }
 
 function ChartPanel({
@@ -52,6 +69,7 @@ function ChartPanel({
   devices,
   fromIso,
   color,
+  onSelectDevice,
   onChange,
   onRemove,
 }: {
@@ -59,6 +77,7 @@ function ChartPanel({
   devices: Device[];
   fromIso: string | undefined;
   color: string;
+  onSelectDevice: (deviceId: string | null) => void;
   onChange: (next: Partial<PanelConfig>) => void;
   onRemove: () => void;
 }) {
@@ -73,6 +92,7 @@ function ChartPanel({
 
   const valueKeys = history ? extractValueKeys(history) : [];
   const series = history && panel.valueKey ? buildSeries(history, panel.valueKey) : [];
+  const latest = history && panel.valueKey ? latestValue(history, panel.valueKey) : null;
   const device = devices.find((d) => d.id === panel.deviceId);
 
   return (
@@ -84,7 +104,7 @@ function ChartPanel({
             placeholder="Appareil"
             data={devices.map((d) => ({ value: d.id, label: d.name }))}
             value={panel.deviceId}
-            onChange={(value) => onChange({ deviceId: value, valueKey: null })}
+            onChange={onSelectDevice}
             w={200}
             searchable
           />
@@ -99,14 +119,25 @@ function ChartPanel({
           />
           <SegmentedControl
             size="xs"
-            value={panel.chartType}
-            onChange={(value) => onChange({ chartType: value as ChartType })}
+            value={panel.displayType}
+            onChange={(value) => onChange({ displayType: value as DisplayType })}
             data={[
-              { label: 'Ligne', value: 'line' },
-              { label: 'Barres', value: 'bar' },
-              { label: 'Aire', value: 'area' },
+              { label: 'Valeur', value: 'value' },
+              { label: 'Graphique', value: 'chart' },
             ]}
           />
+          {panel.displayType === 'chart' && (
+            <SegmentedControl
+              size="xs"
+              value={panel.chartType}
+              onChange={(value) => onChange({ chartType: value as ChartType })}
+              data={[
+                { label: 'Ligne', value: 'line' },
+                { label: 'Barres', value: 'bar' },
+                { label: 'Aire', value: 'area' },
+              ]}
+            />
+          )}
         </Group>
         <ActionIcon variant="subtle" color="red" onClick={onRemove}>
           <IconTrash size={16} />
@@ -123,6 +154,13 @@ function ChartPanel({
         <Center h={220}>
           <Loader size="sm" />
         </Center>
+      ) : panel.displayType === 'value' ? (
+        <Stack gap={4}>
+          <Text size="xs" c="dimmed">
+            {device?.name} · {formatValueLabel(panel.valueKey)}
+          </Text>
+          <LatestValue valueKey={panel.valueKey} value={latest} />
+        </Stack>
       ) : series.length === 0 ? (
         <Center h={220}>
           <Text size="sm" c="dimmed">
@@ -145,9 +183,7 @@ export default function HistoryModulePage() {
   const router = useRouter();
   const [hostname, setHostname] = useState('localhost');
   const [rangeHours, setRangeHours] = useState('168');
-  const [panels, setPanels] = useState<PanelConfig[]>([
-    { id: generateId(), deviceId: null, valueKey: null, chartType: 'line' },
-  ]);
+  const [panels, setPanels] = useState<PanelConfig[]>([emptyPanel()]);
 
   useEffect(() => {
     setHostname(window.location.hostname);
@@ -166,7 +202,7 @@ export default function HistoryModulePage() {
   );
 
   const addPanel = () => {
-    setPanels((prev) => [...prev, { id: generateId(), deviceId: null, valueKey: null, chartType: 'line' }]);
+    setPanels((prev) => [...prev, emptyPanel()]);
   };
 
   const updatePanel = (id: string, next: Partial<PanelConfig>) => {
@@ -175,6 +211,32 @@ export default function HistoryModulePage() {
 
   const removePanel = (id: string) => {
     setPanels((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  // Appliquer les préférences d'affichage par défaut de l'appareil (réglées dans
+  // Réglages > Appareils) : la sélection remplace ce panel par un panel par métrique.
+  const selectDeviceForPanel = (panelId: string, deviceId: string | null) => {
+    const device = (devices ?? []).find((d) => d.id === deviceId);
+    const prefs = device ? parseDisplayPreferences(device.displayPreferences) : [];
+
+    if (!deviceId || prefs.length === 0) {
+      updatePanel(panelId, { deviceId, valueKey: null });
+      return;
+    }
+
+    const newPanels = prefs.map((pref) => ({
+      id: generateId(),
+      deviceId,
+      valueKey: pref.valueKey,
+      displayType: pref.displayType,
+      chartType: pref.chartType ?? ('line' as ChartType),
+    }));
+
+    setPanels((prev) => {
+      const index = prev.findIndex((p) => p.id === panelId);
+      if (index === -1) return prev;
+      return [...prev.slice(0, index), ...newPanels, ...prev.slice(index + 1)];
+    });
   };
 
   return (
@@ -240,6 +302,7 @@ export default function HistoryModulePage() {
                     devices={trackedDevices}
                     fromIso={fromIso}
                     color={CHART_COLORS[i % CHART_COLORS.length]}
+                    onSelectDevice={(deviceId) => selectDeviceForPanel(panel.id, deviceId)}
                     onChange={(next) => updatePanel(panel.id, next)}
                     onRemove={() => removePanel(panel.id)}
                   />
