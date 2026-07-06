@@ -1,11 +1,19 @@
 import { Inject, Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@skbox/db';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import { MqttService } from '../mqtt/mqtt.service';
 import { SettingsService } from '../settings/settings.service';
 import { hasSignificantChange } from '../devices/history-change.util';
 
+const execAsync = promisify(exec);
+
 const DEFAULT_HEALTHCHECK_INTERVAL_SEC = 60;
 const DEFAULT_HEALTHCHECK_TIMEOUT_SEC = 120;
+// Délai minimal entre deux relances automatiques du service systemd : évite une boucle
+// de redémarrages si le bridge reste indisponible pour une raison que le restart ne
+// résout pas (ex. dongle débranché).
+const MIN_AUTO_RESTART_INTERVAL_MS = 10 * 60_000;
 
 interface Z2MDevice {
   ieee_address: string;
@@ -33,6 +41,7 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
   private lastMessageAt = 0;
   private bridgeOnline = false;
   private healthcheckTimer?: ReturnType<typeof setInterval>;
+  private lastAutoRestartAt = 0;
 
   constructor(
     @Inject('PRISMA') private readonly prisma: PrismaClient,
@@ -124,9 +133,14 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
           this.logger.warn('Zigbee2MQTT health check timeout — marking devices offline');
           this.bridgeOnline = false;
           await this.markAllOffline();
+          await this.maybeAutoRestart();
         }
       }, 10_000);
     }
+  }
+
+  isBridgeOnline(): boolean {
+    return this.bridgeOnline;
   }
 
   private async markAllOffline() {
@@ -136,6 +150,22 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
     });
     if (result.count > 0) {
       this.logger.warn(`Marked ${result.count} Zigbee device(s) offline`);
+    }
+  }
+
+  private async maybeAutoRestart() {
+    const enabled = (await this.settings.get('zigbee.autoRestartEnabled')) === 'true';
+    if (!enabled) return;
+
+    const elapsed = Date.now() - this.lastAutoRestartAt;
+    if (elapsed < MIN_AUTO_RESTART_INTERVAL_MS) return;
+
+    this.lastAutoRestartAt = Date.now();
+    this.logger.warn('Auto-restarting skbox-z2m (bridge offline)');
+    try {
+      await execAsync('sudo systemctl restart skbox-z2m', { timeout: 10_000 });
+    } catch (err: any) {
+      this.logger.error(`Failed to auto-restart skbox-z2m: ${err?.stderr?.trim() || err?.message}`);
     }
   }
 
@@ -155,6 +185,7 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
     } else if (state === 'offline') {
       this.bridgeOnline = false;
       await this.markAllOffline();
+      await this.maybeAutoRestart();
     }
   }
 

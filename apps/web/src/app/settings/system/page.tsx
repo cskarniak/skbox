@@ -71,6 +71,10 @@ interface SystemHealth {
     containers: DockerContainer[];
   };
   services: ServiceStatus[];
+  bridges: {
+    zigbee: boolean;
+    rfxcom: boolean;
+  };
   network: string[];
   thermalShutdown: {
     active: boolean;
@@ -439,6 +443,22 @@ export default function SettingsSystemPage() {
                 </Badge>
               ))}
             </Group>
+          </Card>
+
+          <Card shadow="sm" padding="lg" withBorder>
+            <Text size="sm" c="dimmed" mb="xs">
+              Bridges (état fonctionnel, pas juste le process)
+            </Text>
+            <Stack gap={6}>
+              <Group justify="space-between">
+                <Text size="sm">Zigbee2MQTT</Text>
+                <StatusBadge active={health.bridges.zigbee} activeLabel="En ligne" inactiveLabel="Hors-ligne" />
+              </Group>
+              <Group justify="space-between">
+                <Text size="sm">rfxcom2mqtt</Text>
+                <StatusBadge active={health.bridges.rfxcom} activeLabel="En ligne" inactiveLabel="Hors-ligne" />
+              </Group>
+            </Stack>
           </Card>
 
           <Card shadow="sm" padding="lg" withBorder>

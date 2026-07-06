@@ -8,5 +8,6 @@ import { RfxcomController } from './rfxcom.controller';
   imports: [DevicesModule, SettingsModule],
   controllers: [RfxcomController],
   providers: [RfxcomService],
+  exports: [RfxcomService],
 })
 export class RfxcomModule {}

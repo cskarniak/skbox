@@ -8,5 +8,6 @@ import { ZigbeeController } from './zigbee.controller';
   imports: [DevicesModule, SettingsModule],
   controllers: [ZigbeeController],
   providers: [ZigbeeService],
+  exports: [ZigbeeService],
 })
 export class ZigbeeModule {}

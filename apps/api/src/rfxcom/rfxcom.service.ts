@@ -1,11 +1,19 @@
 import { Inject, Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@skbox/db';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import { MqttService } from '../mqtt/mqtt.service';
 import { SettingsService } from '../settings/settings.service';
 import { hasSignificantChange } from '../devices/history-change.util';
 
+const execAsync = promisify(exec);
+
 const DEFAULT_WATCHDOG_INTERVAL_SEC = 60;
 const DEFAULT_WATCHDOG_TIMEOUT_SEC = 120;
+// Délai minimal entre deux relances automatiques du service systemd : évite une boucle
+// de redémarrages si le bridge reste indisponible pour une raison que le restart ne
+// résout pas (ex. dongle débranché).
+const MIN_AUTO_RESTART_INTERVAL_MS = 10 * 60_000;
 
 interface RfxcomPayload {
   id: string;
@@ -29,6 +37,7 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
   private lastMessageAt = 0;
   private bridgeOnline = false;
   private watchdogTimer?: ReturnType<typeof setInterval>;
+  private lastAutoRestartAt = 0;
 
   constructor(
     @Inject('PRISMA') private readonly prisma: PrismaClient,
@@ -86,7 +95,12 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(`No rfxcom2mqtt message for ${Math.round(elapsed / 1000)}s — marking RF devices offline`);
       this.bridgeOnline = false;
       await this.markAllOffline();
+      await this.maybeAutoRestart();
     }
+  }
+
+  isBridgeOnline(): boolean {
+    return this.bridgeOnline;
   }
 
   private async markAllOffline() {
@@ -96,6 +110,22 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
     });
     if (result.count > 0) {
       this.logger.warn(`Marked ${result.count} RF device(s) offline`);
+    }
+  }
+
+  private async maybeAutoRestart() {
+    const enabled = (await this.settings.get('rfxcom.autoRestartEnabled')) === 'true';
+    if (!enabled) return;
+
+    const elapsed = Date.now() - this.lastAutoRestartAt;
+    if (elapsed < MIN_AUTO_RESTART_INTERVAL_MS) return;
+
+    this.lastAutoRestartAt = Date.now();
+    this.logger.warn('Auto-restarting skbox-rfxcom (bridge offline)');
+    try {
+      await execAsync('sudo systemctl restart skbox-rfxcom', { timeout: 10_000 });
+    } catch (err: any) {
+      this.logger.error(`Failed to auto-restart skbox-rfxcom: ${err?.stderr?.trim() || err?.message}`);
     }
   }
 
@@ -179,6 +209,7 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
     } else if (status === 'offline') {
       this.bridgeOnline = false;
       await this.markAllOffline();
+      await this.maybeAutoRestart();
     }
   }
 

@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as os from 'os';
+import { ZigbeeService } from '../zigbee/zigbee.service';
+import { RfxcomService } from '../rfxcom/rfxcom.service';
 
 const execAsync = promisify(exec);
 
@@ -47,6 +49,10 @@ export interface SystemHealth {
     containers: DockerContainer[];
   };
   services: ServiceStatus[];
+  bridges: {
+    zigbee: boolean;
+    rfxcom: boolean;
+  };
   network: string[];
   thermalShutdown: {
     active: boolean;
@@ -59,6 +65,11 @@ export interface SystemHealth {
 @Injectable()
 export class SystemService {
   private readonly logger = new Logger(SystemService.name);
+
+  constructor(
+    private readonly zigbee: ZigbeeService,
+    private readonly rfxcom: RfxcomService,
+  ) {}
 
   async getHealth(): Promise<SystemHealth> {
     const [
@@ -77,7 +88,7 @@ export class SystemService {
       this.readDisk(),
       this.readSmart(),
       this.readDocker(),
-      this.readServices(['mbpfan', 'thermald', 'docker', 'fstrim.timer']),
+      this.readServices(['mbpfan', 'thermald', 'docker', 'fstrim.timer', 'mosquitto', 'skbox-z2m', 'skbox-rfxcom']),
       this.readThermalShutdown(),
     ]);
 
@@ -113,6 +124,10 @@ export class SystemService {
       smart,
       docker,
       services,
+      bridges: {
+        zigbee: this.zigbee.isBridgeOnline(),
+        rfxcom: this.rfxcom.isBridgeOnline(),
+      },
       network: Object.values(os.networkInterfaces())
         .flat()
         .filter((i): i is os.NetworkInterfaceInfo => !!i && !i.internal && i.family === 'IPv4')

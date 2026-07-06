@@ -1,6 +1,6 @@
 'use client';
 
-import { Title, Text, Stack, Card, NumberInput, Button, Group } from '@mantine/core';
+import { Title, Text, Stack, Card, NumberInput, Button, Group, Switch } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
@@ -39,6 +39,57 @@ const HEALTHCHECK_FIELDS: PreferenceField[] = [
     defaultValue: 120,
   },
 ];
+
+interface AutoRestartField {
+  key: string;
+  label: string;
+  description: string;
+}
+
+const AUTO_RESTART_FIELDS: AutoRestartField[] = [
+  {
+    key: 'zigbee.autoRestartEnabled',
+    label: 'Relance automatique Zigbee',
+    description:
+      'Redémarre le service skbox-z2m si le bridge Zigbee2MQTT reste hors-ligne au-delà du timeout ci-dessus (au minimum 10 min entre deux tentatives).',
+  },
+  {
+    key: 'rfxcom.autoRestartEnabled',
+    label: 'Relance automatique RFXcom',
+    description:
+      'Redémarre le service skbox-rfxcom si le bridge rfxcom2mqtt reste hors-ligne au-delà du timeout ci-dessus (au minimum 10 min entre deux tentatives).',
+  },
+];
+
+function AutoRestartToggle({ field }: { field: AutoRestartField }) {
+  const queryClient = useQueryClient();
+
+  const { data } = useQuery<{ value: string | null }>({
+    queryKey: ['settings', field.key],
+    queryFn: () => api.get(`/settings/${field.key}`).then((r) => r.data),
+    staleTime: Infinity,
+  });
+
+  const save = useMutation({
+    mutationFn: (checked: boolean) => api.put(`/settings/${field.key}`, { value: String(checked) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings', field.key] });
+      notifications.show({ color: 'teal', title: 'Enregistré', message: field.label });
+    },
+    onError: () => {
+      notifications.show({ color: 'red', title: 'Échec', message: "Impossible d'enregistrer ce paramètre" });
+    },
+  });
+
+  return (
+    <Switch
+      label={field.label}
+      description={field.description}
+      checked={data?.value === 'true'}
+      onChange={(e) => save.mutate(e.currentTarget.checked)}
+    />
+  );
+}
 
 function PreferenceInput({ field }: { field: PreferenceField }) {
   const queryClient = useQueryClient();
@@ -98,6 +149,17 @@ export default function SettingsPreferencesPage() {
         <Stack gap="md">
           {HEALTHCHECK_FIELDS.map((field) => (
             <PreferenceInput key={field.key} field={field} />
+          ))}
+        </Stack>
+      </Card>
+
+      <Card shadow="sm" padding="lg" withBorder>
+        <Text size="sm" c="dimmed" mb="md">
+          Relance automatique des bridges
+        </Text>
+        <Stack gap="md">
+          {AUTO_RESTART_FIELDS.map((field) => (
+            <AutoRestartToggle key={field.key} field={field} />
           ))}
         </Stack>
       </Card>
