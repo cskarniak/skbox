@@ -196,16 +196,48 @@ function ChartPanel({
   );
 }
 
+const LAYOUT_SETTINGS_KEY = 'historyModule.layout';
+
 export default function HistoryModulePage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [hostname, setHostname] = useState('localhost');
   const [rangeHours, setRangeHours] = useState('168');
   const [panels, setPanels] = useState<PanelConfig[]>([emptyPanel()]);
+  const [layoutHydrated, setLayoutHydrated] = useState(false);
 
   useEffect(() => {
     setHostname(window.location.hostname);
   }, []);
+
+  const { data: savedLayout } = useQuery<{ key: string; value: string | null }>({
+    queryKey: ['settings', LAYOUT_SETTINGS_KEY],
+    queryFn: () => api.get(`/settings/${LAYOUT_SETTINGS_KEY}`).then((r) => r.data),
+  });
+
+  // Restaure la disposition (appareils/valeurs/types de graphique) telle que laissée
+  // la dernière fois : sans ça, tout panel ajouté manuellement disparaît à chaque
+  // rechargement de la page puisque `panels` n'est qu'un state React local.
+  useEffect(() => {
+    if (layoutHydrated || savedLayout === undefined) return;
+    if (savedLayout.value) {
+      try {
+        const parsed = JSON.parse(savedLayout.value);
+        if (Array.isArray(parsed) && parsed.length > 0) setPanels(parsed);
+      } catch {
+        // ignore, garde le panel vide par défaut
+      }
+    }
+    setLayoutHydrated(true);
+  }, [savedLayout, layoutHydrated]);
+
+  useEffect(() => {
+    if (!layoutHydrated) return;
+    const timeout = setTimeout(() => {
+      api.put(`/settings/${LAYOUT_SETTINGS_KEY}`, { value: JSON.stringify(panels) });
+    }, 500);
+    return () => clearTimeout(timeout);
+  }, [panels, layoutHydrated]);
 
   const { data: devices } = useQuery<Device[]>({
     queryKey: ['devices'],
