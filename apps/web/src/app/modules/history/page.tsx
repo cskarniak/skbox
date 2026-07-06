@@ -15,10 +15,10 @@ import {
   Center,
   Loader,
 } from '@mantine/core';
-import { IconSmartHome, IconNetwork, IconChevronLeft, IconPlus, IconTrash, IconDeviceFloppy } from '@tabler/icons-react';
+import { IconSmartHome, IconNetwork, IconChevronLeft, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { AppNav } from '@/components/AppNav';
 import { ValueChart, ChartType } from '@/components/ValueChart';
@@ -27,7 +27,6 @@ import {
   CHART_COLORS,
   DeviceEvent,
   DisplayType,
-  DisplayPreference,
   extractValueKeys,
   buildSeries,
   generateId,
@@ -73,8 +72,6 @@ function ChartPanel({
   onSelectDevice,
   onChange,
   onRemove,
-  onSaveDefault,
-  isSavingDefault,
 }: {
   panel: PanelConfig;
   devices: Device[];
@@ -83,8 +80,6 @@ function ChartPanel({
   onSelectDevice: (deviceId: string | null) => void;
   onChange: (next: Partial<PanelConfig>) => void;
   onRemove: () => void;
-  onSaveDefault: () => void;
-  isSavingDefault: boolean;
 }) {
   const { data: history, isLoading } = useQuery<DeviceEvent[]>({
     queryKey: ['device-history', panel.deviceId, fromIso],
@@ -144,21 +139,9 @@ function ChartPanel({
             />
           )}
         </Group>
-        <Group gap={4}>
-          <Tooltip label="Enregistrer comme réglage par défaut de cet appareil">
-            <ActionIcon
-              variant="subtle"
-              disabled={!panel.deviceId || !panel.valueKey}
-              loading={isSavingDefault}
-              onClick={onSaveDefault}
-            >
-              <IconDeviceFloppy size={16} />
-            </ActionIcon>
-          </Tooltip>
-          <ActionIcon variant="subtle" color="red" onClick={onRemove}>
-            <IconTrash size={16} />
-          </ActionIcon>
-        </Group>
+        <ActionIcon variant="subtle" color="red" onClick={onRemove}>
+          <IconTrash size={16} />
+        </ActionIcon>
       </Group>
 
       {!panel.deviceId || !panel.valueKey ? (
@@ -200,7 +183,6 @@ const LAYOUT_SETTINGS_KEY = 'historyModule.layout';
 
 export default function HistoryModulePage() {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const [hostname, setHostname] = useState('localhost');
   const [rangeHours, setRangeHours] = useState('168');
   const [panels, setPanels] = useState<PanelConfig[]>([emptyPanel()]);
@@ -289,25 +271,6 @@ export default function HistoryModulePage() {
     });
   };
 
-  const saveDefault = useMutation({
-    mutationFn: ({ deviceId, prefs }: { deviceId: string; prefs: DisplayPreference[] }) =>
-      api.patch(`/devices/${deviceId}/display-preferences`, prefs),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['devices'] }),
-  });
-
-  // Ajoute/replace ce panel dans les préférences enregistrées de l'appareil, sans
-  // toucher aux autres métriques déjà enregistrées pour ce même appareil.
-  const savePanelAsDefault = (panel: PanelConfig) => {
-    if (!panel.deviceId || !panel.valueKey) return;
-    const device = (devices ?? []).find((d) => d.id === panel.deviceId);
-    const existing = device ? parseDisplayPreferences(device.displayPreferences) : [];
-    const next: DisplayPreference[] = [
-      ...existing.filter((p) => p.valueKey !== panel.valueKey),
-      { valueKey: panel.valueKey, displayType: panel.displayType, chartType: panel.chartType },
-    ];
-    saveDefault.mutate({ deviceId: panel.deviceId, prefs: next });
-  };
-
   return (
     <AppShell header={{ height: 60 }} padding="md">
       <AppShell.Header>
@@ -382,8 +345,6 @@ export default function HistoryModulePage() {
                     onSelectDevice={(deviceId) => selectDeviceForPanel(panel.id, deviceId)}
                     onChange={(next) => updatePanel(panel.id, next)}
                     onRemove={() => removePanel(panel.id)}
-                    onSaveDefault={() => savePanelAsDefault(panel)}
-                    isSavingDefault={saveDefault.isPending && saveDefault.variables?.deviceId === panel.deviceId}
                   />
                 ))}
               </Stack>
