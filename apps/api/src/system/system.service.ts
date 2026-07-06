@@ -141,6 +141,15 @@ export class SystemService {
     await this.runOrThrow(`sudo systemctl ${action} thermal-shutdown.timer`);
   }
 
+  // Arrêt volontaire d'un bridge pour vérifier en conditions réelles que la relance
+  // automatique (ZigbeeService/RfxcomService) se déclenche bien — sans avoir à
+  // débrancher un dongle. Le service se relance seul si l'option est activée dans
+  // Réglages > Préférences, sinon il restera arrêté jusqu'à une relance manuelle.
+  async stopBridgeService(bridge: 'zigbee' | 'rfxcom'): Promise<void> {
+    const service = bridge === 'zigbee' ? 'skbox-z2m' : 'skbox-rfxcom';
+    await this.runOrThrow(`sudo systemctl stop ${service}`);
+  }
+
   private async runOrThrow(cmd: string): Promise<string> {
     try {
       const { stdout } = await execAsync(cmd, { timeout: 5000 });

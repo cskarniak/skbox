@@ -252,6 +252,32 @@ export default function SettingsSystemPage() {
     setThermalShutdown.mutate(active);
   };
 
+  const stopBridge = useMutation({
+    mutationFn: (bridge: 'zigbee' | 'rfxcom') => api.post(`/system/bridges/${bridge}/stop`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['system-health'] }),
+    onError: (error: any) => {
+      notifications.show({
+        color: 'red',
+        title: 'Échec de la commande',
+        message:
+          error?.response?.data?.message ??
+          "La commande sudo a échoué sur le serveur (règle sudoers manquante ?)",
+      });
+    },
+  });
+
+  const handleStopBridge = (bridge: 'zigbee' | 'rfxcom') => {
+    const serviceName = bridge === 'zigbee' ? 'skbox-z2m' : 'skbox-rfxcom';
+    if (
+      !window.confirm(
+        `Arrêter le service ${serviceName} pour tester la relance automatique ? Le bridge sera hors-ligne jusqu'à la relance (automatique si activée dans Préférences, sinon manuelle).`,
+      )
+    ) {
+      return;
+    }
+    stopBridge.mutate(bridge);
+  };
+
   return (
     <>
       <Group justify="space-between" mb="md">
@@ -452,11 +478,35 @@ export default function SettingsSystemPage() {
             <Stack gap={6}>
               <Group justify="space-between">
                 <Text size="sm">Zigbee2MQTT</Text>
-                <StatusBadge active={health.bridges.zigbee} activeLabel="En ligne" inactiveLabel="Hors-ligne" />
+                <Group gap="xs">
+                  <StatusBadge active={health.bridges.zigbee} activeLabel="En ligne" inactiveLabel="Hors-ligne" />
+                  <Button
+                    size="xs"
+                    variant="light"
+                    color="orange"
+                    disabled={!health.bridges.zigbee}
+                    loading={stopBridge.isPending && stopBridge.variables === 'zigbee'}
+                    onClick={() => handleStopBridge('zigbee')}
+                  >
+                    Tester l'arrêt
+                  </Button>
+                </Group>
               </Group>
               <Group justify="space-between">
                 <Text size="sm">rfxcom2mqtt</Text>
-                <StatusBadge active={health.bridges.rfxcom} activeLabel="En ligne" inactiveLabel="Hors-ligne" />
+                <Group gap="xs">
+                  <StatusBadge active={health.bridges.rfxcom} activeLabel="En ligne" inactiveLabel="Hors-ligne" />
+                  <Button
+                    size="xs"
+                    variant="light"
+                    color="orange"
+                    disabled={!health.bridges.rfxcom}
+                    loading={stopBridge.isPending && stopBridge.variables === 'rfxcom'}
+                    onClick={() => handleStopBridge('rfxcom')}
+                  >
+                    Tester l'arrêt
+                  </Button>
+                </Group>
               </Group>
             </Stack>
           </Card>
