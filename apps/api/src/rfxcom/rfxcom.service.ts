@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nest
 import { PrismaClient } from '@skbox/db';
 import { MqttService } from '../mqtt/mqtt.service';
 import { SettingsService } from '../settings/settings.service';
+import { hasSignificantChange } from '../devices/history-change.util';
 
 const DEFAULT_WATCHDOG_INTERVAL_SEC = 60;
 const DEFAULT_WATCHDOG_TIMEOUT_SEC = 120;
@@ -152,7 +153,7 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
       },
     });
 
-    if (device.trackHistory) {
+    if (device.trackHistory && hasSignificantChange(existing?.state, stateData)) {
       await this.prisma.deviceEvent.create({
         data: {
           deviceId: device.id,

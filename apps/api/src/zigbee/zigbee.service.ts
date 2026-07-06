@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nest
 import { PrismaClient } from '@skbox/db';
 import { MqttService } from '../mqtt/mqtt.service';
 import { SettingsService } from '../settings/settings.service';
+import { hasSignificantChange } from '../devices/history-change.util';
 
 const DEFAULT_HEALTHCHECK_INTERVAL_SEC = 60;
 const DEFAULT_HEALTHCHECK_TIMEOUT_SEC = 120;
@@ -227,7 +228,7 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
       },
     });
 
-    if (device.trackHistory) {
+    if (device.trackHistory && hasSignificantChange(device.state, state)) {
       await this.prisma.deviceEvent.create({
         data: {
           deviceId: device.id,
