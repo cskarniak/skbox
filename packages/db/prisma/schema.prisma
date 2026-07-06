@@ -87,3 +87,11 @@ model Setting {
   value     String
   updatedAt DateTime @updatedAt
 }
+
+model HistoryTemplate {
+  id        String   @id @default(cuid())
+  name      String
+  panels    String   @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
