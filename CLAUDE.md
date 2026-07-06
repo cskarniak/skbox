@@ -48,3 +48,7 @@
   Timeout is set to 5min (Z2M default is 10min) so that critical devices (e.g. the boiler-control Shelly relay) are detected offline promptly, without polling so aggressively it strains the network.
 - Swagger docs at http://localhost:3001/docs
 - Zigbee2MQTT UI at http://localhost:8080
+
+## Deploying to the test server (skbox-mini)
+- **Always ask for explicit confirmation before running the deploy** (`ssh skbox-mini 'cd ~/skbox && git pull && bash deploy/deploy.sh'`), even right after finishing and verifying a fix. Committing and pushing to `origin/main` does not imply permission to deploy.
+- Committing to git still doesn't require asking (per standing repo convention), only the deploy step itself.

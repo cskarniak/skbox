@@ -349,7 +349,15 @@ export default function HistoryModulePage() {
             <Text size="sm">Historique</Text>
           </Group>
 
-          {trackedDevices.length === 0 ? (
+          {!layoutHydrated ? (
+            // Tant que la disposition sauvegardée n'est pas chargée, la moindre édition
+            // ici serait écrasée dès que la requête arrive (voir l'effet d'hydratation
+            // ci-dessus) — on bloque donc l'affichage plutôt que de risquer de perdre un
+            // graphique que l'utilisateur vient de créer.
+            <Center h={200}>
+              <Loader size="sm" />
+            </Center>
+          ) : trackedDevices.length === 0 ? (
             <Text size="sm" c="dimmed">
               Aucun appareil n'est historisé. Activez "Historiser" pour au moins un appareil dans Réglages
               &gt; Appareils.
