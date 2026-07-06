@@ -13,6 +13,7 @@ import {
   Select,
   TextInput,
   SegmentedControl,
+  SimpleGrid,
   Center,
   Loader,
   Popover,
@@ -26,6 +27,9 @@ import {
   IconEdit,
   IconCopy,
   IconDeviceFloppy,
+  IconLayoutList,
+  IconLayoutGrid,
+  IconGridDots,
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useRouter } from 'next/navigation';
@@ -77,6 +81,16 @@ interface PanelConfig {
   displayType: DisplayType;
   chartType: ChartType;
 }
+
+type ColumnLayout = 'list' | 'grid2' | 'grid3';
+
+const columnLayoutCols: Record<ColumnLayout, Record<string, number>> = {
+  list: { base: 1 },
+  grid2: { base: 1, sm: 2 },
+  grid3: { base: 1, sm: 2, lg: 3 },
+};
+
+const COLUMN_LAYOUT_STORAGE_KEY = 'skbox-history-columns';
 
 function emptyPanel(): PanelConfig {
   return { id: generateId(), deviceId: null, valueKey: null, displayType: 'chart', chartType: 'line' };
@@ -331,6 +345,7 @@ export default function HistoryModulePage() {
   const queryClient = useQueryClient();
   const [hostname, setHostname] = useState('localhost');
   const [rangeHours, setRangeHours] = useState('168');
+  const [columnLayout, setColumnLayout] = useState<ColumnLayout>('list');
   const [panels, setPanels] = useState<PanelConfig[]>([]);
   const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -340,7 +355,17 @@ export default function HistoryModulePage() {
 
   useEffect(() => {
     setHostname(window.location.hostname);
+    const saved = localStorage.getItem(COLUMN_LAYOUT_STORAGE_KEY) as ColumnLayout | null;
+    if (saved && ['list', 'grid2', 'grid3'].includes(saved)) {
+      setColumnLayout(saved);
+    }
   }, []);
+
+  const handleColumnLayoutChange = (value: string) => {
+    const layout = value as ColumnLayout;
+    setColumnLayout(layout);
+    localStorage.setItem(COLUMN_LAYOUT_STORAGE_KEY, layout);
+  };
 
   const { data: templates } = useQuery<HistoryTemplate[]>({
     queryKey: ['history-templates'],
@@ -600,8 +625,20 @@ export default function HistoryModulePage() {
                 </Text>
               ) : (
                 <>
-                  <Group justify="space-between">
-                    <SegmentedControl size="xs" value={rangeHours} onChange={setRangeHours} data={RANGE_OPTIONS} />
+                  <Group justify="space-between" wrap="wrap">
+                    <Group gap="xs" wrap="wrap">
+                      <SegmentedControl size="xs" value={rangeHours} onChange={setRangeHours} data={RANGE_OPTIONS} />
+                      <SegmentedControl
+                        size="xs"
+                        value={columnLayout}
+                        onChange={handleColumnLayoutChange}
+                        data={[
+                          { label: <IconLayoutList size={14} />, value: 'list' },
+                          { label: <IconLayoutGrid size={14} />, value: 'grid2' },
+                          { label: <IconGridDots size={14} />, value: 'grid3' },
+                        ]}
+                      />
+                    </Group>
                     <Group gap="xs">
                       {isDirty && (
                         <Button
@@ -625,7 +662,7 @@ export default function HistoryModulePage() {
                       Aucun graphique dans ce template. Cliquez sur "Ajouter un graphique" pour commencer.
                     </Text>
                   ) : (
-                    <Stack gap="md">
+                    <SimpleGrid cols={columnLayoutCols[columnLayout]} spacing="md">
                       {panels.map((panel, i) => (
                         <ChartPanel
                           key={panel.id}
@@ -638,7 +675,7 @@ export default function HistoryModulePage() {
                           onRemove={() => removePanel(panel.id)}
                         />
                       ))}
-                    </Stack>
+                    </SimpleGrid>
                   )}
                 </>
               )}
