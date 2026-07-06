@@ -25,7 +25,9 @@ import {
   IconTrash,
   IconEdit,
   IconCopy,
+  IconDeviceFloppy,
 } from '@tabler/icons-react';
+import { notifications } from '@mantine/notifications';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -82,11 +84,12 @@ function emptyPanel(): PanelConfig {
 
 // Un template ne stocke pas d'id de panel (ceux-ci sont régénérés à la volée pour
 // servir de clé React) — seuls les champs qui décrivent réellement le graphique
-// sont persistés.
+// sont persistés. Un template sans graphique reste un tableau vide : on ne crée plus
+// de graphique vide par défaut, l'utilisateur en ajoute un explicitement.
 function parseTemplatePanels(raw: string): PanelConfig[] {
   try {
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) return [emptyPanel()];
+    if (!Array.isArray(parsed)) return [];
     return parsed.map((p) => ({
       id: generateId(),
       deviceId: p.deviceId ?? null,
@@ -95,7 +98,7 @@ function parseTemplatePanels(raw: string): PanelConfig[] {
       chartType: p.chartType === 'bar' || p.chartType === 'area' ? p.chartType : 'line',
     }));
   } catch {
-    return [emptyPanel()];
+    return [];
   }
 }
 
@@ -331,6 +334,9 @@ export default function HistoryModulePage() {
   const [panels, setPanels] = useState<PanelConfig[]>([]);
   const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  // Instantané JSON du dernier état enregistré côté serveur : sert à savoir si
+  // l'utilisateur a des modifications non enregistrées (icône "Enregistrer" visible).
+  const [savedPanelsSnapshot, setSavedPanelsSnapshot] = useState('[]');
 
   useEffect(() => {
     setHostname(window.location.hostname);
@@ -356,19 +362,32 @@ export default function HistoryModulePage() {
     const preferred = lastTemplateSetting.value && templates.find((t) => t.id === lastTemplateSetting.value);
     const initial = preferred || templates[0];
     if (initial) {
+      const initialPanels = parseTemplatePanels(initial.panels);
       setActiveTemplateId(initial.id);
-      setPanels(parseTemplatePanels(initial.panels));
+      setPanels(initialPanels);
+      setSavedPanelsSnapshot(JSON.stringify(toTemplatePanels(initialPanels)));
     }
     setHydrated(true);
   }, [templates, lastTemplateSetting, hydrated]);
 
-  useEffect(() => {
-    if (!hydrated || !activeTemplateId) return;
-    const timeout = setTimeout(() => {
-      api.patch(`/history-templates/${activeTemplateId}`, { panels: toTemplatePanels(panels) });
-    }, 500);
-    return () => clearTimeout(timeout);
-  }, [panels, hydrated, activeTemplateId]);
+  // Plus d'auto-save silencieux : les modifications restent locales tant que
+  // l'utilisateur ne clique pas sur "Enregistrer" (voir savePanels ci-dessous).
+  const isDirty = useMemo(
+    () => JSON.stringify(toTemplatePanels(panels)) !== savedPanelsSnapshot,
+    [panels, savedPanelsSnapshot],
+  );
+
+  const savePanels = useMutation({
+    mutationFn: () => api.patch(`/history-templates/${activeTemplateId}`, { panels: toTemplatePanels(panels) }),
+    onSuccess: () => {
+      setSavedPanelsSnapshot(JSON.stringify(toTemplatePanels(panels)));
+      queryClient.invalidateQueries({ queryKey: ['history-templates'] });
+      notifications.show({ color: 'teal', title: 'Enregistré', message: 'Le graphique a été enregistré.' });
+    },
+    onError: () => {
+      notifications.show({ color: 'red', title: 'Échec', message: "Impossible d'enregistrer ce graphique." });
+    },
+  });
 
   const { data: devices } = useQuery<Device[]>({
     queryKey: ['devices'],
@@ -422,23 +441,25 @@ export default function HistoryModulePage() {
   };
 
   const switchTemplate = (id: string | null) => {
-    if (!id) return;
+    if (!id || id === activeTemplateId) return;
+    if (isDirty && !window.confirm('Des modifications non enregistrées seront perdues. Continuer ?')) return;
     const template = (templates ?? []).find((t) => t.id === id);
     if (!template) return;
+    const nextPanels = parseTemplatePanels(template.panels);
     setActiveTemplateId(id);
-    setPanels(parseTemplatePanels(template.panels));
+    setPanels(nextPanels);
+    setSavedPanelsSnapshot(JSON.stringify(toTemplatePanels(nextPanels)));
     api.put(`/settings/${LAST_TEMPLATE_SETTINGS_KEY}`, { value: id });
   };
 
   const createTemplate = useMutation({
     mutationFn: (name: string) =>
-      api
-        .post('/history-templates', { name, panels: toTemplatePanels([emptyPanel()]) })
-        .then((r) => r.data as HistoryTemplate),
+      api.post('/history-templates', { name, panels: toTemplatePanels([]) }).then((r) => r.data as HistoryTemplate),
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ['history-templates'] });
       setActiveTemplateId(created.id);
-      setPanels([emptyPanel()]);
+      setPanels([]);
+      setSavedPanelsSnapshot('[]');
       api.put(`/settings/${LAST_TEMPLATE_SETTINGS_KEY}`, { value: created.id });
     },
   });
@@ -456,6 +477,7 @@ export default function HistoryModulePage() {
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ['history-templates'] });
       setActiveTemplateId(created.id);
+      setSavedPanelsSnapshot(JSON.stringify(toTemplatePanels(panels)));
       api.put(`/settings/${LAST_TEMPLATE_SETTINGS_KEY}`, { value: created.id });
     },
   });
@@ -467,8 +489,10 @@ export default function HistoryModulePage() {
       if (deletedId !== activeTemplateId) return;
       const remaining = (templates ?? []).filter((t) => t.id !== deletedId);
       const next = remaining[0] ?? null;
+      const nextPanels = next ? parseTemplatePanels(next.panels) : [];
       setActiveTemplateId(next?.id ?? null);
-      setPanels(next ? parseTemplatePanels(next.panels) : []);
+      setPanels(nextPanels);
+      setSavedPanelsSnapshot(JSON.stringify(toTemplatePanels(nextPanels)));
       api.put(`/settings/${LAST_TEMPLATE_SETTINGS_KEY}`, { value: next?.id ?? '' });
     },
   });
@@ -578,25 +602,44 @@ export default function HistoryModulePage() {
                 <>
                   <Group justify="space-between">
                     <SegmentedControl size="xs" value={rangeHours} onChange={setRangeHours} data={RANGE_OPTIONS} />
-                    <Button leftSection={<IconPlus size={16} />} variant="light" size="xs" onClick={addPanel}>
-                      Ajouter un graphique
-                    </Button>
+                    <Group gap="xs">
+                      {isDirty && (
+                        <Button
+                          leftSection={<IconDeviceFloppy size={16} />}
+                          color="teal"
+                          size="xs"
+                          loading={savePanels.isPending}
+                          onClick={() => savePanels.mutate()}
+                        >
+                          Enregistrer
+                        </Button>
+                      )}
+                      <Button leftSection={<IconPlus size={16} />} variant="light" size="xs" onClick={addPanel}>
+                        Ajouter un graphique
+                      </Button>
+                    </Group>
                   </Group>
 
-                  <Stack gap="md">
-                    {panels.map((panel, i) => (
-                      <ChartPanel
-                        key={panel.id}
-                        panel={panel}
-                        devices={trackedDevices}
-                        fromIso={fromIso}
-                        color={CHART_COLORS[i % CHART_COLORS.length]}
-                        onSelectDevice={(deviceId) => selectDeviceForPanel(panel.id, deviceId)}
-                        onChange={(next) => updatePanel(panel.id, next)}
-                        onRemove={() => removePanel(panel.id)}
-                      />
-                    ))}
-                  </Stack>
+                  {panels.length === 0 ? (
+                    <Text size="sm" c="dimmed">
+                      Aucun graphique dans ce template. Cliquez sur "Ajouter un graphique" pour commencer.
+                    </Text>
+                  ) : (
+                    <Stack gap="md">
+                      {panels.map((panel, i) => (
+                        <ChartPanel
+                          key={panel.id}
+                          panel={panel}
+                          devices={trackedDevices}
+                          fromIso={fromIso}
+                          color={CHART_COLORS[i % CHART_COLORS.length]}
+                          onSelectDevice={(deviceId) => selectDeviceForPanel(panel.id, deviceId)}
+                          onChange={(next) => updatePanel(panel.id, next)}
+                          onRemove={() => removePanel(panel.id)}
+                        />
+                      ))}
+                    </Stack>
+                  )}
                 </>
               )}
             </>
