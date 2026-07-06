@@ -52,3 +52,8 @@
 ## Deploying to the test server (skbox-mini)
 - **Always ask for explicit confirmation before running the deploy** (`ssh skbox-mini 'cd ~/skbox && git pull && bash deploy/deploy.sh'`), even right after finishing and verifying a fix. Committing and pushing to `origin/main` does not imply permission to deploy.
 - Committing to git still doesn't require asking (per standing repo convention), only the deploy step itself.
+
+## Deletion confirmations (UI convention)
+- **Simple deletion** (default): removing an object or a stored record (a graph/panel, a scenario, a room, a theme, etc.) requires a lightweight confirmation — a short message plus a Yes/No (Oui/Non) button, no typed input. Use this unless told otherwise.
+- **Secure deletion** (only when explicitly requested for a given feature): the confirmation additionally requires typing "OUI" in full before the delete button is enabled. Reserve this for destructive, hard-to-recover bulk actions (e.g. clearing all of a device's history) — see `ClearHistoryConfirm` in `apps/web/src/app/settings/devices/page.tsx` for the reference pattern.
+- Don't retrofit this onto every existing delete action unprompted — apply it going forward, and when asked to touch a delete flow that doesn't have it yet.

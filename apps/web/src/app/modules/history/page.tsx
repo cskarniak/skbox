@@ -14,6 +14,7 @@ import {
   SegmentedControl,
   Center,
   Loader,
+  Popover,
 } from '@mantine/core';
 import { IconSmartHome, IconNetwork, IconChevronLeft, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
@@ -94,6 +95,7 @@ function ChartPanel({
   const series = history && panel.valueKey ? buildSeries(history, panel.valueKey) : [];
   const latest = history && panel.valueKey ? latestValue(history, panel.valueKey) : null;
   const device = devices.find((d) => d.id === panel.deviceId);
+  const [confirmRemove, setConfirmRemove] = useState(false);
 
   return (
     <Card shadow="sm" padding="lg" withBorder>
@@ -139,9 +141,26 @@ function ChartPanel({
             />
           )}
         </Group>
-        <ActionIcon variant="subtle" color="red" onClick={onRemove}>
-          <IconTrash size={16} />
-        </ActionIcon>
+        <Popover opened={confirmRemove} onClose={() => setConfirmRemove(false)} position="bottom-end" withArrow>
+          <Popover.Target>
+            <ActionIcon variant="subtle" color="red" onClick={() => setConfirmRemove((o) => !o)}>
+              <IconTrash size={16} />
+            </ActionIcon>
+          </Popover.Target>
+          <Popover.Dropdown>
+            <Stack gap="xs">
+              <Text size="sm">Supprimer ce graphique ?</Text>
+              <Group gap="xs" justify="flex-end">
+                <Button size="xs" variant="subtle" onClick={() => setConfirmRemove(false)}>
+                  Non
+                </Button>
+                <Button size="xs" color="red" onClick={onRemove}>
+                  Oui
+                </Button>
+              </Group>
+            </Stack>
+          </Popover.Dropdown>
+        </Popover>
       </Group>
 
       {!panel.deviceId || !panel.valueKey ? (
