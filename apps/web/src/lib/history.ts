@@ -28,6 +28,22 @@ export function parseDisplayPreferences(raw: string | null | undefined): Display
   }
 }
 
+export interface HistoryFieldConfig {
+  valueKey: string;
+  enabled: boolean;
+  minDelta?: number;
+}
+
+export function parseHistoryFieldConfig(raw: string | null | undefined): HistoryFieldConfig[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 export function latestValue(history: DeviceEvent[], valueKey: string): number | null {
   for (let i = history.length - 1; i >= 0; i--) {
     try {

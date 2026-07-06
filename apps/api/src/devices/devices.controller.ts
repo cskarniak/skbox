@@ -16,6 +16,7 @@ import {
   updateDeviceSchema,
   updateDeviceThemesSchema,
   updateDisplayPreferencesSchema,
+  updateHistoryFieldConfigSchema,
   deviceCommandSchema,
   CreateDeviceDto,
   UpdateDeviceDto,
@@ -63,6 +64,12 @@ export class DevicesController {
   updateDisplayPreferences(@Param('id') id: string, @Body() body: unknown) {
     const dto = updateDisplayPreferencesSchema.parse(body);
     return this.devices.updateDisplayPreferences(id, dto);
+  }
+
+  @Patch(':id/history-config')
+  updateHistoryFieldConfig(@Param('id') id: string, @Body() body: unknown) {
+    const dto = updateHistoryFieldConfigSchema.parse(body);
+    return this.devices.updateHistoryFieldConfig(id, dto);
   }
 
   @Get(':id/history')

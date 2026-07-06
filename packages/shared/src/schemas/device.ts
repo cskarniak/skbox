@@ -28,6 +28,14 @@ export const devicePreferenceEntrySchema = z.object({
 
 export const updateDisplayPreferencesSchema = z.array(devicePreferenceEntrySchema);
 
+export const historyFieldConfigEntrySchema = z.object({
+  valueKey: z.string().min(1),
+  enabled: z.boolean(),
+  minDelta: z.number().min(0).optional(),
+});
+
+export const updateHistoryFieldConfigSchema = z.array(historyFieldConfigEntrySchema);
+
 export const deviceCommandSchema = z.object({
   command: z.string().min(1),
   payload: z.record(z.unknown()).optional(),
@@ -39,3 +47,5 @@ export type UpdateDeviceThemesDto = z.infer<typeof updateDeviceThemesSchema>;
 export type DeviceCommandDto = z.infer<typeof deviceCommandSchema>;
 export type DevicePreferenceEntry = z.infer<typeof devicePreferenceEntrySchema>;
 export type UpdateDisplayPreferencesDto = z.infer<typeof updateDisplayPreferencesSchema>;
+export type HistoryFieldConfigEntry = z.infer<typeof historyFieldConfigEntrySchema>;
+export type UpdateHistoryFieldConfigDto = z.infer<typeof updateHistoryFieldConfigSchema>;

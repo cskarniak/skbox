@@ -1,6 +1,6 @@
 'use client';
 
-import { Title, Text, Stack, Table, Switch, Badge, MultiSelect, ActionIcon, Modal, Tooltip, Center, Loader, ScrollArea, Button, TextInput, Group, Alert, Checkbox, SegmentedControl } from '@mantine/core';
+import { Title, Text, Stack, Table, Switch, Badge, MultiSelect, ActionIcon, Modal, Tooltip, Center, Loader, ScrollArea, Button, TextInput, NumberInput, Group, Alert, Checkbox, SegmentedControl, Divider } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconHistory, IconTrash, IconAlertTriangle, IconAdjustments } from '@tabler/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -10,9 +10,11 @@ import {
   DisplayPreference,
   DisplayType,
   ChartType,
+  HistoryFieldConfig,
   extractValueKeys,
   formatValueLabel,
   parseDisplayPreferences,
+  parseHistoryFieldConfig,
 } from '@/lib/history';
 
 interface Theme {
@@ -32,6 +34,7 @@ interface Device {
   active: boolean;
   trackHistory: boolean;
   displayPreferences: string;
+  historyFieldConfig: string;
 }
 
 interface DeviceEvent {
@@ -172,9 +175,16 @@ function PreferencesModal({ device, opened, onClose }: { device: Device; opened:
   });
 
   const [prefs, setPrefs] = useState<DisplayPreference[]>(() => parseDisplayPreferences(device.displayPreferences));
+  const [historyConfig, setHistoryConfig] = useState<HistoryFieldConfig[]>(() =>
+    parseHistoryFieldConfig(device.historyFieldConfig),
+  );
 
   const savePrefs = useMutation({
-    mutationFn: (next: DisplayPreference[]) => api.patch(`/devices/${device.id}/display-preferences`, next),
+    mutationFn: () =>
+      Promise.all([
+        api.patch(`/devices/${device.id}/display-preferences`, prefs),
+        api.patch(`/devices/${device.id}/history-config`, historyConfig),
+      ]),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['devices'] }),
   });
 
@@ -192,8 +202,19 @@ function PreferencesModal({ device, opened, onClose }: { device: Device; opened:
     setPrefs((prev) => prev.map((p) => (p.valueKey === valueKey ? { ...p, ...next } : p)));
   };
 
+  const getHistoryConfig = (valueKey: string): HistoryFieldConfig =>
+    historyConfig.find((c) => c.valueKey === valueKey) ?? { valueKey, enabled: true };
+
+  const updateHistoryConfig = (valueKey: string, next: Partial<HistoryFieldConfig>) => {
+    setHistoryConfig((prev) => {
+      const existing = prev.find((c) => c.valueKey === valueKey);
+      const merged = { ...(existing ?? { valueKey, enabled: true }), ...next };
+      return existing ? prev.map((c) => (c.valueKey === valueKey ? merged : c)) : [...prev, merged];
+    });
+  };
+
   return (
-    <Modal opened={opened} onClose={onClose} title={`Historique par défaut — ${device.name}`} size="md">
+    <Modal opened={opened} onClose={onClose} title={`Historique — ${device.name}`} size="md">
       {isLoading ? (
         <Center h={150}>
           <Loader size="sm" />
@@ -205,54 +226,77 @@ function PreferencesModal({ device, opened, onClose }: { device: Device; opened:
       ) : (
         <Stack gap="md">
           <Text size="sm" c="dimmed">
-            Choisissez les valeurs affichées par défaut lorsque cet appareil est sélectionné dans le module
-            Historique, et leur forme (valeur ou graphique).
+            Pour chaque valeur : l'historiser ou non, à partir de quelle variation minimum enregistrer un
+            point, et si elle s'affiche par défaut (et sous quelle forme) dans le module Historique.
           </Text>
-          <Stack gap="sm">
+          <Stack gap="md">
             {valueKeys.map((key) => {
               const pref = prefs.find((p) => p.valueKey === key);
+              const cfg = getHistoryConfig(key);
               return (
-                <Group key={key} justify="space-between" wrap="wrap">
-                  <Checkbox
-                    label={formatValueLabel(key)}
-                    checked={!!pref}
-                    onChange={(e) => toggleKey(key, e.currentTarget.checked)}
-                  />
-                  {pref && (
-                    <Group gap="xs">
-                      <SegmentedControl
+                <Stack key={key} gap="xs" pb="sm">
+                  <Text size="sm" fw={500}>
+                    {formatValueLabel(key)}
+                  </Text>
+                  <Group gap="md" wrap="wrap">
+                    <Checkbox
+                      label="Historiser"
+                      checked={cfg.enabled}
+                      onChange={(e) => updateHistoryConfig(key, { enabled: e.currentTarget.checked })}
+                    />
+                    {cfg.enabled && (
+                      <NumberInput
                         size="xs"
-                        value={pref.displayType}
-                        onChange={(value) => updateKey(key, { displayType: value as DisplayType })}
-                        data={[
-                          { label: 'Valeur', value: 'value' },
-                          { label: 'Graphique', value: 'chart' },
-                        ]}
+                        label="Variation minimum"
+                        placeholder="Toute variation"
+                        value={cfg.minDelta}
+                        onChange={(value) =>
+                          updateHistoryConfig(key, { minDelta: typeof value === 'number' ? value : undefined })
+                        }
+                        min={0}
+                        w={160}
                       />
-                      {pref.displayType === 'chart' && (
+                    )}
+                  </Group>
+                  <Group justify="space-between" wrap="wrap">
+                    <Checkbox
+                      label="Afficher par défaut"
+                      checked={!!pref}
+                      onChange={(e) => toggleKey(key, e.currentTarget.checked)}
+                    />
+                    {pref && (
+                      <Group gap="xs">
                         <SegmentedControl
                           size="xs"
-                          value={pref.chartType ?? 'line'}
-                          onChange={(value) => updateKey(key, { chartType: value as ChartType })}
+                          value={pref.displayType}
+                          onChange={(value) => updateKey(key, { displayType: value as DisplayType })}
                           data={[
-                            { label: 'Ligne', value: 'line' },
-                            { label: 'Barres', value: 'bar' },
-                            { label: 'Aire', value: 'area' },
+                            { label: 'Valeur', value: 'value' },
+                            { label: 'Graphique', value: 'chart' },
                           ]}
                         />
-                      )}
-                    </Group>
-                  )}
-                </Group>
+                        {pref.displayType === 'chart' && (
+                          <SegmentedControl
+                            size="xs"
+                            value={pref.chartType ?? 'line'}
+                            onChange={(value) => updateKey(key, { chartType: value as ChartType })}
+                            data={[
+                              { label: 'Ligne', value: 'line' },
+                              { label: 'Barres', value: 'bar' },
+                              { label: 'Aire', value: 'area' },
+                            ]}
+                          />
+                        )}
+                      </Group>
+                    )}
+                  </Group>
+                  <Divider />
+                </Stack>
               );
             })}
           </Stack>
           <Group justify="flex-end">
-            <Button
-              size="xs"
-              loading={savePrefs.isPending}
-              onClick={() => savePrefs.mutate(prefs, { onSuccess: onClose })}
-            >
+            <Button size="xs" loading={savePrefs.isPending} onClick={() => savePrefs.mutate(undefined, { onSuccess: onClose })}>
               Enregistrer
             </Button>
           </Group>

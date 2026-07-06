@@ -5,6 +5,7 @@ import {
   UpdateDeviceDto,
   UpdateDeviceThemesDto,
   UpdateDisplayPreferencesDto,
+  UpdateHistoryFieldConfigDto,
 } from '@skbox/shared';
 
 @Injectable()
@@ -58,6 +59,13 @@ export class DevicesService {
     return this.prisma.device.update({
       where: { id },
       data: { displayPreferences: JSON.stringify(preferences) },
+    });
+  }
+
+  updateHistoryFieldConfig(id: string, config: UpdateHistoryFieldConfigDto) {
+    return this.prisma.device.update({
+      where: { id },
+      data: { historyFieldConfig: JSON.stringify(config) },
     });
   }
 

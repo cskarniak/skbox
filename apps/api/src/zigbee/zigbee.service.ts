@@ -228,7 +228,7 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
       },
     });
 
-    if (device.trackHistory && hasSignificantChange(device.state, state)) {
+    if (device.trackHistory && hasSignificantChange(device.state, state, device.historyFieldConfig)) {
       await this.prisma.deviceEvent.create({
         data: {
           deviceId: device.id,

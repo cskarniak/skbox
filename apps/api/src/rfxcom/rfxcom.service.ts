@@ -153,7 +153,7 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
       },
     });
 
-    if (device.trackHistory && hasSignificantChange(existing?.state, stateData)) {
+    if (device.trackHistory && hasSignificantChange(existing?.state, stateData, existing?.historyFieldConfig)) {
       await this.prisma.deviceEvent.create({
         data: {
           deviceId: device.id,
