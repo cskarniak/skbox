@@ -48,7 +48,16 @@ import { api } from '@/lib/api';
 import { useMemo } from 'react';
 import { AppNav } from '@/components/AppNav';
 import { ValueChart } from '@/components/ValueChart';
-import { CHART_COLORS, DeviceEvent, extractValueKeys, buildSeries, formatValueLabel } from '@/lib/history';
+import { LatestValue } from '@/components/LatestValue';
+import {
+  CHART_COLORS,
+  DeviceEvent,
+  extractValueKeys,
+  buildSeries,
+  formatValueLabel,
+  latestValue,
+  parseDisplayPreferences,
+} from '@/lib/history';
 
 interface Device {
   id: string;
@@ -65,6 +74,7 @@ interface Device {
   visible: boolean;
   active: boolean;
   trackHistory: boolean;
+  displayPreferences: string;
 }
 
 interface Theme {
@@ -147,43 +157,72 @@ function DeviceHistoryModal({ device, opened, onClose }: { device: Device; opene
     enabled: opened,
   });
 
+  const prefs = parseDisplayPreferences(device.displayPreferences);
   const valueKeys = history ? extractValueKeys(history) : [];
   const activeKey = valueKey && valueKeys.includes(valueKey) ? valueKey : valueKeys[0] ?? null;
   const series = history && activeKey ? buildSeries(history, activeKey) : [];
 
   return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
-      title={`Historique — ${device.name}${activeKey ? ` · ${formatValueLabel(activeKey)}` : ''}`}
-      size="lg"
-    >
+    <Modal opened={opened} onClose={onClose} title={`Historique — ${device.name}`} size="lg">
       <Stack gap="md">
-        <Group justify="space-between">
-          <SegmentedControl size="xs" value={rangeHours} onChange={setRangeHours} data={HISTORY_RANGE_OPTIONS} />
-          <Select
-            size="xs"
-            placeholder="Valeur"
-            data={valueKeys.map((k) => ({ value: k, label: formatValueLabel(k) }))}
-            value={activeKey}
-            onChange={setValueKey}
-            w={200}
-            disabled={valueKeys.length === 0}
-          />
-        </Group>
+        <SegmentedControl size="xs" value={rangeHours} onChange={setRangeHours} data={HISTORY_RANGE_OPTIONS} />
 
         {isLoading ? (
           <Center h={220}>
             <Loader size="sm" />
           </Center>
-        ) : !activeKey || series.length === 0 ? (
-          <Center h={220}>
-            <Text size="sm" c="dimmed">
-              Aucune donnée pour cette période.
-            </Text>
-          </Center>
+        ) : prefs.length > 0 ? (
+          <Stack gap="md">
+            {prefs.map((pref) => (
+              <Stack key={pref.valueKey} gap={4}>
+                <Text size="xs" c="dimmed">
+                  {formatValueLabel(pref.valueKey)}
+                </Text>
+                {pref.displayType === 'value' ? (
+                  <LatestValue valueKey={pref.valueKey} value={history ? latestValue(history, pref.valueKey) : null} />
+                ) : (
+                  (() => {
+                    const prefSeries = history ? buildSeries(history, pref.valueKey) : [];
+                    return prefSeries.length === 0 ? (
+                      <Center h={220}>
+                        <Text size="sm" c="dimmed">
+                          Aucune donnée pour cette période.
+                        </Text>
+                      </Center>
+                    ) : (
+                      <ValueChart
+                        series={prefSeries}
+                        chartType={pref.chartType ?? 'line'}
+                        color={CHART_COLORS[0]}
+                        valueKey={pref.valueKey}
+                      />
+                    );
+                  })()
+                )}
+              </Stack>
+            ))}
+          </Stack>
         ) : (
-          <ValueChart series={series} chartType="area" color={CHART_COLORS[0]} valueKey={activeKey} />
+          <Stack gap="md">
+            <Select
+              size="xs"
+              placeholder="Valeur"
+              data={valueKeys.map((k) => ({ value: k, label: formatValueLabel(k) }))}
+              value={activeKey}
+              onChange={setValueKey}
+              w={200}
+              disabled={valueKeys.length === 0}
+            />
+            {!activeKey || series.length === 0 ? (
+              <Center h={220}>
+                <Text size="sm" c="dimmed">
+                  Aucune donnée pour cette période.
+                </Text>
+              </Center>
+            ) : (
+              <ValueChart series={series} chartType="area" color={CHART_COLORS[0]} valueKey={activeKey} />
+            )}
+          </Stack>
         )}
       </Stack>
     </Modal>
