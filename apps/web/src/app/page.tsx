@@ -32,8 +32,6 @@ import {
   IconAdjustments,
   IconToggleLeft,
   IconDevicesPc,
-  IconNetwork,
-  IconAntenna,
   IconEdit,
   IconCheck,
   IconLayoutGrid,
@@ -455,14 +453,12 @@ export default function HomePage() {
   const groups = useMemo(() => groupDevices(devices ?? [], themes ?? []), [devices, themes]);
 
   const [tileSize, setTileSize] = useState<TileSize>('medium');
-  const [hostname, setHostname] = useState('localhost');
 
   useEffect(() => {
     const saved = localStorage.getItem('skbox-tile-size') as TileSize | null;
     if (saved && ['small', 'medium', 'large'].includes(saved)) {
       setTileSize(saved);
     }
-    setHostname(window.location.hostname);
   }, []);
 
   const handleTileSizeChange = (value: string) => {
@@ -486,30 +482,6 @@ export default function HomePage() {
           </Group>
           <Group gap="md">
             <AppNav active="devices" />
-            <Tooltip label="Ouvrir Zigbee2MQTT">
-              <Button
-                variant="subtle"
-                size="sm"
-                leftSection={<IconNetwork size={16} />}
-                component="a"
-                href={`http://${hostname}:8080`}
-                target="_blank"
-              >
-                Z2M
-              </Button>
-            </Tooltip>
-            <Tooltip label="Ouvrir rfxcom2mqtt">
-              <Button
-                variant="subtle"
-                size="sm"
-                leftSection={<IconAntenna size={16} />}
-                component="a"
-                href={`http://${hostname}:8891`}
-                target="_blank"
-              >
-                RFXcom
-              </Button>
-            </Tooltip>
             <SegmentedControl
               size="xs"
               value={tileSize}

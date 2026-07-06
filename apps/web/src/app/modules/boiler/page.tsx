@@ -8,7 +8,6 @@ import {
   Badge,
   Stack,
   Button,
-  Tooltip,
   Card,
   Select,
   TextInput,
@@ -18,7 +17,6 @@ import {
 } from '@mantine/core';
 import {
   IconSmartHome,
-  IconNetwork,
   IconFlame,
   IconPlus,
   IconTrash,
@@ -107,7 +105,6 @@ function generateId(): string {
 export default function BoilerPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [hostname, setHostname] = useState('localhost');
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [temperatureSensorId, setTemperatureSensorId] = useState<string | null>(null);
   const [hysteresis, setHysteresis] = useState(0.3);
@@ -125,10 +122,6 @@ export default function BoilerPage() {
   const [minOffMinutes, setMinOffMinutes] = useState(5);
   const [boostMinutes, setBoostMinutes] = useState(60);
   const [boostLevel, setBoostLevel] = useState<LevelKey>('confort');
-
-  useEffect(() => {
-    setHostname(window.location.hostname);
-  }, []);
 
   const { data: levelLabels } = useQuery<Record<LevelKey, string>>({
     queryKey: ['boiler-levels'],
@@ -275,18 +268,6 @@ export default function BoilerPage() {
           </Group>
           <Group gap="md">
             <AppNav active="modules" />
-            <Tooltip label="Ouvrir Zigbee2MQTT">
-              <Button
-                variant="subtle"
-                size="sm"
-                leftSection={<IconNetwork size={16} />}
-                component="a"
-                href={`http://${hostname}:8080`}
-                target="_blank"
-              >
-                Z2M
-              </Button>
-            </Tooltip>
           </Group>
         </Group>
       </AppShell.Header>

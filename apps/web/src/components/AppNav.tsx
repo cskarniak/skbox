@@ -21,7 +21,7 @@ export function AppNav({ active }: { active: AppNavTab }) {
     >
       <Tabs.List>
         <Tabs.Tab value="devices" leftSection={<IconSmartHome size={16} />}>
-          Appareils
+          Dashboard
         </Tabs.Tab>
         <Tabs.Tab value="scenarios" leftSection={<IconScript size={16} />}>
           Scénarios

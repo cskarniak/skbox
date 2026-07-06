@@ -4,6 +4,7 @@ import { AppShell, Group, Title, Button, Tooltip, Tabs } from '@mantine/core';
 import {
   IconSmartHome,
   IconNetwork,
+  IconAntenna,
   IconAdjustments,
   IconServer,
   IconDatabaseExport,
@@ -55,6 +56,18 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
                 target="_blank"
               >
                 Z2M
+              </Button>
+            </Tooltip>
+            <Tooltip label="Ouvrir rfxcom2mqtt">
+              <Button
+                variant="subtle"
+                size="sm"
+                leftSection={<IconAntenna size={16} />}
+                component="a"
+                href={`http://${hostname}:8891`}
+                target="_blank"
+              >
+                RFXcom
               </Button>
             </Tooltip>
           </Group>

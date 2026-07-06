@@ -6,22 +6,13 @@ import {
   Title,
   Text,
   Stack,
-  Button,
-  Tooltip,
   Card,
   SimpleGrid,
   ThemeIcon,
   UnstyledButton,
 } from '@mantine/core';
-import {
-  IconSmartHome,
-  IconNetwork,
-  IconFlame,
-  IconChevronRight,
-  IconChartLine,
-} from '@tabler/icons-react';
+import { IconSmartHome, IconFlame, IconChevronRight, IconChartLine } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
 import { AppNav } from '@/components/AppNav';
 
 interface ModuleEntry {
@@ -51,11 +42,6 @@ const MODULES: ModuleEntry[] = [
 
 export default function ModulesPage() {
   const router = useRouter();
-  const [hostname, setHostname] = useState('localhost');
-
-  useEffect(() => {
-    setHostname(window.location.hostname);
-  }, []);
 
   return (
     <AppShell header={{ height: 60 }} padding="md">
@@ -67,18 +53,6 @@ export default function ModulesPage() {
           </Group>
           <Group gap="md">
             <AppNav active="modules" />
-            <Tooltip label="Ouvrir Zigbee2MQTT">
-              <Button
-                variant="subtle"
-                size="sm"
-                leftSection={<IconNetwork size={16} />}
-                component="a"
-                href={`http://${hostname}:8080`}
-                target="_blank"
-              >
-                Z2M
-              </Button>
-            </Tooltip>
           </Group>
         </Group>
       </AppShell.Header>

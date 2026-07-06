@@ -11,7 +11,6 @@ import {
   Center,
   Button,
   Switch,
-  Tooltip,
   Table,
   ActionIcon,
   Modal,
@@ -28,12 +27,11 @@ import {
   IconPlus,
   IconTrash,
   IconPlayerPlay,
-  IconNetwork,
   IconClock,
   IconDeviceDesktop,
 } from '@tabler/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { api } from '@/lib/api';
 import { AppNav } from '@/components/AppNav';
 
@@ -694,12 +692,6 @@ export default function ScenariosPage() {
   const [editingScenario, setEditingScenario] = useState<
     Scenario | undefined
   >();
-  const [hostname, setHostname] = useState('localhost');
-
-  useEffect(() => {
-    setHostname(window.location.hostname);
-  }, []);
-
   const { data: scenarios, isLoading } = useQuery<Scenario[]>({
     queryKey: ['scenarios'],
     queryFn: () => api.get('/scenarios').then((r) => r.data),
@@ -736,18 +728,6 @@ export default function ScenariosPage() {
           </Group>
           <Group gap="md">
           <AppNav active="scenarios" />
-          <Tooltip label="Ouvrir Zigbee2MQTT">
-            <Button
-              variant="subtle"
-              size="sm"
-              leftSection={<IconNetwork size={16} />}
-              component="a"
-              href={`http://${hostname}:8080`}
-              target="_blank"
-            >
-              Z2M
-            </Button>
-          </Tooltip>
           </Group>
         </Group>
       </AppShell.Header>

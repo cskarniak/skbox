@@ -7,7 +7,6 @@ import {
   Text,
   Stack,
   Button,
-  Tooltip,
   Card,
   ActionIcon,
   Select,
@@ -20,7 +19,6 @@ import {
 } from '@mantine/core';
 import {
   IconSmartHome,
-  IconNetwork,
   IconChevronLeft,
   IconPlus,
   IconTrash,
@@ -343,7 +341,6 @@ const LAST_TEMPLATE_SETTINGS_KEY = 'historyModule.lastTemplateId';
 export default function HistoryModulePage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [hostname, setHostname] = useState('localhost');
   const [rangeHours, setRangeHours] = useState('168');
   const [columnLayout, setColumnLayout] = useState<ColumnLayout>('list');
   const [panels, setPanels] = useState<PanelConfig[]>([]);
@@ -354,7 +351,6 @@ export default function HistoryModulePage() {
   const [savedPanelsSnapshot, setSavedPanelsSnapshot] = useState('[]');
 
   useEffect(() => {
-    setHostname(window.location.hostname);
     const saved = localStorage.getItem(COLUMN_LAYOUT_STORAGE_KEY) as ColumnLayout | null;
     if (saved && ['list', 'grid2', 'grid3'].includes(saved)) {
       setColumnLayout(saved);
@@ -532,18 +528,6 @@ export default function HistoryModulePage() {
           </Group>
           <Group gap="md">
             <AppNav active="modules" />
-            <Tooltip label="Ouvrir Zigbee2MQTT">
-              <Button
-                variant="subtle"
-                size="sm"
-                leftSection={<IconNetwork size={16} />}
-                component="a"
-                href={`http://${hostname}:8080`}
-                target="_blank"
-              >
-                Z2M
-              </Button>
-            </Tooltip>
           </Group>
         </Group>
       </AppShell.Header>
