@@ -153,7 +153,7 @@ function DeviceHistoryModal({ device, opened, onClose }: { device: Device; opene
 
   const { data: history, isLoading } = useQuery<DeviceEvent[]>({
     queryKey: ['device-history', device.id, fromIso],
-    queryFn: () => api.get(`/devices/${device.id}/history`, { params: { limit: 1000, from: fromIso } }).then((r) => r.data),
+    queryFn: () => api.get(`/devices/${device.id}/history`, { params: { maxPoints: 500, from: fromIso } }).then((r) => r.data),
     enabled: opened,
   });
 

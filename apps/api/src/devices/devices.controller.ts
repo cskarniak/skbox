@@ -71,11 +71,19 @@ export class DevicesController {
     @Query('limit') limit?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('maxPoints') maxPoints?: string,
   ) {
-    const parsed = limit ? parseInt(limit, 10) : NaN;
+    const parsedLimit = limit ? parseInt(limit, 10) : NaN;
+    const parsedMaxPoints = maxPoints ? parseInt(maxPoints, 10) : NaN;
     const fromDate = from ? new Date(from) : undefined;
     const toDate = to ? new Date(to) : undefined;
-    return this.devices.getHistory(id, Number.isFinite(parsed) && parsed > 0 ? parsed : 500, fromDate, toDate);
+    return this.devices.getHistory(
+      id,
+      Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 500,
+      fromDate,
+      toDate,
+      Number.isFinite(parsedMaxPoints) && parsedMaxPoints > 0 ? parsedMaxPoints : undefined,
+    );
   }
 
   @Delete(':id/history')

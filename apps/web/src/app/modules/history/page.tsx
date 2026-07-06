@@ -90,7 +90,7 @@ function ChartPanel({
     queryKey: ['device-history', panel.deviceId, fromIso],
     queryFn: () =>
       api
-        .get(`/devices/${panel.deviceId}/history`, { params: { limit: 1000, from: fromIso } })
+        .get(`/devices/${panel.deviceId}/history`, { params: { maxPoints: 500, from: fromIso } })
         .then((r) => r.data),
     enabled: !!panel.deviceId,
   });

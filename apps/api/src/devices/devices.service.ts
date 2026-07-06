@@ -61,17 +61,45 @@ export class DevicesService {
     });
   }
 
-  async getHistory(id: string, limit: number, from?: Date, to?: Date) {
-    const events = await this.prisma.deviceEvent.findMany({
-      where: {
-        deviceId: id,
-        event: 'state_update',
-        timestamp: from || to ? { gte: from, lte: to } : undefined,
-      },
-      orderBy: { timestamp: 'desc' },
-      take: limit,
+  async getHistory(id: string, limit: number, from?: Date, to?: Date, maxPoints?: number) {
+    const where = {
+      deviceId: id,
+      event: 'state_update',
+      timestamp: from || to ? { gte: from, lte: to } : undefined,
+    };
+
+    if (!maxPoints) {
+      const events = await this.prisma.deviceEvent.findMany({
+        where,
+        orderBy: { timestamp: 'desc' },
+        take: limit,
+      });
+      return events.reverse();
+    }
+
+    // Un capteur bavard peut dépasser `maxPoints` événements bien avant la fin de la
+    // plage demandée : prendre les N derniers tronquerait silencieusement le début de
+    // la période au lieu de couvrir toute la plage. On échantillonne donc un point
+    // régulièrement espacé sur l'ensemble de la plage plutôt que les plus récents.
+    const ids = await this.prisma.deviceEvent.findMany({
+      where,
+      orderBy: { timestamp: 'asc' },
+      select: { id: true },
     });
-    return events.reverse();
+    if (ids.length <= maxPoints) {
+      return this.prisma.deviceEvent.findMany({ where, orderBy: { timestamp: 'asc' } });
+    }
+
+    const step = Math.ceil(ids.length / maxPoints);
+    const sampledIds = ids.filter((_, i) => i % step === 0).map((e) => e.id);
+    const lastId = ids[ids.length - 1].id;
+    if (sampledIds[sampledIds.length - 1] !== lastId) sampledIds.push(lastId);
+
+    const sampled = await this.prisma.deviceEvent.findMany({
+      where: { id: { in: sampledIds } },
+      orderBy: { timestamp: 'asc' },
+    });
+    return sampled;
   }
 
   clearHistory(id: string) {
