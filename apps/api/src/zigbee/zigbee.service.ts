@@ -90,8 +90,9 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
       this.handleBridgeEvent(payload);
     });
 
-    this.mqtt.subscribe('zigbee2mqtt/bridge/response/health_check', () => {
+    this.mqtt.subscribe('zigbee2mqtt/bridge/response/health_check', (_, payload) => {
       this.lastMessageAt = Date.now();
+      this.handleHealthCheckResponse(payload);
     });
 
     this.mqtt.onDisconnect(() => {
@@ -195,6 +196,28 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
       this.bridgeOnline = false;
       await this.markAllOffline();
       await this.maybeAutoRestart();
+    }
+  }
+
+  // Filet de sécurité pour le message retenu "bridge/state" : s'il est reçu avant que
+  // cet abonnement soit enregistré au démarrage de l'API (retenu par le broker mais
+  // livré trop tôt dans le cycle de vie Nest), bridgeOnline resterait bloqué à false
+  // indéfiniment, Z2M ne republiant son état que lors de son propre redémarrage. La
+  // réponse au health_check périodique (déjà envoyée avec succès) sert donc aussi de
+  // confirmation de fonctionnement.
+  private async handleHealthCheckResponse(payload: string) {
+    let healthy = false;
+    try {
+      const data = JSON.parse(payload);
+      healthy = data?.status === 'ok' && data?.data?.healthy === true;
+    } catch {
+      return;
+    }
+
+    if (healthy && !this.bridgeOnline) {
+      this.logger.log('Zigbee2MQTT bridge confirmé en ligne via health_check');
+      await this.events.log('zigbee', 'reconnected', 'confirmé via health_check');
+      this.bridgeOnline = true;
     }
   }
 
