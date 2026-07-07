@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { PrismaClient } from '@skbox/db';
 import {
   CreateDeviceDto,
@@ -8,6 +8,11 @@ import {
   UpdateHistoryFieldConfigDto,
 } from '@skbox/shared';
 import { hasSignificantChange } from './history-change.util';
+
+// Fenêtre pendant laquelle le prochain signal RF433 du même type est réassocié à ce
+// device plutôt que de créer un nouveau device (cf. rolling code Oregon Scientific qui
+// change à chaque insertion de pile).
+const BATTERY_CHANGE_WINDOW_MS = 10 * 60_000;
 
 @Injectable()
 export class DevicesService {
@@ -117,6 +122,63 @@ export class DevicesService {
   clearHistory(id: string) {
     return this.prisma.deviceEvent.deleteMany({
       where: { deviceId: id, event: 'state_update' },
+    });
+  }
+
+  async startBatteryChangeMode(id: string) {
+    const device = await this.prisma.device.findUniqueOrThrow({ where: { id } });
+    if (device.protocol !== 'rf433') {
+      throw new BadRequestException("Le mode changement de pile n'est utile que pour les devices RF433");
+    }
+    return this.prisma.device.update({
+      where: { id },
+      data: { batteryChangePendingUntil: new Date(Date.now() + BATTERY_CHANGE_WINDOW_MS) },
+    });
+  }
+
+  cancelBatteryChangeMode(id: string) {
+    return this.prisma.device.update({
+      where: { id },
+      data: { batteryChangePendingUntil: null },
+    });
+  }
+
+  // Cas où un nouveau device a déjà été créé automatiquement (ex. changement de pile
+  // sans activer le mode dédié en amont) : on affecte l'identité/l'état de `sourceId`
+  // (le device orphelin fraîchement créé) à `targetId` (le device existant à conserver
+  // avec son nom/pièce/historique), puis on supprime l'orphelin.
+  async mergeInto(targetId: string, sourceId: string) {
+    if (targetId === sourceId) {
+      throw new BadRequestException('Impossible de fusionner un device avec lui-même');
+    }
+
+    const [target, source] = await Promise.all([
+      this.prisma.device.findUniqueOrThrow({ where: { id: targetId } }),
+      this.prisma.device.findUniqueOrThrow({ where: { id: sourceId } }),
+    ]);
+
+    if (target.protocol !== source.protocol) {
+      throw new BadRequestException('Les deux devices doivent être du même protocole');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.deviceEvent.updateMany({
+        where: { deviceId: source.id },
+        data: { deviceId: target.id },
+      });
+      await tx.device.delete({ where: { id: source.id } });
+      return tx.device.update({
+        where: { id: target.id },
+        data: {
+          rfxcomId: source.rfxcomId,
+          ieeeAddress: source.ieeeAddress,
+          mqttTopic: source.mqttTopic,
+          state: source.state,
+          status: source.status,
+          lastSeen: source.lastSeen,
+          batteryChangePendingUntil: null,
+        },
+      });
     });
   }
 

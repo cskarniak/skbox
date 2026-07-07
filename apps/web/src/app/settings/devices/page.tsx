@@ -1,8 +1,8 @@
 'use client';
 
-import { Title, Text, Stack, Table, Switch, Badge, MultiSelect, ActionIcon, Modal, Tooltip, Center, Loader, ScrollArea, Button, TextInput, NumberInput, Group, Alert, Checkbox, SegmentedControl, Divider } from '@mantine/core';
+import { Title, Text, Stack, Table, Switch, Badge, MultiSelect, ActionIcon, Modal, Tooltip, Center, Loader, ScrollArea, Button, TextInput, NumberInput, Group, Alert, Checkbox, SegmentedControl, Divider, Select } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconHistory, IconTrash, IconAlertTriangle, IconAdjustments } from '@tabler/icons-react';
+import { IconHistory, IconTrash, IconAlertTriangle, IconAdjustments, IconBattery, IconLink } from '@tabler/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '@/lib/api';
@@ -35,6 +35,9 @@ interface Device {
   trackHistory: boolean;
   displayPreferences: string;
   historyFieldConfig: string;
+  batteryChangePendingUntil: string | null;
+  rfxcomId: string | null;
+  ieeeAddress: string | null;
 }
 
 interface DeviceEvent {
@@ -307,7 +310,87 @@ function PreferencesModal({ device, opened, onClose }: { device: Device; opened:
   );
 }
 
-function DeviceRow({ device, themes }: { device: Device; themes: Theme[] }) {
+function MergeDeviceControl({ device, candidates }: { device: Device; candidates: Device[] }) {
+  const queryClient = useQueryClient();
+  const [opened, { open, close }] = useDisclosure(false);
+  const [targetId, setTargetId] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+
+  const merge = useMutation({
+    mutationFn: () => api.post(`/devices/${targetId}/merge/${device.id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
+      queryClient.invalidateQueries({ queryKey: ['themes'] });
+      close();
+    },
+  });
+
+  const handleClose = () => {
+    setTargetId(null);
+    setConfirming(false);
+    close();
+  };
+
+  const target = candidates.find((c) => c.id === targetId);
+
+  return (
+    <>
+      <Tooltip label="Relier à un device existant (ex. après un changement de pile qui a créé un doublon)">
+        <ActionIcon variant="subtle" onClick={open}>
+          <IconLink size={16} />
+        </ActionIcon>
+      </Tooltip>
+      <Modal opened={opened} onClose={handleClose} title={`Relier « ${device.name} » à un device existant`}>
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            « {device.name} » sera supprimé et son état/identité actuels (dernier signal reçu) seront
+            affectés au device choisi ci-dessous, qui conserve son nom, sa pièce et son historique.
+          </Text>
+          <Select
+            label="Device existant à conserver"
+            placeholder="Choisir un device"
+            searchable
+            data={candidates.map((c) => ({
+              value: c.id,
+              label: `${c.name}${c.room ? ` (${c.room})` : ''} — ${c.rfxcomId ?? c.ieeeAddress ?? c.id}`,
+            }))}
+            value={targetId}
+            onChange={(value) => {
+              setTargetId(value);
+              setConfirming(false);
+            }}
+          />
+          {target && !confirming && (
+            <Group justify="flex-end">
+              <Button size="xs" onClick={() => setConfirming(true)}>
+                Relier
+              </Button>
+            </Group>
+          )}
+          {target && confirming && (
+            <Alert color="orange" icon={<IconAlertTriangle size={18} />}>
+              <Stack gap="xs">
+                <Text size="sm">
+                  Confirmer : « {device.name} » sera définitivement supprimé et remplacé par « {target.name} ».
+                </Text>
+                <Group gap="xs">
+                  <Button size="xs" color="orange" loading={merge.isPending} onClick={() => merge.mutate()}>
+                    Oui
+                  </Button>
+                  <Button size="xs" variant="subtle" onClick={() => setConfirming(false)}>
+                    Non
+                  </Button>
+                </Group>
+              </Stack>
+            </Alert>
+          )}
+        </Stack>
+      </Modal>
+    </>
+  );
+}
+
+function DeviceRow({ device, themes, candidates }: { device: Device; themes: Theme[]; candidates: Device[] }) {
   const queryClient = useQueryClient();
   const [historyOpened, { open: openHistory, close: closeHistory }] = useDisclosure(false);
   const [prefsOpened, { open: openPrefs, close: closePrefs }] = useDisclosure(false);
@@ -323,6 +406,17 @@ function DeviceRow({ device, themes }: { device: Device; themes: Theme[] }) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['themes'] }),
   });
 
+  const batteryChangeMode = useMutation({
+    mutationFn: (start: boolean) =>
+      start
+        ? api.post(`/devices/${device.id}/battery-change-mode`)
+        : api.delete(`/devices/${device.id}/battery-change-mode`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['devices'] }),
+  });
+
+  const batteryChangePending =
+    !!device.batteryChangePendingUntil && new Date(device.batteryChangePendingUntil) > new Date();
+
   const deviceThemeIds = themes.filter((t) => t.devices.some((d) => d.id === device.id)).map((t) => t.id);
 
   return (
@@ -334,6 +428,11 @@ function DeviceRow({ device, themes }: { device: Device; themes: Theme[] }) {
         <Text size="xs" c="dimmed">
           {device.protocol} · {device.type}
         </Text>
+        {(device.rfxcomId || device.ieeeAddress) && (
+          <Text size="xs" c="dimmed" ff="monospace">
+            {device.rfxcomId ?? device.ieeeAddress}
+          </Text>
+        )}
       </Table.Td>
       <Table.Td>
         <Text size="sm" c="dimmed">
@@ -385,6 +484,25 @@ function DeviceRow({ device, themes }: { device: Device; themes: Theme[] }) {
               <IconAdjustments size={16} />
             </ActionIcon>
           </Tooltip>
+          {device.protocol === 'rf433' && (
+            <Tooltip
+              label={
+                batteryChangePending
+                  ? "Mode activé : le prochain signal reçu de ce type de capteur sera rattaché à cet appareil. Cliquez pour annuler."
+                  : "Changement de pile : rattache le prochain signal reçu (même type de capteur) à cet appareil, au lieu de créer un nouveau device"
+              }
+            >
+              <ActionIcon
+                variant={batteryChangePending ? 'filled' : 'subtle'}
+                color={batteryChangePending ? 'orange' : undefined}
+                loading={batteryChangeMode.isPending}
+                onClick={() => batteryChangeMode.mutate(!batteryChangePending)}
+              >
+                <IconBattery size={16} />
+              </ActionIcon>
+            </Tooltip>
+          )}
+          {candidates.length > 0 && <MergeDeviceControl device={device} candidates={candidates} />}
         </Group>
         {device.trackHistory && (
           <>
@@ -433,7 +551,12 @@ export default function SettingsDevicesPage() {
         </Table.Thead>
         <Table.Tbody>
           {(devices ?? []).map((device) => (
-            <DeviceRow key={device.id} device={device} themes={themes ?? []} />
+            <DeviceRow
+              key={device.id}
+              device={device}
+              themes={themes ?? []}
+              candidates={(devices ?? []).filter((d) => d.id !== device.id && d.protocol === device.protocol)}
+            />
           ))}
         </Table.Tbody>
       </Table>

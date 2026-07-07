@@ -152,7 +152,7 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
     const vendor = this.inferVendor(data);
     const modelName = this.formatDeviceName(data.deviceName);
 
-    const existing = await this.prisma.device.findUnique({ where: { rfxcomId } });
+    let existing = await this.prisma.device.findUnique({ where: { rfxcomId } });
     if (existing && !existing.active) return;
 
     const stateData: Record<string, unknown> = {};
@@ -165,12 +165,35 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
     if (data.power !== undefined) stateData.power = data.power;
     if (data.energy !== undefined) stateData.energy = data.energy;
 
+    // Certains capteurs (Oregon Scientific temp/humidité...) régénèrent un rolling code
+    // aléatoire à chaque insertion de pile : le rfxcomId change et un nouveau device
+    // serait créé. Si un device du même type attend explicitement ce changement (mode
+    // "changement de pile" activé depuis l'UI), on réutilise ce device au lieu d'en
+    // créer un nouveau, pour préserver nom/pièce/historique.
+    if (!existing) {
+      const pending = await this.prisma.device.findFirst({
+        where: {
+          protocol: 'rf433',
+          type: deviceType,
+          active: true,
+          batteryChangePendingUntil: { gt: new Date() },
+        },
+        orderBy: { batteryChangePendingUntil: 'asc' },
+      });
+      if (pending) {
+        existing = pending;
+      }
+    }
+
     const device = await this.prisma.device.upsert({
-      where: { rfxcomId },
+      where: existing ? { id: existing.id } : { rfxcomId },
       update: {
+        rfxcomId,
+        mqttTopic: `rfxcom2mqtt/devices/${data.id}`,
         state: JSON.stringify(stateData),
         status: 'online',
         lastSeen: new Date(),
+        batteryChangePendingUntil: null,
       },
       create: {
         name: modelName || rfxcomId,

@@ -98,6 +98,21 @@ export class DevicesController {
     return this.devices.clearHistory(id);
   }
 
+  @Post(':id/battery-change-mode')
+  startBatteryChangeMode(@Param('id') id: string) {
+    return this.devices.startBatteryChangeMode(id);
+  }
+
+  @Delete(':id/battery-change-mode')
+  cancelBatteryChangeMode(@Param('id') id: string) {
+    return this.devices.cancelBatteryChangeMode(id);
+  }
+
+  @Post(':id/merge/:sourceId')
+  mergeInto(@Param('id') id: string, @Param('sourceId') sourceId: string) {
+    return this.devices.mergeInto(id, sourceId);
+  }
+
   @Post('optimize-history')
   optimizeAllHistories(@Query('dryRun') dryRun?: string) {
     return this.devices.optimizeAllHistories(dryRun === 'true');
