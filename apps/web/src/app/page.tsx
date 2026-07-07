@@ -343,8 +343,8 @@ function DeviceCard({ device }: { device: Device }) {
           {device.trackHistory && (
             <>
               <Tooltip label="Voir l'historique">
-                <ActionIcon variant="subtle" size="sm" onClick={openHistory}>
-                  <IconChartLine size={14} />
+                <ActionIcon variant="subtle" size="lg" onClick={openHistory}>
+                  <IconChartLine size={18} />
                 </ActionIcon>
               </Tooltip>
               <DeviceHistoryModal device={device} opened={historyOpened} onClose={closeHistory} />
