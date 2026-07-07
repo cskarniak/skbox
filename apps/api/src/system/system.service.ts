@@ -134,7 +134,7 @@ export class SystemService {
       memory: {
         totalMB,
         usedMB,
-        usedPercent: Math.round((usedMB / totalMB) * 100),
+        usedPercent: Math.round((usedMB / totalMB) * 1000) / 10,
       },
       disk,
       smart,
