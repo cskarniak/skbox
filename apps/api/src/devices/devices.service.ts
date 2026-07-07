@@ -85,28 +85,31 @@ export class DevicesService {
       return events.reverse();
     }
 
-    // Un capteur bavard peut dépasser `maxPoints` événements bien avant la fin de la
-    // plage demandée : prendre les N derniers tronquerait silencieusement le début de
-    // la période au lieu de couvrir toute la plage. On échantillonne donc un point
-    // régulièrement espacé sur l'ensemble de la plage plutôt que les plus récents.
-    const ids = await this.prisma.deviceEvent.findMany({
-      where,
-      orderBy: { timestamp: 'asc' },
-      select: { id: true },
-    });
-    if (ids.length <= maxPoints) {
-      return this.prisma.deviceEvent.findMany({ where, orderBy: { timestamp: 'asc' } });
+    const events = await this.prisma.deviceEvent.findMany({ where, orderBy: { timestamp: 'asc' } });
+    if (events.length <= maxPoints) return events;
+
+    // Échantillonnage par fenêtre de temps (et non par rang de ligne) : une rafale
+    // d'anciens événements bavards (ex. un capteur qui loggait trop avant réglage du
+    // filtre de bruit) ne doit pas gonfler le nombre total au point de décaler le pas
+    // et de faire sauter une transition récente mais isolée (ex. un interrupteur qui
+    // change d'état une seule fois dans la journée). Chaque fenêtre de temps garde son
+    // propre représentant (le plus récent événement qu'elle contient), donc une
+    // période creuse ne peut jamais être totalement éclipsée par une période dense.
+    const startMs = events[0].timestamp.getTime();
+    const endMs = events[events.length - 1].timestamp.getTime();
+    const bucketMs = Math.max(1, (endMs - startMs) / maxPoints);
+
+    const sampled: typeof events = [];
+    let lastBucket = -1;
+    for (const event of events) {
+      const bucket = Math.floor((event.timestamp.getTime() - startMs) / bucketMs);
+      if (bucket !== lastBucket) {
+        sampled.push(event);
+        lastBucket = bucket;
+      } else {
+        sampled[sampled.length - 1] = event;
+      }
     }
-
-    const step = Math.ceil(ids.length / maxPoints);
-    const sampledIds = ids.filter((_, i) => i % step === 0).map((e) => e.id);
-    const lastId = ids[ids.length - 1].id;
-    if (sampledIds[sampledIds.length - 1] !== lastId) sampledIds.push(lastId);
-
-    const sampled = await this.prisma.deviceEvent.findMany({
-      where: { id: { in: sampledIds } },
-      orderBy: { timestamp: 'asc' },
-    });
     return sampled;
   }
 
