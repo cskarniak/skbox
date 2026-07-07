@@ -27,6 +27,7 @@ export class MqttService implements OnModuleInit, OnModuleDestroy, OnApplication
   }
 
   async onModuleInit() {
+    this.logger.debug('ORDERING: MqttService.onModuleInit start');
     const url = this.config.get('MQTT_URL', 'mqtt://localhost:1883');
 
     this.client = mqtt.connect(url, {
@@ -36,6 +37,7 @@ export class MqttService implements OnModuleInit, OnModuleDestroy, OnApplication
 
     this.client.on('connect', () => {
       this.logger.log('Connected to MQTT broker');
+      this.logger.debug(`ORDERING: connect event, handlers keys=${[...this.handlers.keys()].join(',')}`);
       this.connected = true;
       this.subscribeToBrokerTopics();
     });
@@ -77,12 +79,14 @@ export class MqttService implements OnModuleInit, OnModuleDestroy, OnApplication
   // toute la salve de messages retenus (bridge/devices, availability...). Se réabonner
   // ici force le broker à les redélivrer, cette fois avec tous les handlers en place.
   onApplicationBootstrap() {
+    this.logger.debug(`ORDERING: onApplicationBootstrap, connected=${this.connected}, handlers keys=${[...this.handlers.keys()].join(',')}`);
     if (this.connected) {
       this.subscribeToBrokerTopics();
     }
   }
 
   private subscribeToBrokerTopics() {
+    this.logger.debug(`ORDERING: subscribeToBrokerTopics called, handlers keys=${[...this.handlers.keys()].join(',')}`);
     for (const topic of BROKER_TOPICS) {
       this.client.subscribe(topic);
     }
