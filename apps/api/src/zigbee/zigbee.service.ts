@@ -312,6 +312,14 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async handleAvailability(friendlyName: string, payload: string) {
+    try {
+      await this.doHandleAvailability(friendlyName, payload);
+    } catch (err: any) {
+      this.logger.error(`handleAvailability(${friendlyName}) failed: ${err?.message}`, err?.stack);
+    }
+  }
+
+  private async doHandleAvailability(friendlyName: string, payload: string) {
     let state: string;
     try {
       state = (JSON.parse(payload) as { state: string }).state;
@@ -323,7 +331,11 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
     const device = await this.prisma.device.findFirst({
       where: { mqttTopic: `zigbee2mqtt/${friendlyName}` },
     });
-    if (!device || !device.active) return;
+    if (!device) {
+      this.logger.warn(`handleAvailability(${friendlyName}): no device found for mqttTopic zigbee2mqtt/${friendlyName}`);
+      return;
+    }
+    if (!device.active) return;
 
     await this.prisma.device.update({
       where: { id: device.id },
