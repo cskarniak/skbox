@@ -22,7 +22,7 @@ export const updateDeviceThemesSchema = z.object({
 
 export const devicePreferenceEntrySchema = z.object({
   valueKey: z.string().min(1),
-  displayType: z.enum(['value', 'chart']),
+  displayType: z.enum(['value', 'chart', 'table']),
   chartType: z.enum(['line', 'bar', 'area']).optional(),
 });
 

@@ -273,6 +273,7 @@ function PreferencesModal({ device, opened, onClose }: { device: Device; opened:
                           data={[
                             { label: 'Valeur', value: 'value' },
                             { label: 'Graphique', value: 'chart' },
+                            { label: 'Liste', value: 'table' },
                           ]}
                         />
                         {pref.displayType === 'chart' && (

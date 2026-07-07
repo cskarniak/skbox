@@ -9,7 +9,7 @@ export interface DeviceEvent {
   timestamp: string;
 }
 
-export type DisplayType = 'value' | 'chart';
+export type DisplayType = 'value' | 'chart' | 'table';
 export type ChartType = 'line' | 'bar' | 'area';
 
 export interface DisplayPreference {
@@ -120,6 +120,17 @@ export function formatTime(ms: number) {
 
 export function formatDate(ms: number) {
   return new Date(ms).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+}
+
+export function formatDateTime(ms: number) {
+  return new Date(ms).toLocaleString('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
 }
 
 // Pas "rond" le plus proche (1/2/5 × une puissance de 10) pour un pas brut donné —

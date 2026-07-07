@@ -16,6 +16,8 @@ import {
   Center,
   Loader,
   Popover,
+  Table,
+  ScrollArea,
 } from '@mantine/core';
 import {
   IconSmartHome,
@@ -45,6 +47,7 @@ import {
   buildSeries,
   generateId,
   formatValueLabel,
+  formatDateTime,
   latestValue,
   parseDisplayPreferences,
 } from '@/lib/history';
@@ -283,6 +286,7 @@ function ChartPanel({
             data={[
               { label: 'Valeur', value: 'value' },
               { label: 'Graphique', value: 'chart' },
+              { label: 'Liste', value: 'table' },
             ]}
           />
           {panel.displayType === 'chart' && (
@@ -324,6 +328,32 @@ function ChartPanel({
             Aucune donnée pour cette période.
           </Text>
         </Center>
+      ) : panel.displayType === 'table' ? (
+        <Stack gap={4}>
+          <Text size="xs" c="dimmed">
+            {device?.name} · {formatValueLabel(panel.valueKey)}
+          </Text>
+          <ScrollArea.Autosize mah={320}>
+            <Table stickyHeader striped highlightOnHover>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Date / Heure</Table.Th>
+                  <Table.Th>Valeur</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {[...series]
+                  .reverse()
+                  .map((point) => (
+                    <Table.Tr key={point.time}>
+                      <Table.Td>{formatDateTime(point.time)}</Table.Td>
+                      <Table.Td>{point.value}</Table.Td>
+                    </Table.Tr>
+                  ))}
+              </Table.Tbody>
+            </Table>
+          </ScrollArea.Autosize>
+        </Stack>
       ) : (
         <Stack gap={4}>
           <Text size="xs" c="dimmed">
