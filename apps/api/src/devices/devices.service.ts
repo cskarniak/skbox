@@ -7,6 +7,7 @@ import {
   UpdateDisplayPreferencesDto,
   UpdateHistoryFieldConfigDto,
 } from '@skbox/shared';
+import { hasSignificantChange } from './history-change.util';
 
 @Injectable()
 export class DevicesService {
@@ -117,6 +118,64 @@ export class DevicesService {
     return this.prisma.deviceEvent.deleteMany({
       where: { deviceId: id, event: 'state_update' },
     });
+  }
+
+  // Rejoue la même règle qu'à l'écriture (hasSignificantChange) sur l'historique déjà
+  // stocké : des événements peuvent avoir été enregistrés avant que le filtre de bruit
+  // d'un appareil (ex. désactivation de linkquality) ne soit configuré, laissant des
+  // milliers de lignes redondantes qui ne correspondent à aucun vrai changement de
+  // valeur. On ne supprime que ces doublons, jamais le premier ni le dernier événement
+  // d'une série de valeurs identiques.
+  async optimizeHistory(id: string, dryRun = false) {
+    const device = await this.prisma.device.findUniqueOrThrow({ where: { id } });
+    const events = await this.prisma.deviceEvent.findMany({
+      where: { deviceId: id, event: 'state_update' },
+      orderBy: { timestamp: 'asc' },
+    });
+
+    const toDelete: string[] = [];
+    let lastKeptData: string | null = null;
+    for (const event of events) {
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(event.data);
+      } catch {
+        parsed = {};
+      }
+      if (lastKeptData !== null && !hasSignificantChange(lastKeptData, parsed, device.historyFieldConfig)) {
+        toDelete.push(event.id);
+      } else {
+        lastKeptData = event.data;
+      }
+    }
+
+    if (!dryRun && toDelete.length > 0) {
+      const CHUNK = 500;
+      for (let i = 0; i < toDelete.length; i += CHUNK) {
+        await this.prisma.deviceEvent.deleteMany({ where: { id: { in: toDelete.slice(i, i + CHUNK) } } });
+      }
+    }
+
+    return {
+      deviceId: id,
+      name: device.name,
+      total: events.length,
+      redundant: toDelete.length,
+      kept: events.length - toDelete.length,
+      dryRun,
+    };
+  }
+
+  async optimizeAllHistories(dryRun = false) {
+    const devices = await this.prisma.device.findMany({
+      where: { trackHistory: true },
+      orderBy: { name: 'asc' },
+    });
+    const results = [];
+    for (const device of devices) {
+      results.push(await this.optimizeHistory(device.id, dryRun));
+    }
+    return results;
   }
 
   updateState(id: string, state: Record<string, unknown>) {

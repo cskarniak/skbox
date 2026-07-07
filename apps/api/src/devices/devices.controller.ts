@@ -98,6 +98,16 @@ export class DevicesController {
     return this.devices.clearHistory(id);
   }
 
+  @Post('optimize-history')
+  optimizeAllHistories(@Query('dryRun') dryRun?: string) {
+    return this.devices.optimizeAllHistories(dryRun === 'true');
+  }
+
+  @Post(':id/optimize-history')
+  optimizeHistory(@Param('id') id: string, @Query('dryRun') dryRun?: string) {
+    return this.devices.optimizeHistory(id, dryRun === 'true');
+  }
+
   @Post(':id/command')
   async sendCommand(@Param('id') id: string, @Body() body: unknown) {
     const { command, payload } = deviceCommandSchema.parse(body);
