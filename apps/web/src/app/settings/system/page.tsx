@@ -14,7 +14,9 @@ import {
   RingProgress,
   Table,
   Select,
+  Modal,
 } from '@mantine/core';
+import { useDisclosure } from '@mantine/hooks';
 import {
   IconCheck,
   IconX,
@@ -261,10 +263,13 @@ export default function SettingsSystemPage() {
     refetchInterval: refreshInterval,
   });
 
+  const [journalOpened, { open: openJournal, close: closeJournal }] = useDisclosure(false);
+
   const { data: events, isLoading: eventsLoading } = useQuery<ServiceEvent[]>({
     queryKey: ['system-events'],
     queryFn: () => api.get('/system/events?limit=100').then((r) => r.data),
-    refetchInterval: refreshInterval,
+    refetchInterval: journalOpened ? refreshInterval : false,
+    enabled: journalOpened,
   });
 
   const setThermalShutdown = useMutation({
@@ -696,54 +701,62 @@ export default function SettingsSystemPage() {
           </Card>
 
           <Card shadow="sm" padding="lg" withBorder>
-            <Text size="sm" c="dimmed" mb="xs">
-              Journal des arrêts et redémarrages
-            </Text>
-            {eventsLoading ? (
-              <Center h={80}>
-                <Loader size="sm" />
-              </Center>
-            ) : !events || events.length === 0 ? (
+            <Group justify="space-between">
               <Text size="sm" c="dimmed">
-                Aucun événement enregistré
+                Journal des arrêts et redémarrages
               </Text>
-            ) : (
-              <Table striped highlightOnHover>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>Date</Table.Th>
-                    <Table.Th>Service</Table.Th>
-                    <Table.Th>Événement</Table.Th>
-                    <Table.Th>Détail</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {events.map((e) => (
-                    <Table.Tr key={e.id}>
-                      <Table.Td>
-                        <Text size="sm" c="dimmed">
-                          {new Date(e.createdAt).toLocaleString('fr-FR')}
-                        </Text>
-                      </Table.Td>
-                      <Table.Td>{SERVICE_LABELS[e.service] ?? e.service}</Table.Td>
-                      <Table.Td>
-                        <Badge color={EVENT_COLOR[e.event] ?? 'gray'} variant="light">
-                          {EVENT_LABELS[e.event] ?? e.event}
-                        </Badge>
-                      </Table.Td>
-                      <Table.Td>
-                        <Text size="xs" c="dimmed">
-                          {e.detail ?? '—'}
-                        </Text>
-                      </Table.Td>
-                    </Table.Tr>
-                  ))}
-                </Table.Tbody>
-              </Table>
-            )}
+              <Button size="xs" variant="light" onClick={openJournal}>
+                Voir le journal
+              </Button>
+            </Group>
           </Card>
         </Stack>
       )}
+
+      <Modal opened={journalOpened} onClose={closeJournal} title="Journal des arrêts et redémarrages" size="lg">
+        {eventsLoading ? (
+          <Center h={80}>
+            <Loader size="sm" />
+          </Center>
+        ) : !events || events.length === 0 ? (
+          <Text size="sm" c="dimmed">
+            Aucun événement enregistré
+          </Text>
+        ) : (
+          <Table striped highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Date</Table.Th>
+                <Table.Th>Service</Table.Th>
+                <Table.Th>Événement</Table.Th>
+                <Table.Th>Détail</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {events.map((e) => (
+                <Table.Tr key={e.id}>
+                  <Table.Td>
+                    <Text size="sm" c="dimmed">
+                      {new Date(e.createdAt).toLocaleString('fr-FR')}
+                    </Text>
+                  </Table.Td>
+                  <Table.Td>{SERVICE_LABELS[e.service] ?? e.service}</Table.Td>
+                  <Table.Td>
+                    <Badge color={EVENT_COLOR[e.event] ?? 'gray'} variant="light">
+                      {EVENT_LABELS[e.event] ?? e.event}
+                    </Badge>
+                  </Table.Td>
+                  <Table.Td>
+                    <Text size="xs" c="dimmed">
+                      {e.detail ?? '—'}
+                    </Text>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        )}
+      </Modal>
     </>
   );
 }

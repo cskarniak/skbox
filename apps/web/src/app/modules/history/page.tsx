@@ -18,6 +18,8 @@ import {
   Popover,
   Table,
   ScrollArea,
+  Switch,
+  Tooltip,
 } from '@mantine/core';
 import {
   IconSmartHome,
@@ -30,14 +32,15 @@ import {
   IconLayoutList,
   IconLayoutGrid,
   IconGridDots,
+  IconUnlink,
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { AppNav } from '@/components/AppNav';
-import { ValueChart, ChartType } from '@/components/ValueChart';
+import { ValueChart, OverlayChart, OverlaySeries, ChartType } from '@/components/ValueChart';
 import { LatestValue } from '@/components/LatestValue';
 import {
   CHART_COLORS,
@@ -81,6 +84,9 @@ interface PanelConfig {
   valueKey: string | null;
   displayType: DisplayType;
   chartType: ChartType;
+  // Superpose ce panel (doit être de type "chart") sur le graphique du panel qui le
+  // précède immédiatement dans la liste, s'il est lui aussi de type "chart".
+  overlay: boolean;
 }
 
 type ColumnLayout = 'list' | 'grid2' | 'grid3';
@@ -94,7 +100,7 @@ const columnLayoutCols: Record<ColumnLayout, Record<string, number>> = {
 const COLUMN_LAYOUT_STORAGE_KEY = 'skbox-history-columns';
 
 function emptyPanel(): PanelConfig {
-  return { id: generateId(), deviceId: null, valueKey: null, displayType: 'chart', chartType: 'line' };
+  return { id: generateId(), deviceId: null, valueKey: null, displayType: 'chart', chartType: 'line', overlay: false };
 }
 
 // Un template ne stocke pas d'id de panel (ceux-ci sont régénérés à la volée pour
@@ -109,8 +115,9 @@ function parseTemplatePanels(raw: string): PanelConfig[] {
       id: generateId(),
       deviceId: p.deviceId ?? null,
       valueKey: p.valueKey ?? null,
-      displayType: p.displayType === 'value' ? 'value' : 'chart',
+      displayType: p.displayType === 'value' ? 'value' : p.displayType === 'table' ? 'table' : 'chart',
       chartType: p.chartType === 'bar' || p.chartType === 'area' ? p.chartType : 'line',
+      overlay: p.overlay === true,
     }));
   } catch {
     return [];
@@ -118,12 +125,31 @@ function parseTemplatePanels(raw: string): PanelConfig[] {
 }
 
 function toTemplatePanels(panels: PanelConfig[]) {
-  return panels.map(({ deviceId, valueKey, displayType, chartType }) => ({
+  return panels.map(({ deviceId, valueKey, displayType, chartType, overlay }) => ({
     deviceId,
     valueKey,
     displayType,
     chartType,
+    overlay,
   }));
+}
+
+// Regroupe les panels consécutifs marqués "overlay" avec le panel-graphique qui les
+// précède : un groupe de taille 1 s'affiche comme avant (ChartPanel), un groupe de
+// taille >1 s'affiche comme un unique graphique superposé (OverlayGroupPanel).
+function groupPanels(panels: PanelConfig[]): PanelConfig[][] {
+  const groups: PanelConfig[][] = [];
+  for (const panel of panels) {
+    const prevGroup = groups[groups.length - 1];
+    const prevLast = prevGroup?.[prevGroup.length - 1];
+    const canAttach = panel.displayType === 'chart' && panel.overlay && prevLast?.displayType === 'chart';
+    if (canAttach) {
+      prevGroup.push(panel);
+    } else {
+      groups.push([panel]);
+    }
+  }
+  return groups;
 }
 
 function ConfirmDeleteButton({ message, onConfirm }: { message: string; onConfirm: () => void }) {
@@ -231,6 +257,7 @@ function ChartPanel({
   devices,
   fromIso,
   color,
+  canOverlay,
   onSelectDevice,
   onChange,
   onRemove,
@@ -239,6 +266,7 @@ function ChartPanel({
   devices: Device[];
   fromIso: string | undefined;
   color: string;
+  canOverlay: boolean;
   onSelectDevice: (deviceId: string | null) => void;
   onChange: (next: Partial<PanelConfig>) => void;
   onRemove: () => void;
@@ -301,6 +329,19 @@ function ChartPanel({
               ]}
             />
           )}
+          {panel.displayType === 'chart' && (
+            <Tooltip
+              label={canOverlay ? 'Superposer ce graphique au précédent' : 'Aucun graphique précédent auquel superposer'}
+            >
+              <Switch
+                size="xs"
+                label="Superposer"
+                checked={panel.overlay}
+                disabled={!canOverlay}
+                onChange={(e) => onChange({ overlay: e.currentTarget.checked })}
+              />
+            </Tooltip>
+          )}
         </Group>
         <ConfirmDeleteButton message="Supprimer ce graphique ?" onConfirm={onRemove} />
       </Group>
@@ -361,6 +402,123 @@ function ChartPanel({
           </Text>
           <ValueChart series={series} chartType={panel.chartType} color={color} valueKey={panel.valueKey} />
         </Stack>
+      )}
+    </Card>
+  );
+}
+
+function OverlayGroupPanel({
+  group,
+  devices,
+  fromIso,
+  colors,
+  onSelectDevice,
+  onChange,
+  onRemove,
+  onDetach,
+}: {
+  group: PanelConfig[];
+  devices: Device[];
+  fromIso: string | undefined;
+  colors: string[];
+  onSelectDevice: (panelId: string, deviceId: string | null) => void;
+  onChange: (panelId: string, next: Partial<PanelConfig>) => void;
+  onRemove: (panelId: string) => void;
+  onDetach: (panelId: string) => void;
+}) {
+  const results = useQueries({
+    queries: group.map((panel) => ({
+      queryKey: ['device-history', panel.deviceId, fromIso],
+      queryFn: () =>
+        api
+          .get(`/devices/${panel.deviceId}/history`, { params: { maxPoints: 500, from: fromIso } })
+          .then((r) => r.data as DeviceEvent[]),
+      enabled: !!panel.deviceId,
+    })),
+  });
+
+  const isLoading = results.some((r) => r.isLoading);
+
+  const series: OverlaySeries[] = group
+    .map((panel, i) => {
+      const device = devices.find((d) => d.id === panel.deviceId);
+      const history = results[i].data;
+      return {
+        id: panel.id,
+        label: `${device?.name ?? '?'} · ${panel.valueKey ? formatValueLabel(panel.valueKey) : '?'}`,
+        color: colors[i],
+        valueKey: panel.valueKey ?? '',
+        data: history && panel.valueKey ? buildSeries(history, panel.valueKey) : [],
+      };
+    })
+    .filter((s) => s.valueKey);
+
+  const hasData = series.some((s) => s.data.length > 0);
+
+  return (
+    <Card shadow="sm" padding="lg" withBorder>
+      <Stack gap="xs" mb="sm">
+        {group.map((panel, i) => {
+          const valueKeys = results[i].data ? extractValueKeys(results[i].data as DeviceEvent[]) : [];
+          return (
+            <Group key={panel.id} justify="space-between" wrap="wrap">
+              <Group gap="sm" wrap="wrap">
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: 10,
+                    height: 10,
+                    borderRadius: '50%',
+                    background: colors[i],
+                    flexShrink: 0,
+                  }}
+                />
+                <Select
+                  size="xs"
+                  placeholder="Appareil"
+                  data={devices.map((d) => ({ value: d.id, label: d.name }))}
+                  value={panel.deviceId}
+                  onChange={(deviceId) => onSelectDevice(panel.id, deviceId)}
+                  w={200}
+                  searchable
+                />
+                <Select
+                  size="xs"
+                  placeholder="Valeur"
+                  data={valueKeys.map((k) => ({ value: k, label: formatValueLabel(k) }))}
+                  value={panel.valueKey}
+                  onChange={(value) => onChange(panel.id, { valueKey: value })}
+                  disabled={!panel.deviceId}
+                  w={200}
+                />
+              </Group>
+              <Group gap={4}>
+                {i > 0 && (
+                  <Tooltip label="Détacher de la superposition">
+                    <ActionIcon variant="subtle" onClick={() => onDetach(panel.id)}>
+                      <IconUnlink size={16} />
+                    </ActionIcon>
+                  </Tooltip>
+                )}
+                <ConfirmDeleteButton message="Supprimer cette courbe ?" onConfirm={() => onRemove(panel.id)} />
+              </Group>
+            </Group>
+          );
+        })}
+      </Stack>
+
+      {isLoading ? (
+        <Center h={220}>
+          <Loader size="sm" />
+        </Center>
+      ) : !hasData ? (
+        <Center h={220}>
+          <Text size="sm" c="dimmed">
+            Aucune donnée pour cette période.
+          </Text>
+        </Center>
+      ) : (
+        <OverlayChart series={series} />
       )}
     </Card>
   );
@@ -453,6 +611,12 @@ export default function HistoryModulePage() {
     [rangeHours],
   );
 
+  const panelGroups = useMemo(() => groupPanels(panels), [panels]);
+  const colorByPanelId = useMemo(
+    () => new Map(panels.map((p, i) => [p.id, CHART_COLORS[i % CHART_COLORS.length]])),
+    [panels],
+  );
+
   const addPanel = () => {
     setPanels((prev) => [...prev, emptyPanel()]);
   };
@@ -470,18 +634,22 @@ export default function HistoryModulePage() {
   const selectDeviceForPanel = (panelId: string, deviceId: string | null) => {
     const device = (devices ?? []).find((d) => d.id === deviceId);
     const prefs = device ? parseDisplayPreferences(device.displayPreferences) : [];
+    const wasOverlay = panels.find((p) => p.id === panelId)?.overlay ?? false;
 
     if (!deviceId || prefs.length === 0) {
       updatePanel(panelId, { deviceId, valueKey: null });
       return;
     }
 
-    const newPanels = prefs.map((pref) => ({
+    const newPanels = prefs.map((pref, i) => ({
       id: generateId(),
       deviceId,
       valueKey: pref.valueKey,
       displayType: pref.displayType,
       chartType: pref.chartType ?? ('line' as ChartType),
+      // Seul le premier panel généré hérite de l'état "superposé" du panel remplacé —
+      // les suivants démarrent détachés, l'utilisateur les rattache explicitement.
+      overlay: i === 0 ? wasOverlay : false,
     }));
 
     setPanels((prev) => {
@@ -677,18 +845,39 @@ export default function HistoryModulePage() {
                     </Text>
                   ) : (
                     <SimpleGrid cols={columnLayoutCols[columnLayout]} spacing="md">
-                      {panels.map((panel, i) => (
-                        <ChartPanel
-                          key={panel.id}
-                          panel={panel}
-                          devices={trackedDevices}
-                          fromIso={fromIso}
-                          color={CHART_COLORS[i % CHART_COLORS.length]}
-                          onSelectDevice={(deviceId) => selectDeviceForPanel(panel.id, deviceId)}
-                          onChange={(next) => updatePanel(panel.id, next)}
-                          onRemove={() => removePanel(panel.id)}
-                        />
-                      ))}
+                      {panelGroups.map((group) => {
+                        if (group.length === 1) {
+                          const panel = group[0];
+                          const flatIndex = panels.findIndex((p) => p.id === panel.id);
+                          const prevPanel = flatIndex > 0 ? panels[flatIndex - 1] : null;
+                          return (
+                            <ChartPanel
+                              key={panel.id}
+                              panel={panel}
+                              devices={trackedDevices}
+                              fromIso={fromIso}
+                              color={colorByPanelId.get(panel.id)!}
+                              canOverlay={prevPanel?.displayType === 'chart'}
+                              onSelectDevice={(deviceId) => selectDeviceForPanel(panel.id, deviceId)}
+                              onChange={(next) => updatePanel(panel.id, next)}
+                              onRemove={() => removePanel(panel.id)}
+                            />
+                          );
+                        }
+                        return (
+                          <OverlayGroupPanel
+                            key={group[0].id}
+                            group={group}
+                            devices={trackedDevices}
+                            fromIso={fromIso}
+                            colors={group.map((p) => colorByPanelId.get(p.id)!)}
+                            onSelectDevice={selectDeviceForPanel}
+                            onChange={(panelId, next) => updatePanel(panelId, next)}
+                            onRemove={(panelId) => removePanel(panelId)}
+                            onDetach={(panelId) => updatePanel(panelId, { overlay: false })}
+                          />
+                        );
+                      })}
                     </SimpleGrid>
                   )}
                 </>

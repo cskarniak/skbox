@@ -13,6 +13,7 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip as RechartsTooltip,
+  Legend,
   Brush,
 } from 'recharts';
 import { formatTime, formatDate, getValueMeta, buildTimeTicks, buildValueTicks } from '@/lib/history';
@@ -84,6 +85,84 @@ export function ValueChart({
           <Brush dataKey="time" height={24} tickFormatter={formatDate} travellerWidth={8} />
         </LineChart>
       )}
+    </ResponsiveContainer>
+  );
+}
+
+export interface OverlaySeries {
+  id: string;
+  label: string;
+  color: string;
+  valueKey: string;
+  data: { time: number; value: number }[];
+}
+
+// Superpose plusieurs courbes sur un même graphique (toujours en lignes : mélanger
+// barres/aires empilées entre séries indépendantes serait illisible). Au plus deux
+// unités différentes sont supportées (axe gauche pour la première rencontrée, axe
+// droit pour la suivante) — au-delà, les séries supplémentaires partagent l'axe droit,
+// ce qui reste un compromis raisonnable pour un cas d'usage marginal.
+export function OverlayChart({ series, height = 280 }: { series: OverlaySeries[]; height?: number }) {
+  const allTimes = series.flatMap((s) => s.data.map((p) => p.time));
+  const xTicks = useMemo(() => {
+    if (allTimes.length === 0) return [];
+    return buildTimeTicks(Math.min(...allTimes), Math.max(...allTimes));
+  }, [allTimes]);
+
+  const units = useMemo(() => series.map((s) => getValueMeta(s.valueKey).unit), [series]);
+  const primaryUnit = units[0];
+  const secondaryUnit = units.find((u) => u !== primaryUnit);
+  const yAxisIdFor = (unit: string) => (secondaryUnit && unit !== primaryUnit ? 'right' : 'left');
+  const formatAxisValue = (unit: string) => (v: number) => `${v}${unit ? ` ${unit}` : ''}`;
+
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <LineChart>
+        <CartesianGrid strokeDasharray="0" stroke="var(--mantine-color-dark-4)" />
+        <XAxis
+          dataKey="time"
+          type="number"
+          domain={['dataMin', 'dataMax']}
+          ticks={xTicks}
+          tickFormatter={formatDate}
+          tick={{ fontSize: 11 }}
+          allowDuplicatedCategory={false}
+        />
+        <YAxis
+          yAxisId="left"
+          tick={{ fontSize: 11 }}
+          width={48}
+          tickFormatter={formatAxisValue(primaryUnit ?? '')}
+        />
+        {secondaryUnit && (
+          <YAxis
+            yAxisId="right"
+            orientation="right"
+            tick={{ fontSize: 11 }}
+            width={48}
+            tickFormatter={formatAxisValue(secondaryUnit)}
+          />
+        )}
+        <RechartsTooltip
+          labelFormatter={(v) => formatTime(v as number)}
+          formatter={(v, name) => [v as number, name]}
+        />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+        {series.map((s) => (
+          <Line
+            key={s.id}
+            data={s.data}
+            dataKey="value"
+            name={s.label}
+            stroke={s.color}
+            strokeWidth={2}
+            dot={false}
+            type="monotone"
+            yAxisId={yAxisIdFor(getValueMeta(s.valueKey).unit)}
+          />
+        ))}
+        <Brush dataKey="time" height={24} tickFormatter={formatDate} travellerWidth={8} />
+      </LineChart>
     </ResponsiveContainer>
   );
 }

@@ -3,8 +3,11 @@ import { z } from 'zod';
 export const historyTemplatePanelSchema = z.object({
   deviceId: z.string().nullable(),
   valueKey: z.string().nullable(),
-  displayType: z.enum(['value', 'chart']),
+  displayType: z.enum(['value', 'chart', 'table']),
   chartType: z.enum(['line', 'bar', 'area']),
+  // Quand true, ce panel n'affiche pas son propre graphique : sa courbe est superposée
+  // à celle du panel de type "chart" qui le précède immédiatement dans la liste.
+  overlay: z.boolean().default(false),
 });
 
 export const createHistoryTemplateSchema = z.object({
