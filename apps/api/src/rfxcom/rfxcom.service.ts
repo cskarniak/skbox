@@ -162,6 +162,8 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
     if (data.batteryLevel !== undefined) stateData.battery = data.batteryLevel > 5 ? 100 : 10;
     if (data.rssi !== undefined) stateData.rssi = data.rssi;
     if (data.command !== undefined) stateData.command = data.command;
+    if (data.power !== undefined) stateData.power = data.power;
+    if (data.energy !== undefined) stateData.energy = data.energy;
 
     const device = await this.prisma.device.upsert({
       where: { rfxcomId },
@@ -246,9 +248,11 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
     if (type.includes('uv')) return 'sensor_uv';
     if (type.includes('lighting')) return 'switch';
     if (type.includes('remote')) return 'remote';
+    if (type.includes('elec')) return 'sensor_power';
 
     if (data.temperature !== undefined) return 'sensor_temperature';
     if (data.humidity !== undefined) return 'sensor_humidity';
+    if (data.power !== undefined) return 'sensor_power';
     if (data.command !== undefined) return 'switch';
 
     return 'switch';
@@ -260,6 +264,7 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
       return 'Oregon Scientific';
     }
     if (type.includes('lighting')) return 'Chacon/DIO';
+    if (type.includes('elec')) return 'OWL';
     return 'Unknown';
   }
 }

@@ -31,6 +31,7 @@ import {
   IconDroplet,
   IconAdjustments,
   IconToggleLeft,
+  IconBolt,
   IconDevicesPc,
   IconEdit,
   IconCheck,
@@ -90,6 +91,7 @@ const deviceIcons: Record<string, React.ReactNode> = {
   sensor_humidity: <IconDroplet size={24} />,
   sensor_motion: <IconWalk size={24} />,
   sensor_door: <IconDoor size={24} />,
+  sensor_power: <IconBolt size={24} />,
   thermostat: <IconAdjustments size={24} />,
 };
 
@@ -407,6 +409,19 @@ function DeviceCard({ device }: { device: Device }) {
         <Badge size="lg" color={state.contact === false ? 'red' : 'green'} variant="light">
           {state.contact === false ? 'Ouvert' : 'Fermé'}
         </Badge>
+      )}
+
+      {device.type === 'sensor_power' && (
+        <Group gap="md">
+          <Text size="xl" fw={700} c="orange">
+            {state.power !== undefined ? `${state.power} W` : '—'}
+          </Text>
+          {state.energy !== undefined && (
+            <Text size="sm" c="dimmed">
+              {state.energy.toFixed(2)} Wh
+            </Text>
+          )}
+        </Group>
       )}
 
       {state.battery !== undefined && device.protocol !== 'rf433' && (
