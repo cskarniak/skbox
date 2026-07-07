@@ -72,6 +72,12 @@ export interface SystemHealth {
 @Injectable()
 export class SystemService {
   private readonly logger = new Logger(SystemService.name);
+  // Le load average (os.loadavg) est une moyenne lissée sur 1/5/15 min du nombre de
+  // processus en attente, pas un pourcentage d'utilisation CPU instantané : sur cette
+  // machine peu chargée, il reste presque toujours proche de 0 même lors de pics
+  // d'activité courts. On calcule plutôt un vrai %CPU par delta des ticks os.cpus()
+  // entre deux appels successifs de getHealth(), comme le fait `top`.
+  private lastCpuTimes: os.CpuInfo['times'][] | null = null;
 
   constructor(
     private readonly zigbee: ZigbeeService,
@@ -107,10 +113,7 @@ export class SystemService {
 
     const cpus = os.cpus();
     const loadAvg = os.loadavg() as [number, number, number];
-    const usagePercent = Math.min(
-      100,
-      Math.round((loadAvg[0] / (cpus.length || 1)) * 100),
-    );
+    const usagePercent = this.computeCpuUsagePercent(cpus);
 
     const totalMB = Math.round(os.totalmem() / 1024 / 1024);
     const freeMB = Math.round(os.freemem() / 1024 / 1024);
@@ -194,6 +197,29 @@ export class SystemService {
       this.logger.debug(`Command failed: ${cmd} — ${err?.message}`);
       return null;
     }
+  }
+
+  private computeCpuUsagePercent(cpus: os.CpuInfo[]): number {
+    const currentTimes = cpus.map((c) => c.times);
+    const previousTimes = this.lastCpuTimes;
+    this.lastCpuTimes = currentTimes;
+
+    if (!previousTimes || previousTimes.length !== currentTimes.length) {
+      return 0;
+    }
+
+    let idleDelta = 0;
+    let totalDelta = 0;
+    currentTimes.forEach((times, i) => {
+      const prev = previousTimes[i];
+      const total = times.user + times.nice + times.sys + times.idle + times.irq;
+      const prevTotal = prev.user + prev.nice + prev.sys + prev.idle + prev.irq;
+      idleDelta += times.idle - prev.idle;
+      totalDelta += total - prevTotal;
+    });
+
+    if (totalDelta <= 0) return 0;
+    return Math.min(100, Math.max(0, Math.round((1 - idleDelta / totalDelta) * 100)));
   }
 
   private async readGovernor(): Promise<string | null> {
