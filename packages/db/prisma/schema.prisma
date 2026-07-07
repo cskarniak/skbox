@@ -103,6 +103,19 @@ model Theme {
   devices Device[]
 }
 
+model Camera {
+  id        String   @id @default(cuid())
+  name      String
+  room      String?
+  // URL RTSP complète, identifiants inclus — jamais renvoyée au frontend, seule
+  // l'API (via go2rtc) y accède pour enregistrer/mettre à jour le flux.
+  rtspUrl   String
+  active    Boolean  @default(true)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Setting {
   key       String   @id
   value     String

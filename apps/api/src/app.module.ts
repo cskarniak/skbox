@@ -13,6 +13,7 @@ import { SettingsModule } from './settings/settings.module';
 import { BackupModule } from './backup/backup.module';
 import { BoilerModule } from './boiler/boiler.module';
 import { HistoryTemplatesModule } from './history-templates/history-templates.module';
+import { CameraModule } from './camera/camera.module';
 import { PrismaModule } from './prisma.module';
 
 @Module({
@@ -32,6 +33,7 @@ import { PrismaModule } from './prisma.module';
     BackupModule,
     BoilerModule,
     HistoryTemplatesModule,
+    CameraModule,
   ],
 })
 export class AppModule {}

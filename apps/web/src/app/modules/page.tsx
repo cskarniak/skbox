@@ -11,7 +11,7 @@ import {
   ThemeIcon,
   UnstyledButton,
 } from '@mantine/core';
-import { IconSmartHome, IconFlame, IconChevronRight, IconChartLine } from '@tabler/icons-react';
+import { IconSmartHome, IconFlame, IconChevronRight, IconChartLine, IconVideo } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import { AppNav } from '@/components/AppNav';
 
@@ -37,6 +37,13 @@ const MODULES: ModuleEntry[] = [
     description: "Graphiques des valeurs enregistrées pour les appareils historisés, dans le temps.",
     icon: <IconChartLine size={24} />,
     href: '/modules/history',
+  },
+  {
+    key: 'cameras',
+    label: 'Caméras',
+    description: 'Vue en direct des caméras IP (flux RTSP relayé via go2rtc).',
+    icon: <IconVideo size={24} />,
+    href: '/modules/cameras',
   },
 ];
 
