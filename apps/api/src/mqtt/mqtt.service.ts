@@ -1,8 +1,9 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy, OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as mqtt from 'mqtt';
 
 const LOG_BUFFER_SIZE = 500;
+const BROKER_TOPICS = ['skbox/#', 'zigbee2mqtt/#', 'rfxcom2mqtt/#'];
 
 export interface MqttLogEntry {
   topic: string;
@@ -11,7 +12,7 @@ export interface MqttLogEntry {
 }
 
 @Injectable()
-export class MqttService implements OnModuleInit, OnModuleDestroy {
+export class MqttService implements OnModuleInit, OnModuleDestroy, OnApplicationBootstrap {
   private client!: mqtt.MqttClient;
   private readonly logger = new Logger(MqttService.name);
   private readonly handlers = new Map<string, ((topic: string, payload: string) => void)[]>();
@@ -36,9 +37,7 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     this.client.on('connect', () => {
       this.logger.log('Connected to MQTT broker');
       this.connected = true;
-      this.client.subscribe('skbox/#');
-      this.client.subscribe('zigbee2mqtt/#');
-      this.client.subscribe('rfxcom2mqtt/#');
+      this.subscribeToBrokerTopics();
     });
 
     this.client.on('message', (topic, message) => {
@@ -68,6 +67,25 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
         handler();
       }
     });
+  }
+
+  // Tous les onModuleInit (et donc tous les subscribe() enregistrant les handlers des
+  // autres services) ont désormais eu lieu. Si la connexion MQTT s'était établie plus
+  // vite que le boot complet de Nest — de plus en plus probable au fil des modules
+  // ajoutés — le premier subscribe() côté broker (dans 'connect' ci-dessus) a pu arriver
+  // avant que Zigbee/Rfxcom aient enregistré leurs handlers, faisant perdre en silence
+  // toute la salve de messages retenus (bridge/devices, availability...). Se réabonner
+  // ici force le broker à les redélivrer, cette fois avec tous les handlers en place.
+  onApplicationBootstrap() {
+    if (this.connected) {
+      this.subscribeToBrokerTopics();
+    }
+  }
+
+  private subscribeToBrokerTopics() {
+    for (const topic of BROKER_TOPICS) {
+      this.client.subscribe(topic);
+    }
   }
 
   async onModuleDestroy() {
