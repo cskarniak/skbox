@@ -10,7 +10,9 @@ export const createDeviceSchema = z.object({
 
 export const updateDeviceSchema = z.object({
   name: z.string().min(1).max(100).optional(),
-  room: z.string().max(100).optional(),
+  room: z.string().max(100).nullable().optional(),
+  parentObject: z.string().max(100).nullable().optional(),
+  type: z.nativeEnum(DeviceType).optional(),
   visible: z.boolean().optional(),
   active: z.boolean().optional(),
   trackHistory: z.boolean().optional(),

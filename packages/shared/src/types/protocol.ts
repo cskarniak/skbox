@@ -15,6 +15,7 @@ export enum DeviceType {
   SENSOR_RAIN = 'sensor_rain',
   SENSOR_WIND = 'sensor_wind',
   SENSOR_UV = 'sensor_uv',
+  SENSOR_POWER = 'sensor_power',
   THERMOSTAT = 'thermostat',
   PLUG = 'plug',
   REMOTE = 'remote',

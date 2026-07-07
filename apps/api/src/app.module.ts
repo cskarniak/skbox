@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { DevicesModule } from './devices/devices.module';
 import { MqttModule } from './mqtt/mqtt.module';
 import { RoomsModule } from './rooms/rooms.module';
+import { ParentObjectsModule } from './parent-objects/parent-objects.module';
 import { ThemesModule } from './themes/themes.module';
 import { ZigbeeModule } from './zigbee/zigbee.module';
 import { RfxcomModule } from './rfxcom/rfxcom.module';
@@ -21,6 +22,7 @@ import { PrismaModule } from './prisma.module';
     MqttModule,
     DevicesModule,
     RoomsModule,
+    ParentObjectsModule,
     ThemesModule,
     ZigbeeModule,
     RfxcomModule,

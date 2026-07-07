@@ -15,7 +15,6 @@ import {
   Tooltip,
   Slider,
   Button,
-  TextInput,
   SegmentedControl,
   Modal,
   Select,
@@ -35,8 +34,6 @@ import {
   IconToggleLeft,
   IconBolt,
   IconDevicesPc,
-  IconEdit,
-  IconCheck,
   IconLayoutGrid,
   IconGridDots,
   IconLayoutList,
@@ -299,8 +296,6 @@ function DeviceCard({ device }: { device: Device }) {
   const queryClient = useQueryClient();
   const state = JSON.parse(device.state || '{}');
   const isOn = state.state === 'ON' || state.on === true;
-  const [editing, setEditing] = useState(false);
-  const [editName, setEditName] = useState(device.name);
   const [historyOpened, { open: openHistory, close: closeHistory }] = useDisclosure(false);
 
   const sendCommand = useMutation({
@@ -336,52 +331,14 @@ function DeviceCard({ device }: { device: Device }) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['devices'] }),
   });
 
-  const rename = useMutation({
-    mutationFn: (name: string) =>
-      api.patch(`/devices/${device.id}`, { name }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['devices'] });
-      setEditing(false);
-    },
-  });
-
   return (
     <Card shadow="sm" padding="lg" withBorder>
       <Group justify="space-between" mb="xs">
         <Group gap="xs" style={{ flex: 1 }}>
           {deviceIcons[device.type] || <IconSmartHome size={24} />}
-          {editing ? (
-            <TextInput
-              size="sm"
-              value={editName}
-              onChange={(e) => setEditName(e.currentTarget.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') rename.mutate(editName);
-                if (e.key === 'Escape') { setEditing(false); setEditName(device.name); }
-              }}
-              style={{ flex: 1 }}
-              autoFocus
-            />
-          ) : (
-            <Text fw={500}>{device.name}</Text>
-          )}
+          <Text fw={500}>{device.name}</Text>
         </Group>
         <Group gap={4}>
-          <ActionIcon
-            variant="subtle"
-            size="sm"
-            onClick={() => {
-              if (editing) {
-                rename.mutate(editName);
-              } else {
-                setEditName(device.name);
-                setEditing(true);
-              }
-            }}
-            loading={rename.isPending}
-          >
-            {editing ? <IconCheck size={14} /> : <IconEdit size={14} />}
-          </ActionIcon>
           {device.trackHistory && (
             <>
               <Tooltip label="Voir l'historique">

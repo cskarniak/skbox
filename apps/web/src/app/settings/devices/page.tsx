@@ -2,7 +2,7 @@
 
 import { Title, Text, Stack, Table, Switch, Badge, MultiSelect, ActionIcon, Modal, Tooltip, Center, Loader, ScrollArea, Button, TextInput, NumberInput, Group, Alert, Checkbox, SegmentedControl, Divider, Select } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconHistory, IconTrash, IconAlertTriangle, IconAdjustments, IconBattery, IconLink } from '@tabler/icons-react';
+import { IconHistory, IconTrash, IconAlertTriangle, IconAdjustments, IconBattery, IconLink, IconPlus, IconId } from '@tabler/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '@/lib/api';
@@ -23,6 +23,13 @@ interface Theme {
   devices: { id: string }[];
 }
 
+interface NamedListItem {
+  id: string;
+  name: string;
+  icon: string | null;
+  order: number;
+}
+
 interface Device {
   id: string;
   name: string;
@@ -30,6 +37,7 @@ interface Device {
   type: string;
   status: string;
   room: string | null;
+  parentObject: string | null;
   visible: boolean;
   active: boolean;
   trackHistory: boolean;
@@ -38,7 +46,26 @@ interface Device {
   batteryChangePendingUntil: string | null;
   rfxcomId: string | null;
   ieeeAddress: string | null;
+  vendor: string | null;
+  model: string | null;
+  lastSeen: string;
 }
+
+const DEVICE_TYPE_LABELS: Record<string, string> = {
+  light: 'Lumière',
+  switch: 'Interrupteur',
+  plug: 'Prise',
+  sensor_temperature: 'Capteur température',
+  sensor_humidity: 'Capteur humidité',
+  sensor_motion: 'Capteur de mouvement',
+  sensor_door: 'Capteur ouverture',
+  sensor_rain: 'Capteur pluie',
+  sensor_wind: 'Capteur vent',
+  sensor_uv: 'Capteur UV',
+  sensor_power: 'Capteur de puissance',
+  thermostat: 'Thermostat',
+  remote: 'Télécommande',
+};
 
 interface DeviceEvent {
   id: string;
@@ -310,6 +337,179 @@ function PreferencesModal({ device, opened, onClose }: { device: Device; opened:
   );
 }
 
+function NamedListManager({
+  title,
+  description,
+  queryKey,
+  endpoint,
+}: {
+  title: string;
+  description: string;
+  queryKey: string;
+  endpoint: string;
+}) {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState('');
+
+  const { data: items } = useQuery<NamedListItem[]>({
+    queryKey: [queryKey],
+    queryFn: () => api.get(endpoint).then((r) => r.data),
+  });
+
+  const createItem = useMutation({
+    mutationFn: () => api.post(endpoint, { name }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [queryKey] });
+      setName('');
+    },
+  });
+
+  const deleteItem = useMutation({
+    mutationFn: (id: string) => api.delete(`${endpoint}/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [queryKey] }),
+  });
+
+  return (
+    <Stack gap="xs" style={{ flex: 1 }}>
+      <div>
+        <Text fw={500} size="sm">
+          {title}
+        </Text>
+        <Text size="xs" c="dimmed">
+          {description}
+        </Text>
+      </div>
+      <Group gap="xs">
+        <TextInput
+          size="xs"
+          placeholder="Nom"
+          value={name}
+          onChange={(e) => setName(e.currentTarget.value)}
+          style={{ flex: 1 }}
+        />
+        <ActionIcon
+          variant="light"
+          disabled={!name.trim()}
+          loading={createItem.isPending}
+          onClick={() => createItem.mutate()}
+        >
+          <IconPlus size={16} />
+        </ActionIcon>
+      </Group>
+      <Group gap="xs" wrap="wrap">
+        {(items ?? []).map((item) => (
+          <Badge
+            key={item.id}
+            variant="light"
+            rightSection={
+              <ActionIcon
+                size="xs"
+                variant="transparent"
+                color="red"
+                loading={deleteItem.isPending && deleteItem.variables === item.id}
+                onClick={() => deleteItem.mutate(item.id)}
+              >
+                <IconTrash size={12} />
+              </ActionIcon>
+            }
+          >
+            {item.name}
+          </Badge>
+        ))}
+      </Group>
+    </Stack>
+  );
+}
+
+function DeviceFicheModal({
+  device,
+  opened,
+  onClose,
+  rooms,
+  parentObjects,
+}: {
+  device: Device;
+  opened: boolean;
+  onClose: () => void;
+  rooms: NamedListItem[];
+  parentObjects: NamedListItem[];
+}) {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState(device.name);
+  const [room, setRoom] = useState<string | null>(device.room);
+  const [parentObject, setParentObject] = useState<string | null>(device.parentObject);
+  const [type, setType] = useState<string | null>(device.type);
+
+  const save = useMutation({
+    mutationFn: () => api.patch(`/devices/${device.id}`, { name, room, parentObject, type }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
+      onClose();
+    },
+  });
+
+  return (
+    <Modal opened={opened} onClose={onClose} title="Fiche appareil">
+      <Stack gap="md">
+        <TextInput label="Nom" value={name} onChange={(e) => setName(e.currentTarget.value)} />
+        <Select
+          label="Objet parent"
+          placeholder="Aucun"
+          clearable
+          data={parentObjects.map((p) => ({ value: p.name, label: p.name }))}
+          value={parentObject}
+          onChange={setParentObject}
+        />
+        <Select
+          label="Pièce"
+          placeholder="Aucune"
+          clearable
+          data={rooms.map((r) => ({ value: r.name, label: r.name }))}
+          value={room}
+          onChange={setRoom}
+        />
+        <Select
+          label="Catégorie"
+          data={Object.entries(DEVICE_TYPE_LABELS).map(([value, label]) => ({ value, label }))}
+          value={type}
+          onChange={setType}
+        />
+
+        <Divider label="Caractéristiques" />
+        <Stack gap={4}>
+          <Text size="sm" c="dimmed">
+            Protocole : {device.protocol}
+          </Text>
+          {device.vendor && (
+            <Text size="sm" c="dimmed">
+              Fabricant : {device.vendor}
+            </Text>
+          )}
+          {device.model && (
+            <Text size="sm" c="dimmed">
+              Modèle : {device.model}
+            </Text>
+          )}
+          {(device.rfxcomId || device.ieeeAddress) && (
+            <Text size="sm" c="dimmed" ff="monospace">
+              Code : {device.rfxcomId ?? device.ieeeAddress}
+            </Text>
+          )}
+          <Text size="sm" c="dimmed">
+            Dernier signal : {new Date(device.lastSeen).toLocaleString('fr-FR')}
+          </Text>
+        </Stack>
+
+        <Group justify="flex-end">
+          <Button size="xs" loading={save.isPending} onClick={() => save.mutate()}>
+            Enregistrer
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
 function MergeDeviceControl({ device, candidates }: { device: Device; candidates: Device[] }) {
   const queryClient = useQueryClient();
   const [opened, { open, close }] = useDisclosure(false);
@@ -390,10 +590,23 @@ function MergeDeviceControl({ device, candidates }: { device: Device; candidates
   );
 }
 
-function DeviceRow({ device, themes, candidates }: { device: Device; themes: Theme[]; candidates: Device[] }) {
+function DeviceRow({
+  device,
+  themes,
+  candidates,
+  rooms,
+  parentObjects,
+}: {
+  device: Device;
+  themes: Theme[];
+  candidates: Device[];
+  rooms: NamedListItem[];
+  parentObjects: NamedListItem[];
+}) {
   const queryClient = useQueryClient();
   const [historyOpened, { open: openHistory, close: closeHistory }] = useDisclosure(false);
   const [prefsOpened, { open: openPrefs, close: closePrefs }] = useDisclosure(false);
+  const [ficheOpened, { open: openFiche, close: closeFiche }] = useDisclosure(false);
 
   const patchDevice = useMutation({
     mutationFn: (data: Partial<Pick<Device, 'visible' | 'active' | 'trackHistory'>>) =>
@@ -436,6 +649,7 @@ function DeviceRow({ device, themes, candidates }: { device: Device; themes: The
       </Table.Td>
       <Table.Td>
         <Text size="sm" c="dimmed">
+          {device.parentObject ? `${device.parentObject} · ` : ''}
           {device.room ?? '—'}
         </Text>
       </Table.Td>
@@ -474,6 +688,11 @@ function DeviceRow({ device, themes, candidates }: { device: Device; themes: The
       </Table.Td>
       <Table.Td>
         <Group gap={4} wrap="nowrap">
+          <Tooltip label="Fiche appareil (nom, objet parent, pièce, catégorie, caractéristiques)">
+            <ActionIcon variant="subtle" onClick={openFiche}>
+              <IconId size={16} />
+            </ActionIcon>
+          </Tooltip>
           <Tooltip label={device.trackHistory ? 'Voir historique' : 'Activez "Historiser" pour enregistrer des valeurs'}>
             <ActionIcon variant="subtle" disabled={!device.trackHistory} onClick={openHistory}>
               <IconHistory size={16} />
@@ -510,6 +729,13 @@ function DeviceRow({ device, themes, candidates }: { device: Device; themes: The
             <PreferencesModal device={device} opened={prefsOpened} onClose={closePrefs} />
           </>
         )}
+        <DeviceFicheModal
+          device={device}
+          opened={ficheOpened}
+          onClose={closeFiche}
+          rooms={rooms}
+          parentObjects={parentObjects}
+        />
       </Table.Td>
     </Table.Tr>
   );
@@ -526,21 +752,47 @@ export default function SettingsDevicesPage() {
     queryFn: () => api.get('/themes').then((r) => r.data),
   });
 
+  const { data: rooms } = useQuery<NamedListItem[]>({
+    queryKey: ['rooms'],
+    queryFn: () => api.get('/rooms').then((r) => r.data),
+  });
+
+  const { data: parentObjects } = useQuery<NamedListItem[]>({
+    queryKey: ['parent-objects'],
+    queryFn: () => api.get('/parent-objects').then((r) => r.data),
+  });
+
   return (
     <Stack gap="lg">
       <div>
         <Title order={4}>Appareils</Title>
         <Text size="sm" c="dimmed">
           Contrôle la visibilité sur le dashboard, l'activation (les messages MQTT sont ignorés pour un
-          appareil inactivé), l'historisation des valeurs et l'appartenance aux thèmes.
+          appareil inactivé), l'historisation des valeurs et l'appartenance aux thèmes. Le nom, l'objet
+          parent, la pièce et la catégorie de chaque appareil se modifient depuis sa fiche.
         </Text>
       </div>
+
+      <Group align="flex-start" grow>
+        <NamedListManager
+          title="Objets"
+          description="Regroupements de haut niveau (ex: Maison, Garage, Jardin)."
+          queryKey="parent-objects"
+          endpoint="/parent-objects"
+        />
+        <NamedListManager
+          title="Pièces"
+          description="Pièces disponibles pour l'affectation des appareils."
+          queryKey="rooms"
+          endpoint="/rooms"
+        />
+      </Group>
 
       <Table striped highlightOnHover verticalSpacing="sm">
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Appareil</Table.Th>
-            <Table.Th>Pièce</Table.Th>
+            <Table.Th>Objet / Pièce</Table.Th>
             <Table.Th>Statut</Table.Th>
             <Table.Th>Visible</Table.Th>
             <Table.Th>Actif</Table.Th>
@@ -556,6 +808,8 @@ export default function SettingsDevicesPage() {
               device={device}
               themes={themes ?? []}
               candidates={(devices ?? []).filter((d) => d.id !== device.id && d.protocol === device.protocol)}
+              rooms={rooms ?? []}
+              parentObjects={parentObjects ?? []}
             />
           ))}
         </Table.Tbody>
