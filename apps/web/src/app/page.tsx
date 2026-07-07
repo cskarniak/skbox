@@ -19,6 +19,8 @@ import {
   SegmentedControl,
   Modal,
   Select,
+  Table,
+  ScrollArea,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import {
@@ -51,9 +53,11 @@ import { LatestValue } from '@/components/LatestValue';
 import {
   CHART_COLORS,
   DeviceEvent,
+  DisplayType,
   extractValueKeys,
   buildSeries,
   formatValueLabel,
+  formatDateTime,
   latestValue,
   parseDisplayPreferences,
 } from '@/lib/history';
@@ -142,9 +146,35 @@ const HISTORY_RANGE_OPTIONS = [
   { value: '8760', label: 'Année' },
 ];
 
+function HistoryValueTable({ series }: { series: { time: number; value: number }[] }) {
+  return (
+    <ScrollArea.Autosize mah={320}>
+      <Table stickyHeader striped highlightOnHover>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Date / Heure</Table.Th>
+            <Table.Th>Valeur</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {[...series]
+            .reverse()
+            .map((point) => (
+              <Table.Tr key={point.time}>
+                <Table.Td>{formatDateTime(point.time)}</Table.Td>
+                <Table.Td>{point.value}</Table.Td>
+              </Table.Tr>
+            ))}
+        </Table.Tbody>
+      </Table>
+    </ScrollArea.Autosize>
+  );
+}
+
 function DeviceHistoryModal({ device, opened, onClose }: { device: Device; opened: boolean; onClose: () => void }) {
   const [rangeHours, setRangeHours] = useState('168');
   const [valueKey, setValueKey] = useState<string | null>(null);
+  const [displayType, setDisplayType] = useState<DisplayType>('chart');
 
   const fromIso = useMemo(
     () => (rangeHours ? new Date(Date.now() - parseFloat(rangeHours) * 3600_000).toISOString() : undefined),
@@ -189,6 +219,8 @@ function DeviceHistoryModal({ device, opened, onClose }: { device: Device; opene
                           Aucune donnée pour cette période.
                         </Text>
                       </Center>
+                    ) : pref.displayType === 'table' ? (
+                      <HistoryValueTable series={prefSeries} />
                     ) : (
                       <ValueChart
                         series={prefSeries}
@@ -204,21 +236,34 @@ function DeviceHistoryModal({ device, opened, onClose }: { device: Device; opene
           </Stack>
         ) : (
           <Stack gap="md">
-            <Select
-              size="xs"
-              placeholder="Valeur"
-              data={valueKeys.map((k) => ({ value: k, label: formatValueLabel(k) }))}
-              value={activeKey}
-              onChange={setValueKey}
-              w={200}
-              disabled={valueKeys.length === 0}
-            />
+            <Group gap="sm" wrap="wrap">
+              <Select
+                size="xs"
+                placeholder="Valeur"
+                data={valueKeys.map((k) => ({ value: k, label: formatValueLabel(k) }))}
+                value={activeKey}
+                onChange={setValueKey}
+                w={200}
+                disabled={valueKeys.length === 0}
+              />
+              <SegmentedControl
+                size="xs"
+                value={displayType}
+                onChange={(value) => setDisplayType(value as DisplayType)}
+                data={[
+                  { label: 'Graphique', value: 'chart' },
+                  { label: 'Liste', value: 'table' },
+                ]}
+              />
+            </Group>
             {!activeKey || series.length === 0 ? (
               <Center h={220}>
                 <Text size="sm" c="dimmed">
                   Aucune donnée pour cette période.
                 </Text>
               </Center>
+            ) : displayType === 'table' ? (
+              <HistoryValueTable series={series} />
             ) : (
               <ValueChart series={series} chartType="area" color={CHART_COLORS[0]} valueKey={activeKey} />
             )}
