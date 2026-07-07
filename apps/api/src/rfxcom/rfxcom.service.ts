@@ -4,6 +4,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { MqttService } from '../mqtt/mqtt.service';
 import { SettingsService } from '../settings/settings.service';
+import { SystemEventsService } from '../system-events/system-events.service';
 import { hasSignificantChange } from '../devices/history-change.util';
 
 const execAsync = promisify(exec);
@@ -43,6 +44,7 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
     @Inject('PRISMA') private readonly prisma: PrismaClient,
     private readonly mqtt: MqttService,
     private readonly settings: SettingsService,
+    private readonly events: SystemEventsService,
   ) {}
 
   private async getWatchdogTimeoutMs(): Promise<number> {
@@ -110,6 +112,7 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
     });
     if (result.count > 0) {
       this.logger.warn(`Marked ${result.count} RF device(s) offline`);
+      await this.events.log('rfxcom', 'offline', `${result.count} appareil(s) marqué(s) hors-ligne`);
     }
   }
 
@@ -124,8 +127,11 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
     this.logger.warn('Auto-restarting skbox-rfxcom (bridge offline)');
     try {
       await execAsync('sudo systemctl restart skbox-rfxcom', { timeout: 10_000 });
+      await this.events.log('rfxcom', 'auto_restart', 'skbox-rfxcom relancé automatiquement');
     } catch (err: any) {
-      this.logger.error(`Failed to auto-restart skbox-rfxcom: ${err?.stderr?.trim() || err?.message}`);
+      const message = err?.stderr?.trim() || err?.message;
+      this.logger.error(`Failed to auto-restart skbox-rfxcom: ${message}`);
+      await this.events.log('rfxcom', 'auto_restart', `Échec de la relance automatique : ${message}`);
     }
   }
 
@@ -229,6 +235,9 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (status === 'online') {
+      if (!this.bridgeOnline) {
+        await this.events.log('rfxcom', 'reconnected');
+      }
       this.bridgeOnline = true;
       this.lastMessageAt = Date.now();
     } else if (status === 'offline') {

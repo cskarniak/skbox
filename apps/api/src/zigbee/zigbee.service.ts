@@ -4,6 +4,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { MqttService } from '../mqtt/mqtt.service';
 import { SettingsService } from '../settings/settings.service';
+import { SystemEventsService } from '../system-events/system-events.service';
 import { hasSignificantChange } from '../devices/history-change.util';
 
 const execAsync = promisify(exec);
@@ -47,6 +48,7 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
     @Inject('PRISMA') private readonly prisma: PrismaClient,
     private readonly mqtt: MqttService,
     private readonly settings: SettingsService,
+    private readonly events: SystemEventsService,
   ) {}
 
   private async getHealthcheckTimeoutMs(): Promise<number> {
@@ -150,6 +152,7 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
     });
     if (result.count > 0) {
       this.logger.warn(`Marked ${result.count} Zigbee device(s) offline`);
+      await this.events.log('zigbee', 'offline', `${result.count} appareil(s) marqué(s) hors-ligne`);
     }
   }
 
@@ -164,8 +167,11 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
     this.logger.warn('Auto-restarting skbox-z2m (bridge offline)');
     try {
       await execAsync('sudo systemctl restart skbox-z2m', { timeout: 10_000 });
+      await this.events.log('zigbee', 'auto_restart', 'skbox-z2m relancé automatiquement');
     } catch (err: any) {
-      this.logger.error(`Failed to auto-restart skbox-z2m: ${err?.stderr?.trim() || err?.message}`);
+      const message = err?.stderr?.trim() || err?.message;
+      this.logger.error(`Failed to auto-restart skbox-z2m: ${message}`);
+      await this.events.log('zigbee', 'auto_restart', `Échec de la relance automatique : ${message}`);
     }
   }
 
@@ -180,6 +186,9 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
     this.logger.log(`Zigbee2MQTT bridge: ${state}`);
 
     if (state === 'online') {
+      if (!this.bridgeOnline) {
+        await this.events.log('zigbee', 'reconnected');
+      }
       this.bridgeOnline = true;
       this.lastMessageAt = Date.now();
     } else if (state === 'offline') {

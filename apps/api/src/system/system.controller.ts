@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SystemService } from './system.service';
@@ -18,6 +19,11 @@ export class SystemController {
   @Get('health')
   getHealth() {
     return this.system.getHealth();
+  }
+
+  @Get('events')
+  getEvents(@Query('limit') limit?: string) {
+    return this.system.getEvents(limit ? parseInt(limit, 10) : undefined);
   }
 
   @Put('thermal-shutdown')

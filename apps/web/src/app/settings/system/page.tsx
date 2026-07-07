@@ -89,6 +89,37 @@ interface SystemHealth {
   };
 }
 
+interface ServiceEvent {
+  id: string;
+  service: string;
+  event: string;
+  detail: string | null;
+  createdAt: string;
+}
+
+const SERVICE_LABELS: Record<string, string> = {
+  zigbee: 'Zigbee2MQTT',
+  rfxcom: 'rfxcom2mqtt',
+  tailscale: 'Tailscale',
+  system: 'Skbox (machine)',
+};
+
+const EVENT_LABELS: Record<string, string> = {
+  offline: 'Hors-ligne',
+  reconnected: 'Reconnecté',
+  auto_restart: 'Relance auto',
+  manual_stop: 'Arrêt manuel (test)',
+  boot: 'Démarrage machine',
+};
+
+const EVENT_COLOR: Record<string, string> = {
+  offline: 'red',
+  reconnected: 'teal',
+  auto_restart: 'blue',
+  manual_stop: 'orange',
+  boot: 'grape',
+};
+
 type Level = 'good' | 'warning' | 'critical';
 
 const LEVEL_COLOR: Record<Level, string> = {
@@ -230,6 +261,12 @@ export default function SettingsSystemPage() {
     refetchInterval: refreshInterval,
   });
 
+  const { data: events, isLoading: eventsLoading } = useQuery<ServiceEvent[]>({
+    queryKey: ['system-events'],
+    queryFn: () => api.get('/system/events?limit=100').then((r) => r.data),
+    refetchInterval: refreshInterval,
+  });
+
   const setThermalShutdown = useMutation({
     mutationFn: (active: boolean) =>
       api.put('/system/thermal-shutdown', { active }),
@@ -259,7 +296,10 @@ export default function SettingsSystemPage() {
 
   const stopBridge = useMutation({
     mutationFn: (bridge: 'zigbee' | 'rfxcom') => api.post(`/system/bridges/${bridge}/stop`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['system-health'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['system-health'] });
+      queryClient.invalidateQueries({ queryKey: ['system-events'] });
+    },
     onError: (error: any) => {
       notifications.show({
         color: 'red',
@@ -285,7 +325,10 @@ export default function SettingsSystemPage() {
 
   const stopTailscale = useMutation({
     mutationFn: () => api.post('/system/tailscale/stop'),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['system-health'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['system-health'] });
+      queryClient.invalidateQueries({ queryKey: ['system-events'] });
+    },
     onError: (error: any) => {
       notifications.show({
         color: 'red',
@@ -643,6 +686,54 @@ export default function SettingsSystemPage() {
                       <Table.Td>
                         <Text size="sm" c="dimmed">
                           {c.status}
+                        </Text>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            )}
+          </Card>
+
+          <Card shadow="sm" padding="lg" withBorder>
+            <Text size="sm" c="dimmed" mb="xs">
+              Journal des arrêts et redémarrages
+            </Text>
+            {eventsLoading ? (
+              <Center h={80}>
+                <Loader size="sm" />
+              </Center>
+            ) : !events || events.length === 0 ? (
+              <Text size="sm" c="dimmed">
+                Aucun événement enregistré
+              </Text>
+            ) : (
+              <Table striped highlightOnHover>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Date</Table.Th>
+                    <Table.Th>Service</Table.Th>
+                    <Table.Th>Événement</Table.Th>
+                    <Table.Th>Détail</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {events.map((e) => (
+                    <Table.Tr key={e.id}>
+                      <Table.Td>
+                        <Text size="sm" c="dimmed">
+                          {new Date(e.createdAt).toLocaleString('fr-FR')}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>{SERVICE_LABELS[e.service] ?? e.service}</Table.Td>
+                      <Table.Td>
+                        <Badge color={EVENT_COLOR[e.event] ?? 'gray'} variant="light">
+                          {EVENT_LABELS[e.event] ?? e.event}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="xs" c="dimmed">
+                          {e.detail ?? '—'}
                         </Text>
                       </Table.Td>
                     </Table.Tr>

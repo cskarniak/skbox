@@ -5,6 +5,7 @@ import * as os from 'os';
 import { ZigbeeService } from '../zigbee/zigbee.service';
 import { RfxcomService } from '../rfxcom/rfxcom.service';
 import { TailscaleService } from '../tailscale/tailscale.service';
+import { SystemEventsService } from '../system-events/system-events.service';
 
 const execAsync = promisify(exec);
 
@@ -76,7 +77,12 @@ export class SystemService {
     private readonly zigbee: ZigbeeService,
     private readonly rfxcom: RfxcomService,
     private readonly tailscale: TailscaleService,
+    private readonly events: SystemEventsService,
   ) {}
+
+  async getEvents(limit?: number) {
+    return this.events.list(limit);
+  }
 
   async getHealth(): Promise<SystemHealth> {
     const [
@@ -159,12 +165,14 @@ export class SystemService {
   async stopBridgeService(bridge: 'zigbee' | 'rfxcom'): Promise<void> {
     const service = bridge === 'zigbee' ? 'skbox-z2m' : 'skbox-rfxcom';
     await this.runOrThrow(`sudo systemctl stop ${service}`);
+    await this.events.log(bridge, 'manual_stop', `${service} arrêté manuellement (test)`);
   }
 
   // Même principe que stopBridgeService : arrêt volontaire de tailscaled pour vérifier
   // en conditions réelles que la relance automatique (TailscaleService) fonctionne.
   async stopTailscaleService(): Promise<void> {
     await this.runOrThrow('sudo systemctl stop tailscaled');
+    await this.events.log('tailscale', 'manual_stop', 'tailscaled arrêté manuellement (test)');
   }
 
   private async runOrThrow(cmd: string): Promise<string> {

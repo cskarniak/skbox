@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/commo
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { SettingsService } from '../settings/settings.service';
+import { SystemEventsService } from '../system-events/system-events.service';
 
 const execAsync = promisify(exec);
 
@@ -32,7 +33,10 @@ export class TailscaleService implements OnModuleInit, OnModuleDestroy {
     lastCheckAt: null,
   };
 
-  constructor(private readonly settings: SettingsService) {}
+  constructor(
+    private readonly settings: SettingsService,
+    private readonly events: SystemEventsService,
+  ) {}
 
   async onModuleInit() {
     await this.healthcheck();
@@ -54,16 +58,31 @@ export class TailscaleService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async healthcheck() {
+    const wasConnected = this.lastStatus.connected;
     this.lastStatus = await this.readStatus();
-    if (this.lastStatus.connected) return;
+
+    if (this.lastStatus.connected) {
+      if (!wasConnected) {
+        await this.events.log('tailscale', 'reconnected');
+      }
+      return;
+    }
+
+    if (wasConnected) {
+      await this.events.log('tailscale', 'offline', `état=${this.lastStatus.backendState ?? 'inconnu'}`);
+    }
 
     // Tentative de reconnexion à chaque cycle, indépendamment du réglage de relance
     // automatique : non destructive, elle force juste tailscaled à retenter la
     // négociation avec le coordinateur plutôt que d'attendre son propre backoff interne.
     this.logger.warn(`Tailscale non connecté (état=${this.lastStatus.backendState ?? 'inconnu'}) — tentative de reconnexion`);
     await this.run('tailscale up');
-    this.lastStatus = await this.readStatus();
-    if (this.lastStatus.connected) return;
+    const reChecked = await this.readStatus();
+    this.lastStatus = reChecked;
+    if (reChecked.connected) {
+      await this.events.log('tailscale', 'reconnected', 'reconnecté via `tailscale up`');
+      return;
+    }
 
     await this.maybeAutoRestart();
   }
@@ -79,8 +98,11 @@ export class TailscaleService implements OnModuleInit, OnModuleDestroy {
     this.logger.warn('Auto-restarting tailscaled (non connecté)');
     try {
       await execAsync('sudo systemctl restart tailscaled', { timeout: 10_000 });
+      await this.events.log('tailscale', 'auto_restart', 'tailscaled relancé automatiquement');
     } catch (err: any) {
-      this.logger.error(`Failed to auto-restart tailscaled: ${err?.stderr?.trim() || err?.message}`);
+      const message = err?.stderr?.trim() || err?.message;
+      this.logger.error(`Failed to auto-restart tailscaled: ${message}`);
+      await this.events.log('tailscale', 'auto_restart', `Échec de la relance automatique : ${message}`);
     }
   }
 

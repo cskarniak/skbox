@@ -54,6 +54,16 @@ model DeviceEvent {
   @@index([deviceId, timestamp])
 }
 
+model ServiceEvent {
+  id        String   @id @default(cuid())
+  service   String
+  event     String
+  detail    String?
+  createdAt DateTime @default(now())
+
+  @@index([service, createdAt])
+}
+
 model Scenario {
   id         String    @id @default(cuid())
   name       String
