@@ -175,6 +175,9 @@ function DeviceHistoryModal({ device, opened, onClose }: { device: Device; opene
   const [rangeHours, setRangeHours] = useState('168');
   const [valueKey, setValueKey] = useState<string | null>(null);
   const [displayType, setDisplayType] = useState<DisplayType>('chart');
+  // Bascule locale Graphique/Liste par valeur : n'écrase pas la préférence enregistrée
+  // dans Réglages > Appareils, juste ce qui est affiché dans cette modale.
+  const [viewOverrides, setViewOverrides] = useState<Record<string, 'chart' | 'table'>>({});
 
   const fromIso = useMemo(
     () => (rangeHours ? new Date(Date.now() - parseFloat(rangeHours) * 3600_000).toISOString() : undefined),
@@ -203,36 +206,54 @@ function DeviceHistoryModal({ device, opened, onClose }: { device: Device; opene
           </Center>
         ) : prefs.length > 0 ? (
           <Stack gap="md">
-            {prefs.map((pref) => (
-              <Stack key={pref.valueKey} gap={4}>
-                <Text size="xs" c="dimmed">
-                  {formatValueLabel(pref.valueKey)}
-                </Text>
-                {pref.displayType === 'value' ? (
-                  <LatestValue valueKey={pref.valueKey} value={history ? latestValue(history, pref.valueKey) : null} />
-                ) : (
-                  (() => {
-                    const prefSeries = history ? buildSeries(history, pref.valueKey) : [];
-                    return prefSeries.length === 0 ? (
-                      <Center h={220}>
-                        <Text size="sm" c="dimmed">
-                          Aucune donnée pour cette période.
-                        </Text>
-                      </Center>
-                    ) : pref.displayType === 'table' ? (
-                      <HistoryValueTable series={prefSeries} />
-                    ) : (
-                      <ValueChart
-                        series={prefSeries}
-                        chartType={pref.chartType ?? 'line'}
-                        color={CHART_COLORS[0]}
-                        valueKey={pref.valueKey}
+            {prefs.map((pref) => {
+              const effectiveType = pref.displayType === 'value' ? 'value' : viewOverrides[pref.valueKey] ?? pref.displayType;
+              return (
+                <Stack key={pref.valueKey} gap={4}>
+                  <Group justify="space-between" wrap="wrap">
+                    <Text size="xs" c="dimmed">
+                      {formatValueLabel(pref.valueKey)}
+                    </Text>
+                    {pref.displayType !== 'value' && (
+                      <SegmentedControl
+                        size="xs"
+                        value={effectiveType}
+                        onChange={(value) =>
+                          setViewOverrides((prev) => ({ ...prev, [pref.valueKey]: value as 'chart' | 'table' }))
+                        }
+                        data={[
+                          { label: 'Graphique', value: 'chart' },
+                          { label: 'Liste', value: 'table' },
+                        ]}
                       />
-                    );
-                  })()
-                )}
-              </Stack>
-            ))}
+                    )}
+                  </Group>
+                  {effectiveType === 'value' ? (
+                    <LatestValue valueKey={pref.valueKey} value={history ? latestValue(history, pref.valueKey) : null} />
+                  ) : (
+                    (() => {
+                      const prefSeries = history ? buildSeries(history, pref.valueKey) : [];
+                      return prefSeries.length === 0 ? (
+                        <Center h={220}>
+                          <Text size="sm" c="dimmed">
+                            Aucune donnée pour cette période.
+                          </Text>
+                        </Center>
+                      ) : effectiveType === 'table' ? (
+                        <HistoryValueTable series={prefSeries} />
+                      ) : (
+                        <ValueChart
+                          series={prefSeries}
+                          chartType={pref.chartType ?? 'line'}
+                          color={CHART_COLORS[0]}
+                          valueKey={pref.valueKey}
+                        />
+                      );
+                    })()
+                  )}
+                </Stack>
+              );
+            })}
           </Stack>
         ) : (
           <Stack gap="md">
