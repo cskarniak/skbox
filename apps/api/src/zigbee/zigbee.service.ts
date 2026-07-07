@@ -85,6 +85,7 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
     this.mqtt.subscribe('zigbee2mqtt/+/availability', (topic, payload) => {
       this.lastMessageAt = Date.now();
       const name = topic.split('/')[1];
+      this.logger.debug(`availability dispatch: topic=${topic} name=${name} payload=${payload}`);
       this.handleAvailability(name, payload);
     });
 
