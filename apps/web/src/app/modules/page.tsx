@@ -46,12 +46,12 @@ export default function ModulesPage() {
   return (
     <AppShell header={{ height: 60 }} padding="md">
       <AppShell.Header>
-        <Group h="100%" px="md" justify="space-between">
-          <Group gap="xs">
+        <Group h="100%" px="md" justify="space-between" wrap="nowrap">
+          <Group gap="xs" wrap="nowrap">
             <IconSmartHome size={28} />
-            <Title order={3}>Skbox</Title>
+            <Title order={3} visibleFrom="sm">Skbox</Title>
           </Group>
-          <Group gap="md">
+          <Group gap="md" wrap="nowrap">
             <AppNav active="modules" />
           </Group>
         </Group>

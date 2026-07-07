@@ -1,6 +1,6 @@
 'use client';
 
-import { Tabs } from '@mantine/core';
+import { Box, Tabs } from '@mantine/core';
 import { IconSmartHome, IconScript, IconApps, IconSettings } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 
@@ -19,18 +19,18 @@ export function AppNav({ active }: { active: AppNavTab }) {
         if (v === 'settings') router.push('/settings');
       }}
     >
-      <Tabs.List>
+      <Tabs.List style={{ flexWrap: 'nowrap' }}>
         <Tabs.Tab value="devices" leftSection={<IconSmartHome size={16} />}>
-          Dashboard
+          <Box visibleFrom="sm">Dashboard</Box>
         </Tabs.Tab>
         <Tabs.Tab value="scenarios" leftSection={<IconScript size={16} />}>
-          Scénarios
+          <Box visibleFrom="sm">Scénarios</Box>
         </Tabs.Tab>
         <Tabs.Tab value="modules" leftSection={<IconApps size={16} />}>
-          Modules
+          <Box visibleFrom="sm">Modules</Box>
         </Tabs.Tab>
         <Tabs.Tab value="settings" leftSection={<IconSettings size={16} />}>
-          Réglages
+          <Box visibleFrom="sm">Réglages</Box>
         </Tabs.Tab>
       </Tabs.List>
     </Tabs>

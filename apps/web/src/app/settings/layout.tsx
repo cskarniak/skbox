@@ -1,6 +1,6 @@
 'use client';
 
-import { AppShell, Group, Title, Button, Tooltip, Tabs } from '@mantine/core';
+import { AppShell, Box, Group, Title, Button, Tooltip, Tabs } from '@mantine/core';
 import {
   IconSmartHome,
   IconNetwork,
@@ -41,35 +41,37 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   return (
     <AppShell header={{ height: 60 }} padding="md">
       <AppShell.Header>
-        <Group h="100%" px="md" justify="space-between">
-          <Group gap="xs">
+        <Group h="100%" px="md" justify="space-between" wrap="nowrap">
+          <Group gap="xs" wrap="nowrap">
             <IconSmartHome size={28} />
-            <Title order={3}>Skbox</Title>
+            <Title order={3} visibleFrom="sm">Skbox</Title>
           </Group>
-          <Group gap="md">
+          <Group gap="xs" wrap="nowrap">
             <AppNav active="settings" />
             <Tooltip label="Ouvrir Zigbee2MQTT">
               <Button
                 variant="subtle"
                 size="sm"
+                px="xs"
                 leftSection={<IconNetwork size={16} />}
                 component="a"
                 href={`http://${hostname}:8080`}
                 target="_blank"
               >
-                Z2M
+                <Box visibleFrom="sm">Z2M</Box>
               </Button>
             </Tooltip>
             <Tooltip label="Ouvrir rfxcom2mqtt">
               <Button
                 variant="subtle"
                 size="sm"
+                px="xs"
                 leftSection={<IconAntenna size={16} />}
                 component="a"
                 href={`http://${hostname}:8891`}
                 target="_blank"
               >
-                RFXcom
+                <Box visibleFrom="sm">RFXcom</Box>
               </Button>
             </Tooltip>
           </Group>
@@ -85,9 +87,9 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
           }}
           mb="md"
         >
-          <Tabs.List>
+          <Tabs.List style={{ flexWrap: 'nowrap', overflowX: 'auto' }}>
             {SUB_TABS.map((tab) => (
-              <Tabs.Tab key={tab.value} value={tab.value} leftSection={tab.icon}>
+              <Tabs.Tab key={tab.value} value={tab.value} leftSection={tab.icon} style={{ flexShrink: 0 }}>
                 {tab.label}
               </Tabs.Tab>
             ))}
