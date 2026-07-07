@@ -115,6 +115,26 @@ export function OverlayChart({ series, height = 280 }: { series: OverlaySeries[]
   const yAxisIdFor = (unit: string) => (secondaryUnit && unit !== primaryUnit ? 'right' : 'left');
   const formatAxisValue = (unit: string) => (v: number) => `${v}${unit ? ` ${unit}` : ''}`;
 
+  // Sans domaine explicite, Recharts force l'axe Y à démarrer à 0 par défaut — ce qui
+  // écrase une bonne partie du graphique si les valeurs réelles restent loin de 0 (ex.
+  // des températures qui oscillent entre 15 et 30°C). On recalcule donc le domaine à
+  // partir des valeurs effectivement affichées sur chaque axe, comme pour ValueChart.
+  const leftAxis = useMemo(() => {
+    const values = series
+      .filter((s) => yAxisIdFor(getValueMeta(s.valueKey).unit) === 'left')
+      .flatMap((s) => s.data.map((p) => p.value));
+    if (values.length === 0) return { ticks: undefined, domain: ['auto', 'auto'] as [string, string] };
+    return buildValueTicks(Math.min(...values), Math.max(...values));
+  }, [series, secondaryUnit]);
+
+  const rightAxis = useMemo(() => {
+    const values = series
+      .filter((s) => yAxisIdFor(getValueMeta(s.valueKey).unit) === 'right')
+      .flatMap((s) => s.data.map((p) => p.value));
+    if (values.length === 0) return { ticks: undefined, domain: ['auto', 'auto'] as [string, string] };
+    return buildValueTicks(Math.min(...values), Math.max(...values));
+  }, [series, secondaryUnit]);
+
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart>
@@ -133,6 +153,8 @@ export function OverlayChart({ series, height = 280 }: { series: OverlaySeries[]
           tick={{ fontSize: 11 }}
           width={48}
           tickFormatter={formatAxisValue(primaryUnit ?? '')}
+          ticks={leftAxis.ticks}
+          domain={leftAxis.domain}
         />
         {secondaryUnit && (
           <YAxis
@@ -141,6 +163,8 @@ export function OverlayChart({ series, height = 280 }: { series: OverlaySeries[]
             tick={{ fontSize: 11 }}
             width={48}
             tickFormatter={formatAxisValue(secondaryUnit)}
+            ticks={rightAxis.ticks}
+            domain={rightAxis.domain}
           />
         )}
         <RechartsTooltip
