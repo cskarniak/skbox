@@ -15,6 +15,9 @@ const DEFAULT_WATCHDOG_TIMEOUT_SEC = 120;
 // de redémarrages si le bridge reste indisponible pour une raison que le restart ne
 // résout pas (ex. dongle débranché).
 const MIN_AUTO_RESTART_INTERVAL_MS = 10 * 60_000;
+// Fenêtre pendant laquelle markAllOffline() ignore les appareils déjà mis à jour très
+// récemment, pour ne pas écraser une confirmation "online" en cours de traitement.
+const STARTUP_RESET_GRACE_MS = 5000;
 
 interface RfxcomPayload {
   id: string;
@@ -106,8 +109,12 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async markAllOffline() {
+    // Voir le commentaire équivalent dans ZigbeeService.markAllOffline : ne pas écraser
+    // une confirmation "online" (availability ou premier message reçu) en cours de
+    // traitement au moment où ce reset global s'exécute.
+    const cutoff = new Date(Date.now() - STARTUP_RESET_GRACE_MS);
     const result = await this.prisma.device.updateMany({
-      where: { protocol: 'rf433', status: 'online' },
+      where: { protocol: 'rf433', status: 'online', updatedAt: { lt: cutoff } },
       data: { status: 'offline' },
     });
     if (result.count > 0) {

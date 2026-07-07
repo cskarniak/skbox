@@ -15,6 +15,9 @@ const DEFAULT_HEALTHCHECK_TIMEOUT_SEC = 120;
 // de redémarrages si le bridge reste indisponible pour une raison que le restart ne
 // résout pas (ex. dongle débranché).
 const MIN_AUTO_RESTART_INTERVAL_MS = 10 * 60_000;
+// Fenêtre pendant laquelle markAllOffline() ignore les appareils déjà mis à jour très
+// récemment, pour ne pas écraser une confirmation "online" en cours de traitement.
+const STARTUP_RESET_GRACE_MS = 5000;
 
 interface Z2MDevice {
   ieee_address: string;
@@ -147,8 +150,14 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async markAllOffline() {
+    // Au démarrage, un message retenu "availability: online" peut arriver et être en
+    // cours de traitement (deux allers-retours Prisma dans handleAvailability) au moment
+    // où ce reset global s'exécute — sans cette exclusion, le reset peut se terminer
+    // après et écraser la confirmation "online" qui vient d'être écrite. On ignore donc
+    // les appareils dont le statut a été mis à jour dans les toutes dernières secondes.
+    const cutoff = new Date(Date.now() - STARTUP_RESET_GRACE_MS);
     const result = await this.prisma.device.updateMany({
-      where: { protocol: 'zigbee', status: 'online' },
+      where: { protocol: 'zigbee', status: 'online', updatedAt: { lt: cutoff } },
       data: { status: 'offline' },
     });
     if (result.count > 0) {
