@@ -42,4 +42,14 @@ export class SystemController {
     }
     return this.system.getHealth();
   }
+
+  @Post('tailscale/stop')
+  async stopTailscale() {
+    try {
+      await this.system.stopTailscaleService();
+    } catch (err: any) {
+      throw new BadRequestException(err.message);
+    }
+    return this.system.getHealth();
+  }
 }

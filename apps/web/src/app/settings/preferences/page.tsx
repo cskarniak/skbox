@@ -38,6 +38,12 @@ const HEALTHCHECK_FIELDS: PreferenceField[] = [
     description: "Délai sans message rfxcom2mqtt avant de marquer les appareils RF433 hors-ligne (s). Appliqué sans redémarrage.",
     defaultValue: 120,
   },
+  {
+    key: 'tailscale.healthcheckIntervalSec',
+    label: 'Intervalle de vérification Tailscale',
+    description: "Fréquence à laquelle l'API vérifie la connexion Tailscale et tente une reconnexion si besoin (s). Nécessite un redémarrage de l'API.",
+    defaultValue: 60,
+  },
 ];
 
 interface AutoRestartField {
@@ -58,6 +64,12 @@ const AUTO_RESTART_FIELDS: AutoRestartField[] = [
     label: 'Relance automatique RFXcom',
     description:
       'Redémarre le service skbox-rfxcom si le bridge rfxcom2mqtt reste hors-ligne au-delà du timeout ci-dessus (au minimum 10 min entre deux tentatives).',
+  },
+  {
+    key: 'tailscale.autoRestartEnabled',
+    label: 'Relance automatique Tailscale',
+    description:
+      "Redémarre le service tailscaled si la connexion au tailnet reste indisponible malgré les tentatives de reconnexion automatiques (au minimum 10 min entre deux tentatives). Ces tentatives de reconnexion légères (tailscale up) ont lieu à chaque vérification, indépendamment de ce réglage.",
   },
 ];
 

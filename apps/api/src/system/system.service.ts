@@ -4,6 +4,7 @@ import { promisify } from 'util';
 import * as os from 'os';
 import { ZigbeeService } from '../zigbee/zigbee.service';
 import { RfxcomService } from '../rfxcom/rfxcom.service';
+import { TailscaleService } from '../tailscale/tailscale.service';
 
 const execAsync = promisify(exec);
 
@@ -53,6 +54,11 @@ export interface SystemHealth {
     zigbee: boolean;
     rfxcom: boolean;
   };
+  tailscale: {
+    connected: boolean;
+    backendState: string | null;
+    ips: string[];
+  };
   network: string[];
   thermalShutdown: {
     active: boolean;
@@ -69,6 +75,7 @@ export class SystemService {
   constructor(
     private readonly zigbee: ZigbeeService,
     private readonly rfxcom: RfxcomService,
+    private readonly tailscale: TailscaleService,
   ) {}
 
   async getHealth(): Promise<SystemHealth> {
@@ -128,6 +135,10 @@ export class SystemService {
         zigbee: this.zigbee.isBridgeOnline(),
         rfxcom: this.rfxcom.isBridgeOnline(),
       },
+      tailscale: (() => {
+        const status = this.tailscale.getStatus();
+        return { connected: status.connected, backendState: status.backendState, ips: status.tailscaleIPs };
+      })(),
       network: Object.values(os.networkInterfaces())
         .flat()
         .filter((i): i is os.NetworkInterfaceInfo => !!i && !i.internal && i.family === 'IPv4')
@@ -148,6 +159,12 @@ export class SystemService {
   async stopBridgeService(bridge: 'zigbee' | 'rfxcom'): Promise<void> {
     const service = bridge === 'zigbee' ? 'skbox-z2m' : 'skbox-rfxcom';
     await this.runOrThrow(`sudo systemctl stop ${service}`);
+  }
+
+  // Même principe que stopBridgeService : arrêt volontaire de tailscaled pour vérifier
+  // en conditions réelles que la relance automatique (TailscaleService) fonctionne.
+  async stopTailscaleService(): Promise<void> {
+    await this.runOrThrow('sudo systemctl stop tailscaled');
   }
 
   private async runOrThrow(cmd: string): Promise<string> {

@@ -75,6 +75,11 @@ interface SystemHealth {
     zigbee: boolean;
     rfxcom: boolean;
   };
+  tailscale: {
+    connected: boolean;
+    backendState: string | null;
+    ips: string[];
+  };
   network: string[];
   thermalShutdown: {
     active: boolean;
@@ -276,6 +281,35 @@ export default function SettingsSystemPage() {
       return;
     }
     stopBridge.mutate(bridge);
+  };
+
+  const stopTailscale = useMutation({
+    mutationFn: () => api.post('/system/tailscale/stop'),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['system-health'] }),
+    onError: (error: any) => {
+      notifications.show({
+        color: 'red',
+        title: 'Échec de la commande',
+        message:
+          error?.response?.data?.message ??
+          "La commande sudo a échoué sur le serveur (règle sudoers manquante ?)",
+      });
+    },
+  });
+
+  const handleStopTailscale = () => {
+    const isRemote = typeof window !== 'undefined' && /\.ts\.net$|^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(window.location.hostname);
+    const warning = isRemote
+      ? "\n\n⚠️ Vous semblez accéder à Skbox via Tailscale : ce test va couper votre propre accès jusqu'à la relance automatique (ou une relance manuelle depuis le réseau local)."
+      : '';
+    if (
+      !window.confirm(
+        `Arrêter le service tailscaled pour tester la relance automatique ?${warning}`,
+      )
+    ) {
+      return;
+    }
+    stopTailscale.mutate();
   };
 
   return (
@@ -503,6 +537,42 @@ export default function SettingsSystemPage() {
                     disabled={!health.bridges.rfxcom}
                     loading={stopBridge.isPending && stopBridge.variables === 'rfxcom'}
                     onClick={() => handleStopBridge('rfxcom')}
+                  >
+                    Tester l'arrêt
+                  </Button>
+                </Group>
+              </Group>
+            </Stack>
+          </Card>
+
+          <Card shadow="sm" padding="lg" withBorder>
+            <Text size="sm" c="dimmed" mb="xs">
+              Accès distant (Tailscale)
+            </Text>
+            <Stack gap={6}>
+              <Group justify="space-between">
+                <Text size="sm">
+                  tailscaled
+                  {health.tailscale.ips.length > 0 && (
+                    <Text span size="xs" c="dimmed">
+                      {' '}
+                      · {health.tailscale.ips.join(', ')}
+                    </Text>
+                  )}
+                </Text>
+                <Group gap="xs">
+                  <StatusBadge
+                    active={health.tailscale.connected}
+                    activeLabel="Connecté"
+                    inactiveLabel={health.tailscale.backendState ?? 'Déconnecté'}
+                  />
+                  <Button
+                    size="xs"
+                    variant="light"
+                    color="orange"
+                    disabled={!health.tailscale.connected}
+                    loading={stopTailscale.isPending}
+                    onClick={handleStopTailscale}
                   >
                     Tester l'arrêt
                   </Button>
