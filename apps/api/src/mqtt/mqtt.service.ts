@@ -19,6 +19,7 @@ export class MqttService implements OnModuleInit, OnModuleDestroy, OnApplication
   private readonly disconnectHandlers: (() => void)[] = [];
   private readonly logBuffer: MqttLogEntry[] = [];
   private connected = false;
+  private bootstrapped = false;
 
   constructor(private readonly config: ConfigService) {}
 
@@ -27,7 +28,6 @@ export class MqttService implements OnModuleInit, OnModuleDestroy, OnApplication
   }
 
   async onModuleInit() {
-    this.logger.debug('ORDERING: MqttService.onModuleInit start');
     const url = this.config.get('MQTT_URL', 'mqtt://localhost:1883');
 
     this.client = mqtt.connect(url, {
@@ -37,9 +37,16 @@ export class MqttService implements OnModuleInit, OnModuleDestroy, OnApplication
 
     this.client.on('connect', () => {
       this.logger.log('Connected to MQTT broker');
-      this.logger.debug(`ORDERING: connect event, handlers keys=${[...this.handlers.keys()].join(',')}`);
       this.connected = true;
-      this.subscribeToBrokerTopics();
+      // Ne s'abonne côté broker que si le boot Nest est terminé (voir
+      // onApplicationBootstrap) : sur un broker local, cet événement arrive presque
+      // instantanément, souvent avant que les autres services (Zigbee, Rfxcom...) aient
+      // enregistré leurs handlers via leur propre onModuleInit — un abonnement immédiat
+      // ferait livrer toute la salve de messages retenus à une table de handlers vide,
+      // silencieusement perdue (aucun handler ne matche encore).
+      if (this.bootstrapped) {
+        this.subscribeToBrokerTopics();
+      }
     });
 
     this.client.on('message', (topic, message) => {
@@ -72,21 +79,19 @@ export class MqttService implements OnModuleInit, OnModuleDestroy, OnApplication
   }
 
   // Tous les onModuleInit (et donc tous les subscribe() enregistrant les handlers des
-  // autres services) ont désormais eu lieu. Si la connexion MQTT s'était établie plus
-  // vite que le boot complet de Nest — de plus en plus probable au fil des modules
-  // ajoutés — le premier subscribe() côté broker (dans 'connect' ci-dessus) a pu arriver
-  // avant que Zigbee/Rfxcom aient enregistré leurs handlers, faisant perdre en silence
-  // toute la salve de messages retenus (bridge/devices, availability...). Se réabonner
-  // ici force le broker à les redélivrer, cette fois avec tous les handlers en place.
+  // autres services) ont désormais eu lieu à ce stade du cycle de vie Nest. C'est donc
+  // seulement ici — ou dans l'event 'connect' si la connexion MQTT met plus longtemps
+  // à s'établir que le boot complet — que le tout premier abonnement côté broker doit
+  // avoir lieu, pour ne jamais recevoir la salve de messages retenus avant que quoi que
+  // ce soit ne puisse la traiter.
   onApplicationBootstrap() {
-    this.logger.debug(`ORDERING: onApplicationBootstrap, connected=${this.connected}, handlers keys=${[...this.handlers.keys()].join(',')}`);
+    this.bootstrapped = true;
     if (this.connected) {
       this.subscribeToBrokerTopics();
     }
   }
 
   private subscribeToBrokerTopics() {
-    this.logger.debug(`ORDERING: subscribeToBrokerTopics called, handlers keys=${[...this.handlers.keys()].join(',')}`);
     for (const topic of BROKER_TOPICS) {
       this.client.subscribe(topic);
     }

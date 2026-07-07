@@ -61,7 +61,6 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit() {
-    this.logger.debug(`ORDERING: ZigbeeService.onModuleInit start, mqtt.isConnected=${this.mqtt.isConnected}`);
     // Les abonnements doivent être enregistrés de façon synchrone, avant tout await :
     // le message retenu "bridge/devices" peut être livré dès la connexion MQTT (souvent
     // très rapide en local), et un await avant l'enregistrement (ex. l'accès Prisma de
