@@ -117,8 +117,8 @@ export class OnvifClient {
     const source = await this.getVideoSourceToken();
     const fields = [
       settings.brightness !== undefined ? `<Brightness>${settings.brightness}</Brightness>` : '',
-      settings.contrast !== undefined ? `<Contrast>${settings.contrast}</Contrast>` : '',
       settings.saturation !== undefined ? `<ColorSaturation>${settings.saturation}</ColorSaturation>` : '',
+      settings.contrast !== undefined ? `<Contrast>${settings.contrast}</Contrast>` : '',
       settings.sharpness !== undefined ? `<Sharpness>${settings.sharpness}</Sharpness>` : '',
     ].join('');
     await this.request(

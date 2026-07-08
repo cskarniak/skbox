@@ -401,7 +401,7 @@ function ImagingControls({ cameraId }: { cameraId: string }) {
             max={options[key].max}
             value={local[key] ?? options[key].min}
             onChange={(value) => setLocal((prev) => ({ ...prev, [key]: value }))}
-            onChangeEnd={(value) => setMutation.mutate({ [key]: value })}
+            onChangeEnd={(value) => setMutation.mutate({ ...local, [key]: value })}
           />
         </div>
       ))}
