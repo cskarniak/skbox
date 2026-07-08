@@ -115,11 +115,28 @@ export class OnvifClient {
 
   async setImagingSettings(settings: OnvifImagingSettings): Promise<void> {
     const source = await this.getVideoSourceToken();
+    // Some camera firmwares (e.g. Reolink/OEM) silently ignore SetImagingSettings unless the
+    // request echoes back every field GetImagingSettings reported (including IrCutFilter), so
+    // fetch the current settings first and only override what the caller asked to change.
+    const current = await this.request(
+      'imaging_service',
+      'http://www.onvif.org/ver20/imaging/wsdl',
+      'GetImagingSettings',
+      `<VideoSourceToken>${source}</VideoSourceToken>`,
+    );
+    const existing = current?.Envelope?.Body?.GetImagingSettingsResponse?.ImagingSettings ?? {};
+
+    const brightness = settings.brightness ?? numOrUndefined(existing.Brightness);
+    const saturation = settings.saturation ?? numOrUndefined(existing.ColorSaturation);
+    const contrast = settings.contrast ?? numOrUndefined(existing.Contrast);
+    const sharpness = settings.sharpness ?? numOrUndefined(existing.Sharpness);
+
     const fields = [
-      settings.brightness !== undefined ? `<Brightness>${settings.brightness}</Brightness>` : '',
-      settings.saturation !== undefined ? `<ColorSaturation>${settings.saturation}</ColorSaturation>` : '',
-      settings.contrast !== undefined ? `<Contrast>${settings.contrast}</Contrast>` : '',
-      settings.sharpness !== undefined ? `<Sharpness>${settings.sharpness}</Sharpness>` : '',
+      brightness !== undefined ? `<Brightness>${brightness}</Brightness>` : '',
+      saturation !== undefined ? `<ColorSaturation>${saturation}</ColorSaturation>` : '',
+      contrast !== undefined ? `<Contrast>${contrast}</Contrast>` : '',
+      existing.IrCutFilter ? `<IrCutFilter>${existing.IrCutFilter}</IrCutFilter>` : '',
+      sharpness !== undefined ? `<Sharpness>${sharpness}</Sharpness>` : '',
     ].join('');
     await this.request(
       'imaging_service',
