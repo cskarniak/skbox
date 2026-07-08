@@ -339,7 +339,9 @@ function PtzPresets({ cameraId }: { cameraId: string }) {
             key={p.token}
             size="xs"
             variant="default"
+            title="Positionner la caméra ici"
             leftSection={<IconMapPin size={14} />}
+            loading={gotoMutation.isPending && gotoMutation.variables === p.token}
             rightSection={
               <Group gap={2} wrap="nowrap">
                 <ActionIcon
