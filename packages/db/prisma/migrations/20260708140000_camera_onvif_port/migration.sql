@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Camera" ADD COLUMN "onvifPort" INTEGER DEFAULT 8000;

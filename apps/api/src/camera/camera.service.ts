@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaClient } from '@skbox/db';
+import { OnvifClient, OnvifImagingSettings } from './onvif-client';
 
 interface CameraConnectionDto {
   host: string;
@@ -8,6 +9,7 @@ interface CameraConnectionDto {
   path?: string;
   username?: string | null;
   password?: string | null;
+  onvifPort?: number | null;
 }
 
 interface CreateCameraDto extends CameraConnectionDto {
@@ -77,6 +79,49 @@ export class CameraService implements OnModuleInit {
     const res = await fetch(`${this.go2rtcUrl}/api/frame.jpeg?src=${encodeURIComponent(id)}`);
     if (!res.ok) throw new Error(`go2rtc a répondu ${res.status}`);
     return Buffer.from(await res.arrayBuffer());
+  }
+
+  async ptzMove(id: string, x: number, y: number, zoom: number) {
+    await (await this.getOnvifClient(id)).continuousMove(x, y, zoom);
+  }
+
+  async ptzStop(id: string) {
+    await (await this.getOnvifClient(id)).stop();
+  }
+
+  async listPresets(id: string) {
+    return (await this.getOnvifClient(id)).getPresets();
+  }
+
+  async gotoPreset(id: string, token: string) {
+    await (await this.getOnvifClient(id)).gotoPreset(token);
+  }
+
+  async savePreset(id: string, name: string) {
+    return (await this.getOnvifClient(id)).setPreset(name);
+  }
+
+  async removePreset(id: string, token: string) {
+    await (await this.getOnvifClient(id)).removePreset(token);
+  }
+
+  async getImagingSettings(id: string) {
+    return (await this.getOnvifClient(id)).getImagingSettings();
+  }
+
+  async getImagingOptions(id: string) {
+    return (await this.getOnvifClient(id)).getImagingOptions();
+  }
+
+  async setImagingSettings(id: string, settings: OnvifImagingSettings) {
+    await (await this.getOnvifClient(id)).setImagingSettings(settings);
+  }
+
+  private async getOnvifClient(id: string): Promise<OnvifClient> {
+    const camera = await this.prisma.camera.findUnique({ where: { id } });
+    if (!camera) throw new Error('Caméra introuvable');
+    if (!camera.onvifPort) throw new Error("Cette caméra n'a pas de port ONVIF configuré");
+    return new OnvifClient(camera.host, camera.onvifPort, camera.username ?? '', camera.password ?? '');
   }
 
   private buildRtspUrl(camera: {

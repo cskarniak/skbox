@@ -114,6 +114,8 @@ model Camera {
   path      String   @default("")
   username  String?
   password  String?
+  // Port ONVIF (PTZ + réglages image), null si la caméra n'expose pas ONVIF.
+  onvifPort Int?     @default(8000)
   active    Boolean  @default(true)
   order     Int      @default(0)
   createdAt DateTime @default(now())
