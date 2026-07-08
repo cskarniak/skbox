@@ -123,7 +123,7 @@ export class CameraService implements OnModuleInit {
     const camera = await this.prisma.camera.findUnique({ where: { id } });
     if (!camera) throw new Error('Caméra introuvable');
     if (camera.imagingApi === 'reolink') {
-      return new ReolinkClient(camera.host, 80, camera.username ?? '', camera.password ?? '');
+      return new ReolinkClient(camera.host, 443, camera.username ?? '', camera.password ?? '');
     }
     return this.getOnvifClient(id, camera);
   }

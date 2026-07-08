@@ -1,3 +1,5 @@
+import { request as httpsRequest, Agent } from 'https';
+
 export interface ReolinkImagingSettings {
   brightness?: number;
   contrast?: number;
@@ -5,9 +7,13 @@ export interface ReolinkImagingSettings {
   sharpness?: number;
 }
 
+// Reolink cameras expose their web UI/CGI API over HTTPS with a self-signed certificate — this
+// agent is scoped to Reolink requests only, it does not weaken TLS verification process-wide.
+const insecureAgent = new Agent({ rejectUnauthorized: false });
+
 // L'API ONVIF SetImagingSettings des Reolink répond avec succès sans jamais appliquer le
 // changement (firmware limitation connue). Ce client parle à l'API CGI propriétaire de Reolink
-// (celle utilisée par leur appli), qui applique réellement les réglages.
+// (celle utilisée par leur appli, en HTTPS sur le port 443), qui applique réellement les réglages.
 export class ReolinkClient {
   private token: string | null = null;
 
@@ -54,13 +60,7 @@ export class ReolinkClient {
 
   private async call<T = any>(cmd: string, param: Record<string, unknown>): Promise<{ value: T }[]> {
     const token = await this.getToken();
-    const res = await fetch(`http://${this.host}:${this.port}/cgi-bin/api.cgi?cmd=${cmd}&token=${token}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify([{ cmd, action: 0, param }]),
-    });
-    if (!res.ok) throw new Error(`Reolink ${cmd} a répondu HTTP ${res.status}`);
-    const body = (await res.json()) as any;
+    const body = await this.post(`/cgi-bin/api.cgi?cmd=${cmd}&token=${token}`, [{ cmd, action: 0, param }]);
     const entry = Array.isArray(body) ? body[0] : body;
     if (entry?.error) throw new Error(`Reolink ${cmd} a échoué: ${entry.error.detail ?? JSON.stringify(entry.error)}`);
     return (Array.isArray(body) ? body : [body]) as { value: T }[];
@@ -68,17 +68,47 @@ export class ReolinkClient {
 
   private async getToken(): Promise<string> {
     if (this.token) return this.token;
-    const res = await fetch(`http://${this.host}:${this.port}/cgi-bin/api.cgi?cmd=Login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify([{ cmd: 'Login', action: 0, param: { User: { userName: this.username, password: this.password } } }]),
-    });
-    if (!res.ok) throw new Error(`Reolink Login a répondu HTTP ${res.status}`);
-    const body = await res.json();
+    const body = await this.post('/cgi-bin/api.cgi?cmd=Login', [
+      { cmd: 'Login', action: 0, param: { User: { userName: this.username, password: this.password } } },
+    ]);
     const entry = Array.isArray(body) ? body[0] : body;
     const token = entry?.value?.Token?.name;
     if (!token) throw new Error(`Reolink Login a échoué: ${JSON.stringify(entry?.error ?? entry)}`);
     this.token = token;
     return token;
+  }
+
+  private post(path: string, payload: unknown): Promise<any> {
+    const data = Buffer.from(JSON.stringify(payload));
+    return new Promise((resolve, reject) => {
+      const req = httpsRequest(
+        {
+          agent: insecureAgent,
+          host: this.host,
+          port: this.port,
+          path,
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Content-Length': data.length },
+        },
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (c) => chunks.push(c));
+          res.on('end', () => {
+            if (res.statusCode !== 200) {
+              reject(new Error(`Reolink a répondu HTTP ${res.statusCode}`));
+              return;
+            }
+            try {
+              resolve(JSON.parse(Buffer.concat(chunks).toString('utf-8')));
+            } catch (err: any) {
+              reject(new Error(`Réponse Reolink invalide: ${err.message}`));
+            }
+          });
+        },
+      );
+      req.on('error', reject);
+      req.write(data);
+      req.end();
+    });
   }
 }
