@@ -107,9 +107,13 @@ model Camera {
   id        String   @id @default(cuid())
   name      String
   room      String?
-  // URL RTSP complète, identifiants inclus — jamais renvoyée au frontend, seule
-  // l'API (via go2rtc) y accède pour enregistrer/mettre à jour le flux.
-  rtspUrl   String
+  // Connexion RTSP décomposée — reconstruite en `rtsp://[user[:pass]@]host[:port][path]`
+  // par l'API pour parler à go2rtc.
+  host      String
+  port      Int      @default(554)
+  path      String   @default("")
+  username  String?
+  password  String?
   active    Boolean  @default(true)
   order     Int      @default(0)
   createdAt DateTime @default(now())

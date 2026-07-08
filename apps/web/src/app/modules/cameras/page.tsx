@@ -30,8 +30,21 @@ interface Camera {
   id: string;
   name: string;
   room: string | null;
+  host: string;
+  port: number;
+  path: string;
+  username: string | null;
+  password: string | null;
   active: boolean;
   order: number;
+}
+
+interface CameraConnection {
+  host: string;
+  port: number;
+  path: string;
+  username: string | null;
+  password: string | null;
 }
 
 interface RoomItem {
@@ -91,13 +104,17 @@ function CameraFormModal({
   opened: boolean;
   onClose: () => void;
   rooms: RoomItem[];
-  initial?: { name: string; room: string | null };
-  onSubmit: (data: { name: string; room: string | null; rtspUrl: string }) => void;
+  initial?: { name: string; room: string | null } & Partial<CameraConnection>;
+  onSubmit: (data: { name: string; room: string | null } & CameraConnection) => void;
   submitting: boolean;
 }) {
   const [name, setName] = useState(initial?.name ?? '');
   const [room, setRoom] = useState<string | null>(initial?.room ?? null);
-  const [rtspUrl, setRtspUrl] = useState('');
+  const [host, setHost] = useState(initial?.host ?? '');
+  const [port, setPort] = useState(String(initial?.port ?? 554));
+  const [path, setPath] = useState(initial?.path ?? '');
+  const [username, setUsername] = useState(initial?.username ?? '');
+  const [password, setPassword] = useState(initial?.password ?? '');
 
   return (
     <Modal opened={opened} onClose={onClose} title={initial ? 'Modifier la caméra' : 'Nouvelle caméra'}>
@@ -111,22 +128,49 @@ function CameraFormModal({
           clearable
           searchable
         />
-        <PasswordInput
-          label="URL RTSP"
-          description="Identifiants inclus, ex. rtsp://user:motdepasse@192.168.1.x:554/chemin"
-          value={rtspUrl}
-          onChange={(e) => setRtspUrl(e.currentTarget.value)}
-          placeholder={initial ? 'Laisser vide pour ne pas modifier' : undefined}
-          required={!initial}
+        <Group grow>
+          <TextInput
+            label="Adresse IP / nom d'hôte"
+            placeholder="192.168.1.x"
+            value={host}
+            onChange={(e) => setHost(e.currentTarget.value)}
+            required
+          />
+          <TextInput
+            label="Port"
+            value={port}
+            onChange={(e) => setPort(e.currentTarget.value.replace(/\D/g, ''))}
+          />
+        </Group>
+        <TextInput
+          label="Chemin du flux"
+          description="ex. /h264Preview_01_main"
+          placeholder="/..."
+          value={path}
+          onChange={(e) => setPath(e.currentTarget.value)}
         />
+        <Group grow>
+          <TextInput label="Identifiant" value={username} onChange={(e) => setUsername(e.currentTarget.value)} />
+          <PasswordInput label="Mot de passe" value={password} onChange={(e) => setPassword(e.currentTarget.value)} />
+        </Group>
         <Group justify="flex-end" mt="sm">
           <Button variant="subtle" onClick={onClose}>
             Annuler
           </Button>
           <Button
             loading={submitting}
-            disabled={!name.trim() || (!initial && !rtspUrl.trim())}
-            onClick={() => onSubmit({ name: name.trim(), room, rtspUrl: rtspUrl.trim() })}
+            disabled={!name.trim() || !host.trim()}
+            onClick={() =>
+              onSubmit({
+                name: name.trim(),
+                room,
+                host: host.trim(),
+                port: Number(port) || 554,
+                path: path.trim(),
+                username: username.trim() || null,
+                password: password || null,
+              })
+            }
           >
             Enregistrer
           </Button>
@@ -209,7 +253,7 @@ export default function CamerasModulePage() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['cameras'] });
 
   const createCamera = useMutation({
-    mutationFn: (data: { name: string; room: string | null; rtspUrl: string }) => api.post('/cameras', data),
+    mutationFn: (data: { name: string; room: string | null } & CameraConnection) => api.post('/cameras', data),
     onSuccess: () => {
       invalidate();
       closeForm();
@@ -219,9 +263,9 @@ export default function CamerasModulePage() {
   });
 
   const updateCamera = useMutation({
-    mutationFn: (data: { id: string; name: string; room: string | null; rtspUrl: string }) => {
-      const { id, rtspUrl, ...rest } = data;
-      return api.patch(`/cameras/${id}`, rtspUrl ? { ...rest, rtspUrl } : rest);
+    mutationFn: (data: { id: string; name: string; room: string | null } & CameraConnection) => {
+      const { id, ...rest } = data;
+      return api.patch(`/cameras/${id}`, rest);
     },
     onSuccess: () => {
       invalidate();
@@ -311,13 +355,26 @@ export default function CamerasModulePage() {
       </AppShell.Main>
 
       <CameraFormModal
+        key={editingCamera?.id ?? 'new'}
         opened={formOpened}
         onClose={() => {
           closeForm();
           setEditingCamera(null);
         }}
         rooms={rooms ?? []}
-        initial={editingCamera ? { name: editingCamera.name, room: editingCamera.room } : undefined}
+        initial={
+          editingCamera
+            ? {
+                name: editingCamera.name,
+                room: editingCamera.room,
+                host: editingCamera.host,
+                port: editingCamera.port,
+                path: editingCamera.path,
+                username: editingCamera.username,
+                password: editingCamera.password,
+              }
+            : undefined
+        }
         submitting={createCamera.isPending || updateCamera.isPending}
         onSubmit={(data) => {
           if (editingCamera) {

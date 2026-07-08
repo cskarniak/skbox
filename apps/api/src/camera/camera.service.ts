@@ -2,16 +2,22 @@ import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaClient } from '@skbox/db';
 
-interface CreateCameraDto {
-  name: string;
-  room?: string | null;
-  rtspUrl: string;
+interface CameraConnectionDto {
+  host: string;
+  port?: number;
+  path?: string;
+  username?: string | null;
+  password?: string | null;
 }
 
-interface UpdateCameraDto {
+interface CreateCameraDto extends CameraConnectionDto {
+  name: string;
+  room?: string | null;
+}
+
+interface UpdateCameraDto extends Partial<CameraConnectionDto> {
   name?: string;
   room?: string | null;
-  rtspUrl?: string;
   active?: boolean;
   order?: number;
 }
@@ -35,29 +41,28 @@ export class CameraService implements OnModuleInit {
   async onModuleInit() {
     const cameras = await this.prisma.camera.findMany({ where: { active: true } });
     for (const camera of cameras) {
-      await this.syncStream(camera.id, camera.rtspUrl);
+      await this.syncStream(camera.id, this.buildRtspUrl(camera));
     }
   }
 
   async findAll() {
-    const cameras = await this.prisma.camera.findMany({ orderBy: { order: 'asc' } });
-    return cameras.map((c) => this.toPublic(c));
+    return this.prisma.camera.findMany({ orderBy: { order: 'asc' } });
   }
 
   async create(data: CreateCameraDto) {
     const camera = await this.prisma.camera.create({ data });
-    await this.syncStream(camera.id, camera.rtspUrl);
-    return this.toPublic(camera);
+    await this.syncStream(camera.id, this.buildRtspUrl(camera));
+    return camera;
   }
 
   async update(id: string, data: UpdateCameraDto) {
     const camera = await this.prisma.camera.update({ where: { id }, data });
     if (camera.active) {
-      await this.syncStream(camera.id, camera.rtspUrl);
+      await this.syncStream(camera.id, this.buildRtspUrl(camera));
     } else {
       await this.removeStream(camera.id);
     }
-    return this.toPublic(camera);
+    return camera;
   }
 
   async remove(id: string) {
@@ -74,10 +79,18 @@ export class CameraService implements OnModuleInit {
     return Buffer.from(await res.arrayBuffer());
   }
 
-  private toPublic(camera: { rtspUrl: string; [key: string]: unknown }) {
-    const { rtspUrl, ...rest } = camera;
-    void rtspUrl;
-    return rest;
+  private buildRtspUrl(camera: {
+    host: string;
+    port: number;
+    path: string;
+    username?: string | null;
+    password?: string | null;
+  }): string {
+    const auth = camera.username
+      ? `${encodeURIComponent(camera.username)}${camera.password ? `:${encodeURIComponent(camera.password)}` : ''}@`
+      : '';
+    const path = camera.path && !camera.path.startsWith('/') ? `/${camera.path}` : camera.path;
+    return `rtsp://${auth}${camera.host}:${camera.port}${path}`;
   }
 
   private async syncStream(id: string, rtspUrl: string) {

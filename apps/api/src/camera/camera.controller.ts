@@ -14,9 +14,20 @@ export class CameraController {
   }
 
   @Post()
-  create(@Body() body: { name: string; room?: string | null; rtspUrl: string }) {
-    if (!body.name?.trim() || !body.rtspUrl?.trim()) {
-      throw new BadRequestException('name et rtspUrl sont requis');
+  create(
+    @Body()
+    body: {
+      name: string;
+      room?: string | null;
+      host: string;
+      port?: number;
+      path?: string;
+      username?: string | null;
+      password?: string | null;
+    },
+  ) {
+    if (!body.name?.trim() || !body.host?.trim()) {
+      throw new BadRequestException('name et host sont requis');
     }
     return this.cameras.create(body);
   }
@@ -24,7 +35,18 @@ export class CameraController {
   @Patch(':id')
   update(
     @Param('id') id: string,
-    @Body() body: { name?: string; room?: string | null; rtspUrl?: string; active?: boolean; order?: number },
+    @Body()
+    body: {
+      name?: string;
+      room?: string | null;
+      host?: string;
+      port?: number;
+      path?: string;
+      username?: string | null;
+      password?: string | null;
+      active?: boolean;
+      order?: number;
+    },
   ) {
     return this.cameras.update(id, body);
   }
