@@ -57,6 +57,17 @@ export class TailscaleService implements OnModuleInit, OnModuleDestroy {
     return this.lastStatus;
   }
 
+  // Persisté (survit à un redémarrage de skbox-api) : tant que l'utilisateur a
+  // volontairement arrêté tailscaled depuis Réglages > Outils, la boucle de
+  // reconnexion/relance auto ne doit pas le rallumer dans son dos.
+  async setManuallyStopped(stopped: boolean): Promise<void> {
+    await this.settings.set('tailscale.manuallyStopped', stopped ? 'true' : 'false');
+  }
+
+  private async isManuallyStopped(): Promise<boolean> {
+    return (await this.settings.get('tailscale.manuallyStopped')) === 'true';
+  }
+
   private async healthcheck() {
     const wasConnected = this.lastStatus.connected;
     this.lastStatus = await this.readStatus();
@@ -70,6 +81,10 @@ export class TailscaleService implements OnModuleInit, OnModuleDestroy {
 
     if (wasConnected) {
       await this.events.log('tailscale', 'offline', `état=${this.lastStatus.backendState ?? 'inconnu'}`);
+    }
+
+    if (await this.isManuallyStopped()) {
+      return;
     }
 
     // Tentative de reconnexion à chaque cycle, indépendamment du réglage de relance

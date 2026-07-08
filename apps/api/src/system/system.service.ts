@@ -171,15 +171,21 @@ export class SystemService {
     await this.events.log(bridge, 'manual_stop', `${service} arrêté manuellement (test)`);
   }
 
-  // Même principe que stopBridgeService : arrêt volontaire de tailscaled pour vérifier
-  // en conditions réelles que la relance automatique (TailscaleService) fonctionne.
+  // Arrêt volontaire de tailscaled. On marque l'arrêt comme "manuel" avant de couper le
+  // service pour que la boucle de reconnexion/relance auto (TailscaleService) ne le
+  // rallume pas tout seul au cycle suivant.
   async stopTailscaleService(): Promise<void> {
+    await this.tailscale.setManuallyStopped(true);
     await this.runOrThrow('sudo systemctl stop tailscaled');
-    await this.events.log('tailscale', 'manual_stop', 'tailscaled arrêté manuellement (test)');
+    await this.events.log('tailscale', 'manual_stop', 'tailscaled arrêté manuellement');
   }
 
+  // `restart` plutôt que `start` : c'est la seule commande whitelistée sans mot de passe
+  // dans les sudoers pour tailscaled, et `systemctl restart` démarre bien un service à
+  // l'arrêt (pas seulement un service déjà actif).
   async startTailscaleService(): Promise<void> {
-    await this.runOrThrow('sudo systemctl start tailscaled');
+    await this.tailscale.setManuallyStopped(false);
+    await this.runOrThrow('sudo systemctl restart tailscaled');
     await this.events.log('tailscale', 'manual_start', 'tailscaled démarré manuellement');
   }
 
