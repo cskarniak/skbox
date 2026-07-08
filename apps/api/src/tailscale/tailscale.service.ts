@@ -57,6 +57,14 @@ export class TailscaleService implements OnModuleInit, OnModuleDestroy {
     return this.lastStatus;
   }
 
+  // Le statut mis en cache n'est normalement rafraîchi que par le healthcheck périodique
+  // (jusqu'à 60s de retard) : après un start/stop manuel, on force une lecture immédiate
+  // pour que l'appelant (et donc l'UI) voie tout de suite le nouvel état.
+  async refreshStatus(): Promise<TailscaleStatus> {
+    this.lastStatus = await this.readStatus();
+    return this.lastStatus;
+  }
+
   // Persisté (survit à un redémarrage de skbox-api) : tant que l'utilisateur a
   // volontairement arrêté tailscaled depuis Réglages > Outils, la boucle de
   // reconnexion/relance auto ne doit pas le rallumer dans son dos.
