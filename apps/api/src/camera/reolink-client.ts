@@ -28,10 +28,10 @@ export class ReolinkClient {
   async getImagingSettings(): Promise<ReolinkImagingSettings> {
     const image = await this.getImage();
     return {
-      brightness: image.Bright,
-      contrast: image.Contrast,
-      saturation: image.Saturation,
-      sharpness: image.Sharpen,
+      brightness: image.bright,
+      contrast: image.contrast,
+      saturation: image.saturation,
+      sharpness: image.sharpen,
     };
   }
 
@@ -44,11 +44,11 @@ export class ReolinkClient {
     const current = await this.getImage();
     const image = {
       channel: this.channel,
-      Bright: settings.brightness ?? current.Bright,
-      Contrast: settings.contrast ?? current.Contrast,
-      Saturation: settings.saturation ?? current.Saturation,
-      Sharpen: settings.sharpness ?? current.Sharpen,
-      Hue: current.Hue,
+      bright: settings.brightness ?? current.bright,
+      contrast: settings.contrast ?? current.contrast,
+      saturation: settings.saturation ?? current.saturation,
+      sharpen: settings.sharpness ?? current.sharpen,
+      hue: current.hue,
     };
     await this.call('SetImage', { Image: image });
   }
