@@ -87,6 +87,11 @@ interface ImagingOptions {
   sharpness: { min: number; max: number };
 }
 
+interface ImagingProfile extends ImagingSettings {
+  id: string;
+  name: string;
+}
+
 interface RoomItem {
   id: string;
   name: string;
@@ -393,6 +398,9 @@ function PtzPresets({ cameraId }: { cameraId: string }) {
 }
 
 function ImagingControls({ cameraId }: { cameraId: string }) {
+  const queryClient = useQueryClient();
+  const [profileName, setProfileName] = useState('');
+
   const { data: options } = useQuery<ImagingOptions>({
     queryKey: ['imaging-options', cameraId],
     queryFn: () => api.get(`/cameras/${cameraId}/imaging/options`).then((r) => r.data),
@@ -404,11 +412,19 @@ function ImagingControls({ cameraId }: { cameraId: string }) {
     retry: false,
     enabled: !!options,
   });
+  const { data: profiles } = useQuery<ImagingProfile[]>({
+    queryKey: ['imaging-profiles', cameraId],
+    queryFn: () => api.get(`/cameras/${cameraId}/imaging/profiles`).then((r) => r.data),
+    retry: false,
+    enabled: !!options,
+  });
 
   const [local, setLocal] = useState<ImagingSettings>({});
   useEffect(() => {
     if (settings) setLocal(settings);
   }, [settings]);
+
+  const invalidateProfiles = () => queryClient.invalidateQueries({ queryKey: ['imaging-profiles', cameraId] });
 
   const setMutation = useMutation({
     mutationFn: (patch: ImagingSettings) => api.patch(`/cameras/${cameraId}/imaging`, patch),
@@ -416,6 +432,26 @@ function ImagingControls({ cameraId }: { cameraId: string }) {
       notifications.show({ color: 'red', title: 'Échec', message: "Impossible d'appliquer le réglage à la caméra" });
       if (settings) setLocal(settings);
     },
+  });
+
+  const saveProfileMutation = useMutation({
+    mutationFn: (name: string) => api.post(`/cameras/${cameraId}/imaging/profiles`, { name }),
+    onSuccess: () => {
+      invalidateProfiles();
+      setProfileName('');
+    },
+    onError: () => notifications.show({ color: 'red', title: 'Échec', message: "Impossible d'enregistrer le profil" }),
+  });
+
+  const applyProfileMutation = useMutation({
+    mutationFn: (profileId: string) => api.post(`/cameras/${cameraId}/imaging/profiles/${profileId}/apply`),
+    onSuccess: (res) => setLocal(res.data),
+    onError: () => notifications.show({ color: 'red', title: 'Échec', message: "Impossible d'appliquer ce profil" }),
+  });
+
+  const removeProfileMutation = useMutation({
+    mutationFn: (profileId: string) => api.delete(`/cameras/${cameraId}/imaging/profiles/${profileId}`),
+    onSuccess: invalidateProfiles,
   });
 
   if (!options || !settings) return null;
@@ -443,6 +479,44 @@ function ImagingControls({ cameraId }: { cameraId: string }) {
           />
         </div>
       ))}
+
+      <Divider label="Profils d'image" labelPosition="left" mt="xs" />
+      <Group gap="xs">
+        {(profiles ?? []).map((p) => (
+          <Button
+            key={p.id}
+            size="xs"
+            variant="default"
+            title="Appliquer ce profil à la caméra"
+            loading={applyProfileMutation.isPending && applyProfileMutation.variables === p.id}
+            rightSection={
+              <span onClick={(e) => e.stopPropagation()}>
+                <ConfirmDeleteButton message={`Supprimer le profil "${p.name}" ?`} onConfirm={() => removeProfileMutation.mutate(p.id)} />
+              </span>
+            }
+            onClick={() => applyProfileMutation.mutate(p.id)}
+          >
+            {p.name}
+          </Button>
+        ))}
+      </Group>
+      <Group gap="xs">
+        <TextInput
+          size="xs"
+          placeholder="Nom du profil"
+          value={profileName}
+          onChange={(e) => setProfileName(e.currentTarget.value)}
+          style={{ flex: 1 }}
+        />
+        <Button
+          size="xs"
+          disabled={!profileName.trim()}
+          loading={saveProfileMutation.isPending}
+          onClick={() => saveProfileMutation.mutate(profileName.trim())}
+        >
+          Enregistrer le profil
+        </Button>
+      </Group>
     </Stack>
   );
 }

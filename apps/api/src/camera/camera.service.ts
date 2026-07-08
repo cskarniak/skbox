@@ -119,6 +119,35 @@ export class CameraService implements OnModuleInit {
     await (await this.getImagingClient(id)).setImagingSettings(settings);
   }
 
+  async listImagingProfiles(cameraId: string) {
+    return this.prisma.cameraImagingProfile.findMany({ where: { cameraId }, orderBy: { createdAt: 'asc' } });
+  }
+
+  async saveImagingProfile(cameraId: string, name: string) {
+    const settings = await this.getImagingSettings(cameraId);
+    return this.prisma.cameraImagingProfile.create({
+      data: { cameraId, name, ...settings },
+    });
+  }
+
+  async applyImagingProfile(cameraId: string, profileId: string) {
+    const profile = await this.prisma.cameraImagingProfile.findUnique({ where: { id: profileId } });
+    if (!profile || profile.cameraId !== cameraId) throw new Error('Profil introuvable');
+    await this.setImagingSettings(cameraId, {
+      brightness: profile.brightness ?? undefined,
+      contrast: profile.contrast ?? undefined,
+      saturation: profile.saturation ?? undefined,
+      sharpness: profile.sharpness ?? undefined,
+    });
+    return profile;
+  }
+
+  async removeImagingProfile(cameraId: string, profileId: string) {
+    const profile = await this.prisma.cameraImagingProfile.findUnique({ where: { id: profileId } });
+    if (!profile || profile.cameraId !== cameraId) throw new Error('Profil introuvable');
+    await this.prisma.cameraImagingProfile.delete({ where: { id: profileId } });
+  }
+
   private async getImagingClient(id: string): Promise<OnvifClient | ReolinkClient> {
     const camera = await this.prisma.camera.findUnique({ where: { id } });
     if (!camera) throw new Error('Caméra introuvable');

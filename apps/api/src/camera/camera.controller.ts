@@ -166,4 +166,41 @@ export class CameraController {
       throw new BadRequestException(err.message);
     }
   }
+
+  @Get(':id/imaging/profiles')
+  async listImagingProfiles(@Param('id') id: string) {
+    try {
+      return await this.cameras.listImagingProfiles(id);
+    } catch (err: any) {
+      throw new BadRequestException(err.message);
+    }
+  }
+
+  @Post(':id/imaging/profiles')
+  async saveImagingProfile(@Param('id') id: string, @Body() body: { name: string }) {
+    if (!body.name?.trim()) throw new BadRequestException('name est requis');
+    try {
+      return await this.cameras.saveImagingProfile(id, body.name.trim());
+    } catch (err: any) {
+      throw new BadRequestException(err.message);
+    }
+  }
+
+  @Post(':id/imaging/profiles/:profileId/apply')
+  async applyImagingProfile(@Param('id') id: string, @Param('profileId') profileId: string) {
+    try {
+      return await this.cameras.applyImagingProfile(id, profileId);
+    } catch (err: any) {
+      throw new BadRequestException(err.message);
+    }
+  }
+
+  @Delete(':id/imaging/profiles/:profileId')
+  async removeImagingProfile(@Param('id') id: string, @Param('profileId') profileId: string) {
+    try {
+      await this.cameras.removeImagingProfile(id, profileId);
+    } catch (err: any) {
+      throw new BadRequestException(err.message);
+    }
+  }
 }
