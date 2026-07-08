@@ -3,9 +3,11 @@
 import { AppShell, Title, Text, Stack, Table, Switch, Badge, MultiSelect, ActionIcon, Modal, Tooltip, Center, Loader, ScrollArea, Button, TextInput, NumberInput, Group, Alert, Checkbox, SegmentedControl, Divider, Select } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconSmartHome, IconHistory, IconTrash, IconAlertTriangle, IconAdjustments, IconBattery, IconLink, IconId } from '@tabler/icons-react';
+import { notifications } from '@mantine/notifications';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '@/lib/api';
+import { errorMessage } from '@/lib/errors';
 import { AppNav } from '@/components/AppNav';
 import {
   DisplayPreference,
@@ -507,6 +509,68 @@ function MergeDeviceControl({ device, candidates }: { device: Device; candidates
   );
 }
 
+function DeleteDeviceConfirm({ device }: { device: Device }) {
+  const queryClient = useQueryClient();
+  const [opened, { open, close }] = useDisclosure(false);
+  const [confirmText, setConfirmText] = useState('');
+
+  const deleteDevice = useMutation({
+    mutationFn: () => api.delete(`/devices/${device.id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
+      handleClose();
+    },
+    onError: (err) => notifications.show({ color: 'red', message: errorMessage(err, 'Impossible de supprimer.') }),
+  });
+
+  const handleClose = () => {
+    setConfirmText('');
+    close();
+  };
+
+  return (
+    <>
+      <Tooltip label="Supprimer l'appareil">
+        <ActionIcon variant="subtle" color="red" onClick={open}>
+          <IconTrash size={16} />
+        </ActionIcon>
+      </Tooltip>
+      <Modal opened={opened} onClose={handleClose} title={`Supprimer « ${device.name} » ?`}>
+        <Stack gap="md">
+          <Alert color="red" icon={<IconAlertTriangle size={18} />} title="Suppression définitive">
+            <Text size="sm">
+              L'appareil et tout son historique seront supprimés définitivement (impossible si encore
+              utilisé par un scénario ou un module). Tapez{' '}
+              <Text span fw={700}>
+                OUI
+              </Text>{' '}
+              pour confirmer.
+            </Text>
+          </Alert>
+          <Group gap="xs">
+            <TextInput
+              size="xs"
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.currentTarget.value)}
+              placeholder="OUI"
+              w={120}
+            />
+            <Button
+              size="xs"
+              color="red"
+              disabled={confirmText !== 'OUI'}
+              loading={deleteDevice.isPending}
+              onClick={() => deleteDevice.mutate()}
+            >
+              Supprimer définitivement
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </>
+  );
+}
+
 function DeviceRow({
   device,
   themes,
@@ -639,6 +703,7 @@ function DeviceRow({
             </Tooltip>
           )}
           {candidates.length > 0 && <MergeDeviceControl device={device} candidates={candidates} />}
+          <DeleteDeviceConfirm device={device} />
         </Group>
         {device.trackHistory && (
           <>

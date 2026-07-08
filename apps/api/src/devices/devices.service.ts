@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable } from '@nestjs/common';
 import { PrismaClient } from '@skbox/db';
 import {
   CreateDeviceDto,
@@ -8,6 +8,29 @@ import {
   UpdateHistoryFieldConfigDto,
 } from '@skbox/shared';
 import { hasSignificantChange } from './history-change.util';
+
+// Trigger/conditions/actions sont du JSON opaque (pas de FK Prisma), donc on doit les
+// parser pour savoir si un scénario référence encore ce device avant suppression.
+function scenarioReferencesDevice(
+  scenario: { trigger: string; conditions: string; actions: string },
+  deviceId: string,
+): boolean {
+  const referencesId = (value: unknown): boolean => {
+    if (!value || typeof value !== 'object') return false;
+    return Object.values(value as Record<string, unknown>).some((v) => v === deviceId);
+  };
+
+  try {
+    if (referencesId(JSON.parse(scenario.trigger))) return true;
+    const conditions = JSON.parse(scenario.conditions);
+    if (Array.isArray(conditions) && conditions.some(referencesId)) return true;
+    const actions = JSON.parse(scenario.actions);
+    if (Array.isArray(actions) && actions.some(referencesId)) return true;
+  } catch {
+    return false;
+  }
+  return false;
+}
 
 // Fenêtre pendant laquelle le prochain signal RF433 du même type est réassocié à ce
 // device plutôt que de créer un nouveau device (cf. rolling code Oregon Scientific qui
@@ -251,7 +274,29 @@ export class DevicesService {
     });
   }
 
-  delete(id: string) {
+  async delete(id: string) {
+    const scenarios = await this.prisma.scenario.findMany({
+      select: { name: true, trigger: true, conditions: true, actions: true },
+    });
+    const usedByScenario = scenarios.find((s) => scenarioReferencesDevice(s, id));
+    if (usedByScenario) {
+      throw new ConflictException(
+        `Impossible de supprimer : utilisé par le scénario « ${usedByScenario.name} ».`,
+      );
+    }
+
+    const boilerSetting = await this.prisma.setting.findUnique({ where: { key: 'boiler' } });
+    if (boilerSetting) {
+      try {
+        const boilerState = JSON.parse(boilerSetting.value);
+        if (boilerState.deviceId === id || boilerState.temperatureSensorId === id) {
+          throw new ConflictException('Impossible de supprimer : utilisé par le module Chaudière.');
+        }
+      } catch (err) {
+        if (err instanceof ConflictException) throw err;
+      }
+    }
+
     return this.prisma.device.delete({ where: { id } });
   }
 }
