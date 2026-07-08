@@ -109,6 +109,16 @@ export class CameraController {
     }
   }
 
+  @Patch(':id/ptz/presets/:token')
+  async updatePreset(@Param('id') id: string, @Param('token') token: string, @Body() body: { name: string }) {
+    if (!body.name?.trim()) throw new BadRequestException('name est requis');
+    try {
+      return { token: await this.cameras.savePreset(id, body.name.trim(), token) };
+    } catch (err: any) {
+      throw new BadRequestException(err.message);
+    }
+  }
+
   @Post(':id/ptz/presets/:token/goto')
   async gotoPreset(@Param('id') id: string, @Param('token') token: string) {
     try {

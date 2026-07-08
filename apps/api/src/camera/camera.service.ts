@@ -99,8 +99,8 @@ export class CameraService implements OnModuleInit {
     await (await this.getOnvifClient(id)).gotoPreset(token);
   }
 
-  async savePreset(id: string, name: string) {
-    return (await this.getOnvifClient(id)).setPreset(name);
+  async savePreset(id: string, name: string, token?: string) {
+    return (await this.getOnvifClient(id)).setPreset(name, token);
   }
 
   async removePreset(id: string, token: string) {

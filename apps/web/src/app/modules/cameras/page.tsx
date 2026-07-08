@@ -33,6 +33,7 @@ import {
   IconZoomIn,
   IconZoomOut,
   IconMapPin,
+  IconRefresh,
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useRouter } from 'next/navigation';
@@ -324,6 +325,12 @@ function PtzPresets({ cameraId }: { cameraId: string }) {
     onSuccess: invalidate,
   });
 
+  const updateMutation = useMutation({
+    mutationFn: ({ token, name }: { token: string; name: string }) => api.patch(`/cameras/${cameraId}/ptz/presets/${token}`, { name }),
+    onSuccess: () => notifications.show({ color: 'green', title: 'Mis à jour', message: 'Préréglage réenregistré à la position actuelle' }),
+    onError: () => notifications.show({ color: 'red', title: 'Échec', message: 'Impossible de mettre à jour ce préréglage' }),
+  });
+
   return (
     <Stack gap="xs">
       <Group gap="xs">
@@ -334,18 +341,32 @@ function PtzPresets({ cameraId }: { cameraId: string }) {
             variant="default"
             leftSection={<IconMapPin size={14} />}
             rightSection={
-              <ActionIcon
-                size="xs"
-                variant="transparent"
-                color="red"
-                component="span"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  removeMutation.mutate(p.token);
-                }}
-              >
-                <IconTrash size={12} />
-              </ActionIcon>
+              <Group gap={2} wrap="nowrap">
+                <ActionIcon
+                  size="xs"
+                  variant="transparent"
+                  component="span"
+                  title="Réenregistrer à la position actuelle"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    updateMutation.mutate({ token: p.token, name: p.name });
+                  }}
+                >
+                  <IconRefresh size={12} />
+                </ActionIcon>
+                <ActionIcon
+                  size="xs"
+                  variant="transparent"
+                  color="red"
+                  component="span"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeMutation.mutate(p.token);
+                  }}
+                >
+                  <IconTrash size={12} />
+                </ActionIcon>
+              </Group>
             }
             onClick={() => gotoMutation.mutate(p.token)}
           >

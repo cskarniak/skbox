@@ -62,15 +62,17 @@ export class OnvifClient {
     await this.request('ptz_service', 'http://www.onvif.org/ver20/ptz/wsdl', 'GotoPreset', `<ProfileToken>${profile}</ProfileToken><PresetToken>${token}</PresetToken>`);
   }
 
-  async setPreset(name: string): Promise<string> {
+  // Sans `token`, la caméra crée un nouveau préréglage. Avec un `token` existant, elle écrase
+  // la position de ce préréglage par la position actuelle (mise à jour au lieu de dupliquer).
+  async setPreset(name: string, token?: string): Promise<string> {
     const profile = await this.getProfileToken();
     const res = await this.request(
       'ptz_service',
       'http://www.onvif.org/ver20/ptz/wsdl',
       'SetPreset',
-      `<ProfileToken>${profile}</ProfileToken><PresetName>${escapeXml(name)}</PresetName>`,
+      `<ProfileToken>${profile}</ProfileToken><PresetName>${escapeXml(name)}</PresetName>${token ? `<PresetToken>${token}</PresetToken>` : ''}`,
     );
-    return res?.Envelope?.Body?.SetPresetResponse?.PresetToken;
+    return res?.Envelope?.Body?.SetPresetResponse?.PresetToken ?? token;
   }
 
   async removePreset(token: string): Promise<void> {
