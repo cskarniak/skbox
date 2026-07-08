@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import { PrismaClient } from '@skbox/db';
 import { CreateThemeDto, UpdateThemeDto } from '@skbox/shared';
 
@@ -21,7 +21,16 @@ export class ThemesService {
     return this.prisma.theme.update({ where: { id }, data: dto });
   }
 
-  delete(id: string) {
+  async delete(id: string) {
+    const theme = await this.prisma.theme.findUniqueOrThrow({
+      where: { id },
+      include: { _count: { select: { devices: true } } },
+    });
+    if (theme._count.devices > 0) {
+      throw new ConflictException(
+        `Impossible de supprimer : ${theme._count.devices} appareil(s) utilisent encore ce thème.`,
+      );
+    }
     return this.prisma.theme.delete({ where: { id } });
   }
 }

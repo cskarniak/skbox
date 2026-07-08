@@ -1,10 +1,17 @@
 'use client';
 
-import { Title, Text, Stack, Card, Table, TextInput, Button, Group, ActionIcon, Badge } from '@mantine/core';
-import { IconPlus, IconTrash } from '@tabler/icons-react';
+import { Title, Text, Stack, Card, Table, TextInput, Button, Group, Badge } from '@mantine/core';
+import { IconPlus } from '@tabler/icons-react';
+import { notifications } from '@mantine/notifications';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '@/lib/api';
+import { DeleteConfirmButton } from '@/components/DeleteConfirmButton';
+
+function errorMessage(err: unknown, fallback: string): string {
+  const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+  return message ?? fallback;
+}
 
 interface Theme {
   id: string;
@@ -17,6 +24,8 @@ interface Theme {
 export default function SettingsThemesPage() {
   const queryClient = useQueryClient();
   const [name, setName] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
 
   const { data: themes } = useQuery<Theme[]>({
     queryKey: ['themes'],
@@ -31,10 +40,35 @@ export default function SettingsThemesPage() {
     },
   });
 
+  const renameTheme = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => api.patch(`/themes/${id}`, { name }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['themes'] });
+      setEditingId(null);
+    },
+    onError: (err) => notifications.show({ color: 'red', message: errorMessage(err, 'Impossible de renommer.') }),
+  });
+
   const deleteTheme = useMutation({
     mutationFn: (id: string) => api.delete(`/themes/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['themes'] }),
+    onError: (err) => notifications.show({ color: 'red', message: errorMessage(err, 'Impossible de supprimer.') }),
   });
+
+  const startEditing = (theme: Theme) => {
+    setEditingId(theme.id);
+    setEditingName(theme.name);
+  };
+
+  const commitEditing = () => {
+    if (!editingId) return;
+    const trimmed = editingName.trim();
+    if (!trimmed) {
+      setEditingId(null);
+      return;
+    }
+    renameTheme.mutate({ id: editingId, name: trimmed });
+  };
 
   return (
     <Stack gap="lg">
@@ -77,19 +111,38 @@ export default function SettingsThemesPage() {
           <Table.Tbody>
             {(themes ?? []).map((theme) => (
               <Table.Tr key={theme.id}>
-                <Table.Td>{theme.name}</Table.Td>
+                <Table.Td>
+                  {editingId === theme.id ? (
+                    <TextInput
+                      size="xs"
+                      autoFocus
+                      value={editingName}
+                      onChange={(e) => setEditingName(e.currentTarget.value)}
+                      onBlur={commitEditing}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') commitEditing();
+                        if (e.key === 'Escape') setEditingId(null);
+                      }}
+                    />
+                  ) : (
+                    <Text
+                      size="sm"
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => startEditing(theme)}
+                    >
+                      {theme.name}
+                    </Text>
+                  )}
+                </Table.Td>
                 <Table.Td>
                   <Badge variant="light">{theme.devices.length}</Badge>
                 </Table.Td>
                 <Table.Td>
-                  <ActionIcon
-                    variant="subtle"
-                    color="red"
+                  <DeleteConfirmButton
+                    label={`Supprimer le thème « ${theme.name} » ?`}
                     loading={deleteTheme.isPending && deleteTheme.variables === theme.id}
-                    onClick={() => deleteTheme.mutate(theme.id)}
-                  >
-                    <IconTrash size={16} />
-                  </ActionIcon>
+                    onConfirm={() => deleteTheme.mutate(theme.id)}
+                  />
                 </Table.Td>
               </Table.Tr>
             ))}
