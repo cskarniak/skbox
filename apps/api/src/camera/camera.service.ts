@@ -135,6 +135,13 @@ export class CameraService implements OnModuleInit {
     });
   }
 
+  async updateImagingProfile(cameraId: string, profileId: string) {
+    const profile = await this.prisma.cameraImagingProfile.findUnique({ where: { id: profileId } });
+    if (!profile || profile.cameraId !== cameraId) throw new Error('Profil introuvable');
+    const settings = await this.getImagingSettings(cameraId);
+    return this.prisma.cameraImagingProfile.update({ where: { id: profileId }, data: settings });
+  }
+
   async applyImagingProfile(cameraId: string, profileId: string) {
     const profile = await this.prisma.cameraImagingProfile.findUnique({ where: { id: profileId } });
     if (!profile || profile.cameraId !== cameraId) throw new Error('Profil introuvable');

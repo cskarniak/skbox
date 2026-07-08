@@ -186,6 +186,15 @@ export class CameraController {
     }
   }
 
+  @Patch(':id/imaging/profiles/:profileId')
+  async updateImagingProfile(@Param('id') id: string, @Param('profileId') profileId: string) {
+    try {
+      return await this.cameras.updateImagingProfile(id, profileId);
+    } catch (err: any) {
+      throw new BadRequestException(err.message);
+    }
+  }
+
   @Post(':id/imaging/profiles/:profileId/apply')
   async applyImagingProfile(@Param('id') id: string, @Param('profileId') profileId: string) {
     try {

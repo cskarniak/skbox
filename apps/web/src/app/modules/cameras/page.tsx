@@ -454,6 +454,15 @@ function ImagingControls({ cameraId }: { cameraId: string }) {
     onSuccess: invalidateProfiles,
   });
 
+  const updateProfileMutation = useMutation({
+    mutationFn: (profileId: string) => api.patch(`/cameras/${cameraId}/imaging/profiles/${profileId}`),
+    onSuccess: () => {
+      invalidateProfiles();
+      notifications.show({ color: 'green', title: 'Mis à jour', message: 'Profil réenregistré avec les valeurs actuelles' });
+    },
+    onError: () => notifications.show({ color: 'red', title: 'Échec', message: 'Impossible de mettre à jour ce profil' }),
+  });
+
   if (!options || !settings) return null;
 
   const fields: { key: keyof ImagingSettings; label: string }[] = [
@@ -490,9 +499,17 @@ function ImagingControls({ cameraId }: { cameraId: string }) {
             title="Appliquer ce profil à la caméra"
             loading={applyProfileMutation.isPending && applyProfileMutation.variables === p.id}
             rightSection={
-              <span onClick={(e) => e.stopPropagation()}>
+              <Group gap={2} wrap="nowrap" onClick={(e) => e.stopPropagation()}>
+                <ActionIcon
+                  size="xs"
+                  variant="transparent"
+                  title="Réenregistrer avec les valeurs actuelles"
+                  onClick={() => updateProfileMutation.mutate(p.id)}
+                >
+                  <IconRefresh size={12} />
+                </ActionIcon>
                 <ConfirmDeleteButton message={`Supprimer le profil "${p.name}" ?`} onConfirm={() => removeProfileMutation.mutate(p.id)} />
-              </span>
+              </Group>
             }
             onClick={() => applyProfileMutation.mutate(p.id)}
           >
