@@ -171,24 +171,46 @@ export class SystemService {
     await this.events.log(bridge, 'manual_stop', `${service} arrêté manuellement (test)`);
   }
 
+  // Empêche deux start/stop tailscaled de s'exécuter en même temps (ex. double-clic, ou
+  // clic pendant qu'un `restart` précédent est encore en train de se négocier) : lancer
+  // `systemctl restart` par-dessus un restart déjà en cours peut laisser tailscaled dans
+  // un état transitoire cassé (`NoState`) au lieu de simplement le relancer proprement.
+  private tailscaleActionInProgress = false;
+
   // Arrêt volontaire de tailscaled. On marque l'arrêt comme "manuel" avant de couper le
   // service pour que la boucle de reconnexion/relance auto (TailscaleService) ne le
   // rallume pas tout seul au cycle suivant.
   async stopTailscaleService(): Promise<void> {
-    await this.tailscale.setManuallyStopped(true);
-    await this.runOrThrow('sudo systemctl stop tailscaled');
-    await this.tailscale.refreshStatus();
-    await this.events.log('tailscale', 'manual_stop', 'tailscaled arrêté manuellement');
+    if (this.tailscaleActionInProgress) {
+      throw new Error('Une action Tailscale est déjà en cours, patientez.');
+    }
+    this.tailscaleActionInProgress = true;
+    try {
+      await this.tailscale.setManuallyStopped(true);
+      await this.runOrThrow('sudo systemctl stop tailscaled');
+      await this.tailscale.refreshStatus();
+      await this.events.log('tailscale', 'manual_stop', 'tailscaled arrêté manuellement');
+    } finally {
+      this.tailscaleActionInProgress = false;
+    }
   }
 
   // `restart` plutôt que `start` : c'est la seule commande whitelistée sans mot de passe
   // dans les sudoers pour tailscaled, et `systemctl restart` démarre bien un service à
   // l'arrêt (pas seulement un service déjà actif).
   async startTailscaleService(): Promise<void> {
-    await this.tailscale.setManuallyStopped(false);
-    await this.runOrThrow('sudo systemctl restart tailscaled');
-    await this.tailscale.refreshStatus();
-    await this.events.log('tailscale', 'manual_start', 'tailscaled démarré manuellement');
+    if (this.tailscaleActionInProgress) {
+      throw new Error('Une action Tailscale est déjà en cours, patientez.');
+    }
+    this.tailscaleActionInProgress = true;
+    try {
+      await this.tailscale.setManuallyStopped(false);
+      await this.runOrThrow('sudo systemctl restart tailscaled');
+      await this.tailscale.refreshStatus();
+      await this.events.log('tailscale', 'manual_start', 'tailscaled démarré manuellement');
+    } finally {
+      this.tailscaleActionInProgress = false;
+    }
   }
 
   private async runOrThrow(cmd: string): Promise<string> {

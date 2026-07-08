@@ -111,6 +111,8 @@ export default function ToolsPage() {
       notifications.show({ color: 'red', title: 'Échec', message: errorMessage(err, 'Impossible d\'arrêter tailscaled.') }),
   });
 
+  const tailscaleActionPending = startTailscale.isPending || stopTailscale.isPending;
+
   const analyze = useMutation({
     mutationFn: () => api.post<OptimizeResult[]>('/devices/optimize-history?dryRun=true').then((r) => r.data),
     onSuccess: (data) => setResults(data),
@@ -167,7 +169,7 @@ export default function ToolsPage() {
               color="teal"
               onClick={() => startTailscale.mutate()}
               loading={startTailscale.isPending}
-              disabled={!!health?.tailscale.connected}
+              disabled={tailscaleActionPending || !!health?.tailscale.connected}
             >
               Démarrer
             </Button>
@@ -176,7 +178,7 @@ export default function ToolsPage() {
               message="Arrêter le service tailscaled ? L'accès distant sera coupé jusqu'au redémarrage."
               onConfirm={() => stopTailscale.mutate()}
               loading={stopTailscale.isPending}
-              disabled={!health?.tailscale.connected}
+              disabled={tailscaleActionPending || !health?.tailscale.connected}
               icon={<IconPlayerStop size={16} />}
             />
           </Group>
