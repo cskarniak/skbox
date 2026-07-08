@@ -25,6 +25,7 @@ export class CameraController {
       username?: string | null;
       password?: string | null;
       onvifPort?: number | null;
+      imagingApi?: string;
     },
   ) {
     if (!body.name?.trim() || !body.host?.trim()) {
@@ -46,6 +47,7 @@ export class CameraController {
       username?: string | null;
       password?: string | null;
       onvifPort?: number | null;
+      imagingApi?: string;
       active?: boolean;
       order?: number;
     },

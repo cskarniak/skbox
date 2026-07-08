@@ -116,6 +116,11 @@ model Camera {
   password  String?
   // Port ONVIF (PTZ + réglages image), null si la caméra n'expose pas ONVIF.
   onvifPort Int?     @default(8000)
+  // API utilisée pour les réglages image (luminosité/contraste/saturation/netteté) : "onvif" ou "reolink".
+  // Le PTZ passe toujours par ONVIF. Certaines caméras (ex. Reolink) répondent avec succès à
+  // SetImagingSettings en ONVIF sans jamais appliquer le changement — on bascule alors sur leur
+  // API CGI propriétaire, qui fonctionne réellement.
+  imagingApi String  @default("onvif")
   active    Boolean  @default(true)
   order     Int      @default(0)
   createdAt DateTime @default(now())

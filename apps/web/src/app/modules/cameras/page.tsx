@@ -52,6 +52,7 @@ interface Camera {
   username: string | null;
   password: string | null;
   onvifPort: number | null;
+  imagingApi: string;
   active: boolean;
   order: number;
 }
@@ -63,6 +64,7 @@ interface CameraConnection {
   username: string | null;
   password: string | null;
   onvifPort: number | null;
+  imagingApi: string;
 }
 
 interface PtzPreset {
@@ -155,6 +157,7 @@ function CameraFormModal({
   const [onvifPort, setOnvifPort] = useState<string>(
     initial?.onvifPort !== undefined && initial?.onvifPort !== null ? String(initial.onvifPort) : '8000',
   );
+  const [imagingApi, setImagingApi] = useState<string>(initial?.imagingApi ?? 'onvif');
 
   return (
     <Modal opened={opened} onClose={onClose} title={initial ? 'Modifier la caméra' : 'Nouvelle caméra'}>
@@ -200,6 +203,17 @@ function CameraFormModal({
           value={onvifPort}
           onChange={(e) => setOnvifPort(e.currentTarget.value.replace(/\D/g, ''))}
         />
+        <Select
+          label="API réglages image"
+          description="Reolink : leur SetImagingSettings ONVIF répond OK sans jamais s'appliquer, on passe alors par leur API propriétaire"
+          data={[
+            { value: 'onvif', label: 'ONVIF standard' },
+            { value: 'reolink', label: 'Reolink (API propriétaire)' },
+          ]}
+          value={imagingApi}
+          onChange={(v) => setImagingApi(v ?? 'onvif')}
+          allowDeselect={false}
+        />
         <Group justify="flex-end" mt="sm">
           <Button variant="subtle" onClick={onClose}>
             Annuler
@@ -217,6 +231,7 @@ function CameraFormModal({
                 username: username.trim() || null,
                 password: password || null,
                 onvifPort: onvifPort ? Number(onvifPort) : null,
+                imagingApi,
               })
             }
           >
@@ -615,6 +630,7 @@ export default function CamerasModulePage() {
                 username: editingCamera.username,
                 password: editingCamera.password,
                 onvifPort: editingCamera.onvifPort,
+                imagingApi: editingCamera.imagingApi,
               }
             : undefined
         }

@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaClient } from '@skbox/db';
 import { OnvifClient, OnvifImagingSettings } from './onvif-client';
+import { ReolinkClient } from './reolink-client';
 
 interface CameraConnectionDto {
   host: string;
@@ -10,6 +11,7 @@ interface CameraConnectionDto {
   username?: string | null;
   password?: string | null;
   onvifPort?: number | null;
+  imagingApi?: string;
 }
 
 interface CreateCameraDto extends CameraConnectionDto {
@@ -106,19 +108,28 @@ export class CameraService implements OnModuleInit {
   }
 
   async getImagingSettings(id: string) {
-    return (await this.getOnvifClient(id)).getImagingSettings();
+    return (await this.getImagingClient(id)).getImagingSettings();
   }
 
   async getImagingOptions(id: string) {
-    return (await this.getOnvifClient(id)).getImagingOptions();
+    return (await this.getImagingClient(id)).getImagingOptions();
   }
 
   async setImagingSettings(id: string, settings: OnvifImagingSettings) {
-    await (await this.getOnvifClient(id)).setImagingSettings(settings);
+    await (await this.getImagingClient(id)).setImagingSettings(settings);
   }
 
-  private async getOnvifClient(id: string): Promise<OnvifClient> {
+  private async getImagingClient(id: string): Promise<OnvifClient | ReolinkClient> {
     const camera = await this.prisma.camera.findUnique({ where: { id } });
+    if (!camera) throw new Error('Caméra introuvable');
+    if (camera.imagingApi === 'reolink') {
+      return new ReolinkClient(camera.host, 80, camera.username ?? '', camera.password ?? '');
+    }
+    return this.getOnvifClient(id, camera);
+  }
+
+  private async getOnvifClient(id: string, preloaded?: { host: string; onvifPort: number | null; username: string | null; password: string | null }): Promise<OnvifClient> {
+    const camera = preloaded ?? (await this.prisma.camera.findUnique({ where: { id } }));
     if (!camera) throw new Error('Caméra introuvable');
     if (!camera.onvifPort) throw new Error("Cette caméra n'a pas de port ONVIF configuré");
     return new OnvifClient(camera.host, camera.onvifPort, camera.username ?? '', camera.password ?? '');
