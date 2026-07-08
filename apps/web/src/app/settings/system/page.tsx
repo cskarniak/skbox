@@ -111,6 +111,7 @@ const EVENT_LABELS: Record<string, string> = {
   reconnected: 'Reconnecté',
   auto_restart: 'Relance auto',
   manual_stop: 'Arrêt manuel (test)',
+  manual_start: 'Démarrage manuel',
   boot: 'Démarrage machine',
 };
 
@@ -119,6 +120,7 @@ const EVENT_COLOR: Record<string, string> = {
   reconnected: 'teal',
   auto_restart: 'blue',
   manual_stop: 'orange',
+  manual_start: 'teal',
   boot: 'grape',
 };
 

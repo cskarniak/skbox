@@ -178,6 +178,11 @@ export class SystemService {
     await this.events.log('tailscale', 'manual_stop', 'tailscaled arrêté manuellement (test)');
   }
 
+  async startTailscaleService(): Promise<void> {
+    await this.runOrThrow('sudo systemctl start tailscaled');
+    await this.events.log('tailscale', 'manual_start', 'tailscaled démarré manuellement');
+  }
+
   private async runOrThrow(cmd: string): Promise<string> {
     try {
       const { stdout } = await execAsync(cmd, { timeout: 5000 });

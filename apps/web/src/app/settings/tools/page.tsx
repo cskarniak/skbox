@@ -1,11 +1,12 @@
 'use client';
 
 import { Card, Title, Text, Stack, Button, Table, Group, Badge, Loader, Center, Popover } from '@mantine/core';
-import { IconSearch, IconTrash } from '@tabler/icons-react';
+import { IconSearch, IconTrash, IconPlayerPlay, IconPlayerStop } from '@tabler/icons-react';
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
 import { api } from '@/lib/api';
+import { errorMessage } from '@/lib/errors';
 
 interface OptimizeResult {
   deviceId: string;
@@ -16,18 +17,28 @@ interface OptimizeResult {
   dryRun: boolean;
 }
 
+interface SystemHealth {
+  tailscale: {
+    connected: boolean;
+    backendState: string | null;
+    ips: string[];
+  };
+}
+
 function ConfirmButton({
   label,
   message,
   onConfirm,
   loading,
   disabled,
+  icon = <IconTrash size={16} />,
 }: {
   label: string;
   message: string;
   onConfirm: () => void;
   loading?: boolean;
   disabled?: boolean;
+  icon?: React.ReactNode;
 }) {
   const [opened, setOpened] = useState(false);
 
@@ -35,7 +46,7 @@ function ConfirmButton({
     <Popover opened={opened} onClose={() => setOpened(false)} position="bottom-start" withArrow>
       <Popover.Target>
         <Button
-          leftSection={<IconTrash size={16} />}
+          leftSection={icon}
           color="red"
           variant="light"
           size="sm"
@@ -71,7 +82,34 @@ function ConfirmButton({
 }
 
 export default function ToolsPage() {
+  const queryClient = useQueryClient();
   const [results, setResults] = useState<OptimizeResult[] | null>(null);
+
+  const { data: health } = useQuery<SystemHealth>({
+    queryKey: ['system-health'],
+    queryFn: () => api.get('/system/health').then((r) => r.data),
+    refetchInterval: 10000,
+  });
+
+  const startTailscale = useMutation({
+    mutationFn: () => api.post('/system/tailscale/start'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['system-health'] });
+      notifications.show({ color: 'teal', message: 'tailscaled démarré.' });
+    },
+    onError: (err) =>
+      notifications.show({ color: 'red', title: 'Échec', message: errorMessage(err, 'Impossible de démarrer tailscaled.') }),
+  });
+
+  const stopTailscale = useMutation({
+    mutationFn: () => api.post('/system/tailscale/stop'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['system-health'] });
+      notifications.show({ color: 'teal', message: 'tailscaled arrêté.' });
+    },
+    onError: (err) =>
+      notifications.show({ color: 'red', title: 'Échec', message: errorMessage(err, 'Impossible d\'arrêter tailscaled.') }),
+  });
 
   const analyze = useMutation({
     mutationFn: () => api.post<OptimizeResult[]>('/devices/optimize-history?dryRun=true').then((r) => r.data),
@@ -101,6 +139,50 @@ export default function ToolsPage() {
 
   return (
     <Stack gap="lg">
+      <Card shadow="sm" padding="lg" withBorder>
+        <Stack gap="md">
+          <div>
+            <Title order={4}>Tailscale (accès distant)</Title>
+            <Text size="sm" c="dimmed">
+              Démarre ou arrête le service <code>tailscaled</code> sur le serveur. L&apos;arrêter coupe
+              l&apos;accès distant à Skbox tant qu&apos;il n&apos;est pas relancé.
+            </Text>
+          </div>
+
+          <Group gap="sm">
+            <Badge color={health?.tailscale.connected ? 'teal' : 'red'} variant="light">
+              {health?.tailscale.connected ? 'Connecté' : (health?.tailscale.backendState ?? 'Arrêté')}
+            </Badge>
+            {health && health.tailscale.ips.length > 0 && (
+              <Text size="xs" c="dimmed" ff="monospace">
+                {health.tailscale.ips.join(', ')}
+              </Text>
+            )}
+          </Group>
+
+          <Group gap="sm">
+            <Button
+              leftSection={<IconPlayerPlay size={16} />}
+              variant="light"
+              color="teal"
+              onClick={() => startTailscale.mutate()}
+              loading={startTailscale.isPending}
+              disabled={!!health?.tailscale.connected}
+            >
+              Démarrer
+            </Button>
+            <ConfirmButton
+              label="Arrêter"
+              message="Arrêter le service tailscaled ? L'accès distant sera coupé jusqu'au redémarrage."
+              onConfirm={() => stopTailscale.mutate()}
+              loading={stopTailscale.isPending}
+              disabled={!health?.tailscale.connected}
+              icon={<IconPlayerStop size={16} />}
+            />
+          </Group>
+        </Stack>
+      </Card>
+
       <Card shadow="sm" padding="lg" withBorder>
         <Stack gap="md">
           <div>
