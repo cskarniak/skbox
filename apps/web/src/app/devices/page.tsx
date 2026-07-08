@@ -1,11 +1,12 @@
 'use client';
 
-import { Title, Text, Stack, Table, Switch, Badge, MultiSelect, ActionIcon, Modal, Tooltip, Center, Loader, ScrollArea, Button, TextInput, NumberInput, Group, Alert, Checkbox, SegmentedControl, Divider, Select } from '@mantine/core';
+import { AppShell, Title, Text, Stack, Table, Switch, Badge, MultiSelect, ActionIcon, Modal, Tooltip, Center, Loader, ScrollArea, Button, TextInput, NumberInput, Group, Alert, Checkbox, SegmentedControl, Divider, Select } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconHistory, IconTrash, IconAlertTriangle, IconAdjustments, IconBattery, IconLink, IconPlus, IconId } from '@tabler/icons-react';
+import { IconSmartHome, IconHistory, IconTrash, IconAlertTriangle, IconAdjustments, IconBattery, IconLink, IconPlus, IconId } from '@tabler/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '@/lib/api';
+import { AppNav } from '@/components/AppNav';
 import {
   DisplayPreference,
   DisplayType,
@@ -741,7 +742,7 @@ function DeviceRow({
   );
 }
 
-export default function SettingsDevicesPage() {
+export default function DevicesPage() {
   const { data: devices } = useQuery<Device[]>({
     queryKey: ['devices'],
     queryFn: () => api.get('/devices').then((r) => r.data),
@@ -763,7 +764,21 @@ export default function SettingsDevicesPage() {
   });
 
   return (
-    <Stack gap="lg">
+    <AppShell header={{ height: 60 }} padding="md">
+      <AppShell.Header>
+        <Group h="100%" px="md" justify="space-between" wrap="nowrap">
+          <Group gap="xs" wrap="nowrap">
+            <IconSmartHome size={28} />
+            <Title order={3} visibleFrom="sm">Skbox</Title>
+          </Group>
+          <Group gap="md" wrap="nowrap">
+            <AppNav active="appareils" />
+          </Group>
+        </Group>
+      </AppShell.Header>
+
+      <AppShell.Main>
+      <Stack gap="lg">
       <div>
         <Title order={4}>Appareils</Title>
         <Text size="sm" c="dimmed">
@@ -814,6 +829,8 @@ export default function SettingsDevicesPage() {
           ))}
         </Table.Tbody>
       </Table>
-    </Stack>
+      </Stack>
+      </AppShell.Main>
+    </AppShell>
   );
 }

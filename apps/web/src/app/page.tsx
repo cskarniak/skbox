@@ -2,7 +2,6 @@
 
 import {
   AppShell,
-  Box,
   Group,
   Title,
   Text,
@@ -15,7 +14,6 @@ import {
   Center,
   Tooltip,
   Slider,
-  Button,
   SegmentedControl,
   Modal,
   Select,
@@ -34,7 +32,6 @@ import {
   IconAdjustments,
   IconToggleLeft,
   IconBolt,
-  IconDevicesPc,
   IconLayoutGrid,
   IconGridDots,
   IconLayoutList,
@@ -506,11 +503,6 @@ export default function HomePage() {
     localStorage.setItem('skbox-tile-size', size);
   };
 
-  const permitJoin = useMutation({
-    mutationFn: (enable: boolean) =>
-      api.post('/zigbee/permit-join', { enable, duration: 120 }),
-  });
-
   return (
     <AppShell header={{ height: 60 }} padding="md">
       <AppShell.Header>
@@ -531,18 +523,6 @@ export default function HomePage() {
                 { label: <IconGridDots size={14} />, value: 'small' },
               ]}
             />
-            <Tooltip label="Autoriser l'appairage Zigbee pendant 2 min">
-              <Button
-                variant="light"
-                size="sm"
-                px="xs"
-                leftSection={<IconDevicesPc size={16} />}
-                loading={permitJoin.isPending}
-                onClick={() => permitJoin.mutate(true)}
-              >
-                <Box visibleFrom="sm">Appairer</Box>
-              </Button>
-            </Tooltip>
           </Group>
         </Group>
       </AppShell.Header>
@@ -558,8 +538,8 @@ export default function HomePage() {
               <IconSmartHome size={48} opacity={0.5} />
               <Text c="dimmed">Aucun appareil connecté</Text>
               <Text c="dimmed" size="sm">
-                Cliquez sur &quot;Appairer&quot; pour ajouter un appareil
-                Zigbee, ou connectez un bridge Matter
+                Rendez-vous dans Réglages &gt; Appairage pour ajouter un
+                appareil Zigbee, ou connectez un bridge Matter
               </Text>
             </Stack>
           </Center>
