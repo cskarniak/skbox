@@ -231,6 +231,7 @@ function CameraFormModal({
 function PtzPad({ cameraId }: { cameraId: string }) {
   const moveMutation = useMutation({
     mutationFn: (vector: { x: number; y: number; zoom: number }) => api.post(`/cameras/${cameraId}/ptz/move`, vector),
+    onError: () => notifications.show({ color: 'red', title: 'Échec', message: 'Impossible de déplacer la caméra' }),
   });
   const stopMutation = useMutation({
     mutationFn: () => api.post(`/cameras/${cameraId}/ptz/stop`),
@@ -373,6 +374,10 @@ function ImagingControls({ cameraId }: { cameraId: string }) {
 
   const setMutation = useMutation({
     mutationFn: (patch: ImagingSettings) => api.patch(`/cameras/${cameraId}/imaging`, patch),
+    onError: () => {
+      notifications.show({ color: 'red', title: 'Échec', message: "Impossible d'appliquer le réglage à la caméra" });
+      if (settings) setLocal(settings);
+    },
   });
 
   if (!options || !settings) return null;
