@@ -29,6 +29,10 @@ interface UpdateCameraDto extends Partial<CameraConnectionDto> {
 @Injectable()
 export class CameraService implements OnModuleInit {
   private readonly logger = new Logger(CameraService.name);
+  // Le login CGI Reolink est limité en nombre de sessions simultanées ; on réutilise le même
+  // client (et son token) tant que la caméra n'est pas modifiée, au lieu de se reconnecter à
+  // chaque requête d'imaging.
+  private readonly reolinkClients = new Map<string, ReolinkClient>();
 
   constructor(
     @Inject('PRISMA') private readonly prisma: PrismaClient,
@@ -61,6 +65,7 @@ export class CameraService implements OnModuleInit {
 
   async update(id: string, data: UpdateCameraDto) {
     const camera = await this.prisma.camera.update({ where: { id }, data });
+    this.reolinkClients.delete(id);
     if (camera.active) {
       await this.syncStream(camera.id, this.buildRtspUrl(camera));
     } else {
@@ -152,7 +157,12 @@ export class CameraService implements OnModuleInit {
     const camera = await this.prisma.camera.findUnique({ where: { id } });
     if (!camera) throw new Error('Caméra introuvable');
     if (camera.imagingApi === 'reolink') {
-      return new ReolinkClient(camera.host, 443, camera.username ?? '', camera.password ?? '');
+      let client = this.reolinkClients.get(id);
+      if (!client) {
+        client = new ReolinkClient(camera.host, 443, camera.username ?? '', camera.password ?? '');
+        this.reolinkClients.set(id, client);
+      }
+      return client;
     }
     return this.getOnvifClient(id, camera);
   }

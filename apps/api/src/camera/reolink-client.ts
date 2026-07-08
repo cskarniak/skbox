@@ -62,7 +62,12 @@ export class ReolinkClient {
     const token = await this.getToken();
     const body = await this.post(`/cgi-bin/api.cgi?cmd=${cmd}&token=${token}`, [{ cmd, action: 0, param }]);
     const entry = Array.isArray(body) ? body[0] : body;
-    if (entry?.error) throw new Error(`Reolink ${cmd} a échoué: ${entry.error.detail ?? JSON.stringify(entry.error)}`);
+    if (entry?.error) {
+      // Le token peut avoir expiré côté caméra ; on force une reconnexion au prochain appel
+      // plutôt que de rester bloqué indéfiniment sur un token invalide.
+      this.token = null;
+      throw new Error(`Reolink ${cmd} a échoué: ${entry.error.detail ?? JSON.stringify(entry.error)}`);
+    }
     return (Array.isArray(body) ? body : [body]) as { value: T }[];
   }
 
