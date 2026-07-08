@@ -20,7 +20,7 @@ import { AppNav } from '@/components/AppNav';
 const SUB_TABS = [
   { value: 'preferences', label: 'Préférences', icon: <IconAdjustments size={16} />, href: '/settings/preferences' },
   { value: 'pairing', label: 'Appairage', icon: <IconDevicesPc size={16} />, href: '/settings/pairing' },
-  { value: 'themes', label: 'Thèmes', icon: <IconCategory size={16} />, href: '/settings/themes' },
+  { value: 'parametres', label: 'Paramètres', icon: <IconCategory size={16} />, href: '/settings/parametres' },
   { value: 'mqtt-logs', label: 'Logs MQTT', icon: <IconLogs size={16} />, href: '/settings/mqtt-logs' },
   { value: 'tools', label: 'Outils', icon: <IconTool size={16} />, href: '/settings/tools' },
   { value: 'system', label: 'Système', icon: <IconServer size={16} />, href: '/settings/system' },

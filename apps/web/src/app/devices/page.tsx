@@ -2,13 +2,11 @@
 
 import { AppShell, Title, Text, Stack, Table, Switch, Badge, MultiSelect, ActionIcon, Modal, Tooltip, Center, Loader, ScrollArea, Button, TextInput, NumberInput, Group, Alert, Checkbox, SegmentedControl, Divider, Select } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconSmartHome, IconHistory, IconTrash, IconAlertTriangle, IconAdjustments, IconBattery, IconLink, IconPlus, IconId } from '@tabler/icons-react';
-import { notifications } from '@mantine/notifications';
+import { IconSmartHome, IconHistory, IconTrash, IconAlertTriangle, IconAdjustments, IconBattery, IconLink, IconId } from '@tabler/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '@/lib/api';
 import { AppNav } from '@/components/AppNav';
-import { DeleteConfirmButton } from '@/components/DeleteConfirmButton';
 import {
   DisplayPreference,
   DisplayType,
@@ -19,11 +17,6 @@ import {
   parseDisplayPreferences,
   parseHistoryFieldConfig,
 } from '@/lib/history';
-
-function errorMessage(err: unknown, fallback: string): string {
-  const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-  return message ?? fallback;
-}
 
 interface Theme {
   id: string;
@@ -342,132 +335,6 @@ function PreferencesModal({ device, opened, onClose }: { device: Device; opened:
         </Stack>
       )}
     </Modal>
-  );
-}
-
-function NamedListManager({
-  title,
-  description,
-  queryKey,
-  endpoint,
-}: {
-  title: string;
-  description: string;
-  queryKey: string;
-  endpoint: string;
-}) {
-  const queryClient = useQueryClient();
-  const [name, setName] = useState('');
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingName, setEditingName] = useState('');
-
-  const { data: items } = useQuery<NamedListItem[]>({
-    queryKey: [queryKey],
-    queryFn: () => api.get(endpoint).then((r) => r.data),
-  });
-
-  const createItem = useMutation({
-    mutationFn: () => api.post(endpoint, { name }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [queryKey] });
-      setName('');
-    },
-  });
-
-  const renameItem = useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) => api.patch(`${endpoint}/${id}`, { name }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [queryKey] });
-      queryClient.invalidateQueries({ queryKey: ['devices'] });
-      setEditingId(null);
-    },
-    onError: (err) => notifications.show({ color: 'red', message: errorMessage(err, 'Impossible de renommer.') }),
-  });
-
-  const deleteItem = useMutation({
-    mutationFn: (id: string) => api.delete(`${endpoint}/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [queryKey] }),
-    onError: (err) => notifications.show({ color: 'red', message: errorMessage(err, 'Impossible de supprimer.') }),
-  });
-
-  const startEditing = (item: NamedListItem) => {
-    setEditingId(item.id);
-    setEditingName(item.name);
-  };
-
-  const commitEditing = () => {
-    if (!editingId) return;
-    const trimmed = editingName.trim();
-    if (!trimmed) {
-      setEditingId(null);
-      return;
-    }
-    renameItem.mutate({ id: editingId, name: trimmed });
-  };
-
-  return (
-    <Stack gap="xs" style={{ flex: 1 }}>
-      <div>
-        <Text fw={500} size="sm">
-          {title}
-        </Text>
-        <Text size="xs" c="dimmed">
-          {description}
-        </Text>
-      </div>
-      <Group gap="xs">
-        <TextInput
-          size="xs"
-          placeholder="Nom"
-          value={name}
-          onChange={(e) => setName(e.currentTarget.value)}
-          style={{ flex: 1 }}
-        />
-        <ActionIcon
-          variant="light"
-          disabled={!name.trim()}
-          loading={createItem.isPending}
-          onClick={() => createItem.mutate()}
-        >
-          <IconPlus size={16} />
-        </ActionIcon>
-      </Group>
-      <Table striped highlightOnHover verticalSpacing={4} fz="xs">
-        <Table.Tbody>
-          {(items ?? []).map((item) => (
-            <Table.Tr key={item.id}>
-              <Table.Td>
-                {editingId === item.id ? (
-                  <TextInput
-                    size="xs"
-                    autoFocus
-                    value={editingName}
-                    onChange={(e) => setEditingName(e.currentTarget.value)}
-                    onBlur={commitEditing}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') commitEditing();
-                      if (e.key === 'Escape') setEditingId(null);
-                    }}
-                  />
-                ) : (
-                  <Text size="xs" style={{ cursor: 'pointer' }} onClick={() => startEditing(item)}>
-                    {item.name}
-                  </Text>
-                )}
-              </Table.Td>
-              <Table.Td w={28}>
-                <DeleteConfirmButton
-                  size="xs"
-                  label={`Supprimer « ${item.name} » ?`}
-                  loading={deleteItem.isPending && deleteItem.variables === item.id}
-                  onConfirm={() => deleteItem.mutate(item.id)}
-                />
-              </Table.Td>
-            </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
-    </Stack>
   );
 }
 
@@ -833,24 +700,10 @@ export default function DevicesPage() {
         <Text size="sm" c="dimmed">
           Contrôle la visibilité sur le dashboard, l'activation (les messages MQTT sont ignorés pour un
           appareil inactivé), l'historisation des valeurs et l'appartenance aux thèmes. Le nom, l'objet
-          parent, la pièce et la catégorie de chaque appareil se modifient depuis sa fiche.
+          parent, la pièce et la catégorie de chaque appareil se modifient depuis sa fiche. La gestion des
+          thèmes, pièces et objets se fait depuis Réglages &gt; Paramètres.
         </Text>
       </div>
-
-      <Group align="flex-start" grow>
-        <NamedListManager
-          title="Objets"
-          description="Regroupements de haut niveau (ex: Maison, Garage, Jardin)."
-          queryKey="parent-objects"
-          endpoint="/parent-objects"
-        />
-        <NamedListManager
-          title="Pièces"
-          description="Pièces disponibles pour l'affectation des appareils."
-          queryKey="rooms"
-          endpoint="/rooms"
-        />
-      </Group>
 
       <Table striped highlightOnHover verticalSpacing="sm">
         <Table.Thead>

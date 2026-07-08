@@ -6,12 +6,9 @@ import { notifications } from '@mantine/notifications';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from '@/lib/api';
+import { errorMessage } from '@/lib/errors';
 import { DeleteConfirmButton } from '@/components/DeleteConfirmButton';
-
-function errorMessage(err: unknown, fallback: string): string {
-  const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-  return message ?? fallback;
-}
+import { NamedListManager } from '@/components/NamedListManager';
 
 interface Theme {
   id: string;
@@ -21,7 +18,7 @@ interface Theme {
   devices: { id: string }[];
 }
 
-export default function SettingsThemesPage() {
+export default function SettingsParametresPage() {
   const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -73,10 +70,37 @@ export default function SettingsThemesPage() {
   return (
     <Stack gap="lg">
       <div>
-        <Title order={4}>Thèmes</Title>
+        <Title order={4}>Paramètres</Title>
+        <Text size="sm" c="dimmed">
+          Thèmes, pièces et objets utilisés pour organiser et regrouper les appareils. L'assignation des
+          appareils se fait depuis l'onglet Appareils.
+        </Text>
+      </div>
+
+      <Group align="flex-start" grow>
+        <Card shadow="sm" padding="lg" withBorder>
+          <NamedListManager
+            title="Objets"
+            description="Regroupements de haut niveau (ex: Maison, Garage, Jardin)."
+            queryKey="parent-objects"
+            endpoint="/parent-objects"
+          />
+        </Card>
+        <Card shadow="sm" padding="lg" withBorder>
+          <NamedListManager
+            title="Pièces"
+            description="Pièces disponibles pour l'affectation des appareils."
+            queryKey="rooms"
+            endpoint="/rooms"
+          />
+        </Card>
+      </Group>
+
+      <div>
+        <Title order={5}>Thèmes</Title>
         <Text size="sm" c="dimmed">
           Groupes libres d'appareils utilisés pour organiser les sections du dashboard, indépendants des
-          pièces. L'assignation des appareils à un thème se fait depuis l'onglet Appareils.
+          pièces.
         </Text>
       </div>
 
