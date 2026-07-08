@@ -188,7 +188,7 @@ export class SystemService {
     try {
       await this.tailscale.setManuallyStopped(true);
       await this.runOrThrow('sudo systemctl stop tailscaled');
-      await this.tailscale.refreshStatus();
+      await this.tailscale.waitUntilSettled();
       await this.events.log('tailscale', 'manual_stop', 'tailscaled arrêté manuellement');
     } finally {
       this.tailscaleActionInProgress = false;
@@ -206,7 +206,7 @@ export class SystemService {
     try {
       await this.tailscale.setManuallyStopped(false);
       await this.runOrThrow('sudo systemctl restart tailscaled');
-      await this.tailscale.refreshStatus();
+      await this.tailscale.waitUntilSettled();
       await this.events.log('tailscale', 'manual_start', 'tailscaled démarré manuellement');
     } finally {
       this.tailscaleActionInProgress = false;

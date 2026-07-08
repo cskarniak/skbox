@@ -65,6 +65,27 @@ export class TailscaleService implements OnModuleInit, OnModuleDestroy {
     return this.lastStatus;
   }
 
+  // États transitoires que traverse tailscaled juste après un restart, avant de se
+  // stabiliser sur "Running" (connecté) ou "Stopped"/une erreur durable.
+  private static readonly TRANSITIONAL_STATES = new Set(['Starting', 'NoState']);
+
+  // `systemctl restart` rend la main dès que le process est relancé, bien avant que
+  // tailscaled ait fini de renégocier avec le coordinateur (BackendState reste sur
+  // "Starting"/"NoState" plusieurs secondes, parfois plus). Si on relâche le verrou
+  // d'action dès le retour de systemctl, le bouton Démarrer redevient cliquable pendant
+  // cette fenêtre et un deuxième restart lancé par-dessus casse l'état. On bloque donc
+  // l'appelant (et par ricochet la requête HTTP / le bouton frontend) jusqu'à ce que
+  // l'état se stabilise, ou jusqu'à un délai max.
+  async waitUntilSettled(maxWaitMs = 15000): Promise<TailscaleStatus> {
+    const start = Date.now();
+    let status = await this.refreshStatus();
+    while (TailscaleService.TRANSITIONAL_STATES.has(status.backendState ?? '') && Date.now() - start < maxWaitMs) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      status = await this.refreshStatus();
+    }
+    return status;
+  }
+
   // Persisté (survit à un redémarrage de skbox-api) : tant que l'utilisateur a
   // volontairement arrêté tailscaled depuis Réglages > Outils, la boucle de
   // reconnexion/relance auto ne doit pas le rallumer dans son dos.
