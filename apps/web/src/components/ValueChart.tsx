@@ -67,7 +67,7 @@ export function ValueChart({
           <YAxis tick={{ fontSize: 11 }} width={48} tickFormatter={formatValue} {...yAxisProps} />
           <RechartsTooltip labelFormatter={(v) => formatTime(v as number)} formatter={(v) => [formatValue(v as number), '']} />
           <Bar dataKey="value" fill={color} radius={[4, 4, 0, 0]} maxBarSize={24} />
-          <Brush dataKey="time" height={24} tickFormatter={formatDate} travellerWidth={8} />
+          <Brush dataKey="time" height={32} tickFormatter={formatDate} travellerWidth={18} />
         </BarChart>
       ) : effectiveChartType === 'area' ? (
         <AreaChart data={series}>
@@ -82,7 +82,7 @@ export function ValueChart({
           <YAxis tick={{ fontSize: 11 }} width={48} tickFormatter={formatValue} {...yAxisProps} />
           <RechartsTooltip labelFormatter={(v) => formatTime(v as number)} formatter={(v) => [formatValue(v as number), '']} />
           <Area type={lineType} dataKey="value" stroke={color} strokeWidth={2} fill={`url(#${gradientId})`} />
-          <Brush dataKey="time" height={24} tickFormatter={formatDate} travellerWidth={8} />
+          <Brush dataKey="time" height={32} tickFormatter={formatDate} travellerWidth={18} />
         </AreaChart>
       ) : (
         <LineChart data={series}>
@@ -91,7 +91,7 @@ export function ValueChart({
           <YAxis tick={{ fontSize: 11 }} width={48} tickFormatter={formatValue} {...yAxisProps} />
           <RechartsTooltip labelFormatter={(v) => formatTime(v as number)} formatter={(v) => [formatValue(v as number), '']} />
           <Line type={lineType} dataKey="value" stroke={color} strokeWidth={2} dot={false} />
-          <Brush dataKey="time" height={24} tickFormatter={formatDate} travellerWidth={8} />
+          <Brush dataKey="time" height={32} tickFormatter={formatDate} travellerWidth={18} />
         </LineChart>
       )}
     </ResponsiveContainer>
@@ -237,7 +237,7 @@ export function OverlayChart({ series, height = 280 }: { series: OverlaySeries[]
             yAxisId={yAxisIdFor(s)}
           />
         ))}
-        <Brush dataKey="time" height={24} tickFormatter={formatDate} travellerWidth={8} />
+        <Brush dataKey="time" height={32} tickFormatter={formatDate} travellerWidth={18} />
       </LineChart>
     </ResponsiveContainer>
   );
