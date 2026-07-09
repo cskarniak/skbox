@@ -499,6 +499,14 @@ function DeviceCard({ device }: { device: Device }) {
         </Badge>
       )}
 
+      {/* Certains capteurs (ex: HEIMAN HS1MS-EF) n'exposent qu'un booléen de pile
+          faible via Zigbee2MQTT, jamais de pourcentage. */}
+      {state.battery === undefined && state.battery_low !== undefined && (
+        <Badge size="sm" variant="light" color={state.battery_low ? 'red' : 'green'} mt="xs">
+          Pile {state.battery_low ? 'faible' : 'OK'}
+        </Badge>
+      )}
+
       {state.linkquality !== undefined && (
         <Text size="xs" c="dimmed">
           Signal : {state.linkquality}/255
