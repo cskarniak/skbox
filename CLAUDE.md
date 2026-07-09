@@ -50,8 +50,8 @@
 - Zigbee2MQTT UI at http://localhost:8080
 
 ## Deploying to the test server (skbox-mini)
-- **Always ask for explicit confirmation before running the deploy** (`ssh skbox-mini 'cd ~/skbox && git pull && bash deploy/deploy.sh'`), even right after finishing and verifying a fix. Committing and pushing to `origin/main` does not imply permission to deploy.
-- Committing to git still doesn't require asking (per standing repo convention), only the deploy step itself.
+- Pushing to `origin/main` implies permission to deploy: run the deploy (`ssh skbox-mini 'cd ~/skbox && git pull && bash deploy/deploy.sh'`) right after a push without asking again. (Until 2026-07-09 this required a separate explicit confirmation per deploy — the user lifted that requirement so a push alone is now sufficient authorization.)
+- Still ask first if deploying independently of a push you just made (e.g. redeploying an older commit, or after someone else pushed).
 
 ## Deletion confirmations (UI convention)
 - **Simple deletion** (default): removing an object or a stored record (a graph/panel, a scenario, a room, a theme, etc.) requires a lightweight confirmation — a short message plus a Yes/No (Oui/Non) button, no typed input. Use this unless told otherwise.
