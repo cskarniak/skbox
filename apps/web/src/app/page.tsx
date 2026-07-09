@@ -44,6 +44,7 @@ import { api } from '@/lib/api';
 import { useMemo } from 'react';
 import { AppNav } from '@/components/AppNav';
 import { ValueChart } from '@/components/ValueChart';
+import { ExpandableChart } from '@/components/ExpandableChart';
 import { LatestValue } from '@/components/LatestValue';
 import {
   CHART_COLORS,
@@ -262,12 +263,17 @@ function DeviceHistoryModal({ device, opened, onClose }: { device: Device; opene
                       ) : effectiveType === 'table' ? (
                         <HistoryValueTable series={prefSeries} />
                       ) : (
-                        <ValueChart
-                          series={prefSeries}
-                          chartType={pref.chartType ?? 'line'}
-                          color={CHART_COLORS[0]}
-                          valueKey={pref.valueKey}
-                        />
+                        <ExpandableChart title={`${device.name} · ${formatValueLabel(pref.valueKey)}`}>
+                          {(height) => (
+                            <ValueChart
+                              series={prefSeries}
+                              chartType={pref.chartType ?? 'line'}
+                              color={CHART_COLORS[0]}
+                              valueKey={pref.valueKey}
+                              height={height}
+                            />
+                          )}
+                        </ExpandableChart>
                       );
                     })()
                   )}
@@ -306,7 +312,9 @@ function DeviceHistoryModal({ device, opened, onClose }: { device: Device; opene
             ) : displayType === 'table' ? (
               <HistoryValueTable series={series} />
             ) : (
-              <ValueChart series={series} chartType="area" color={CHART_COLORS[0]} valueKey={activeKey} />
+              <ExpandableChart title={`${device.name} · ${formatValueLabel(activeKey)}`}>
+                {(height) => <ValueChart series={series} chartType="area" color={CHART_COLORS[0]} valueKey={activeKey} height={height} />}
+              </ExpandableChart>
             )}
           </Stack>
         )}

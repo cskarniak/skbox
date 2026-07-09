@@ -41,6 +41,7 @@ import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/rea
 import { api } from '@/lib/api';
 import { AppNav } from '@/components/AppNav';
 import { ValueChart, OverlayChart, OverlaySeries, ChartType } from '@/components/ValueChart';
+import { ExpandableChart } from '@/components/ExpandableChart';
 import { LatestValue } from '@/components/LatestValue';
 import {
   CHART_COLORS,
@@ -424,7 +425,9 @@ function ChartPanel({
           <Text size="xs" c="dimmed">
             {device?.name} · {formatValueLabel(panel.valueKey)}
           </Text>
-          <ValueChart series={series} chartType={panel.chartType} color={color} valueKey={panel.valueKey} />
+          <ExpandableChart title={`${device?.name} · ${formatValueLabel(panel.valueKey)}`}>
+            {(height) => <ValueChart series={series} chartType={panel.chartType} color={color} valueKey={panel.valueKey!} height={height} />}
+          </ExpandableChart>
         </Stack>
       )}
     </Card>
@@ -542,7 +545,7 @@ function OverlayGroupPanel({
           </Text>
         </Center>
       ) : (
-        <OverlayChart series={series} />
+        <ExpandableChart>{(height) => <OverlayChart series={series} height={height} />}</ExpandableChart>
       )}
     </Card>
   );
