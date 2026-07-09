@@ -391,6 +391,11 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
           );
         }
       }
+      if (condition.type === 'time_range') {
+        const now = new Date();
+        const current = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        descriptions.push(`Condition : plage horaire ${condition.from}–${condition.to} — heure : ${current}`);
+      }
     }
 
     return { values, conditions: descriptions };
