@@ -6,6 +6,7 @@ import { MqttService } from '../mqtt/mqtt.service';
 import { SettingsService } from '../settings/settings.service';
 import { SystemEventsService } from '../system-events/system-events.service';
 import { hasSignificantChange } from '../devices/history-change.util';
+import { TriggerContextService } from '../scenarios/trigger-context.service';
 
 const execAsync = promisify(exec);
 
@@ -48,6 +49,7 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
     private readonly mqtt: MqttService,
     private readonly settings: SettingsService,
     private readonly events: SystemEventsService,
+    private readonly triggerContext: TriggerContextService,
   ) {}
 
   private async getWatchdogTimeoutMs(): Promise<number> {
@@ -222,11 +224,12 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
     });
 
     if (device.trackHistory && hasSignificantChange(existing?.state, stateData, existing?.historyFieldConfig)) {
+      const scenarioContext = this.triggerContext.consume(device.id);
       await this.prisma.deviceEvent.create({
         data: {
           deviceId: device.id,
           event: 'state_update',
-          data: JSON.stringify(stateData),
+          data: JSON.stringify(scenarioContext ? { ...stateData, _scenario: scenarioContext } : stateData),
         },
       });
     }

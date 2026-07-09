@@ -9,6 +9,7 @@ import {
 } from '@skbox/shared';
 import { CronExpressionParser } from 'cron-parser';
 import { MqttService } from '../mqtt/mqtt.service';
+import { TriggerContextService, TriggerContextValue } from './trigger-context.service';
 
 @Injectable()
 export class ScenariosService implements OnModuleInit, OnModuleDestroy {
@@ -21,6 +22,7 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
   constructor(
     @Inject('PRISMA') private readonly prisma: PrismaClient,
     private readonly mqtt: MqttService,
+    private readonly triggerContext: TriggerContextService,
   ) {}
 
   async onModuleInit() {
@@ -187,6 +189,7 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
           return;
         }
 
+        await this.recordTriggerContextForActions(fresh.name, { type: 'cron' } as Trigger, conditions, actions);
         await this.executeActions(actions);
         await this.prisma.scenario.update({
           where: { id: fresh.id },
@@ -230,6 +233,7 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
       const actions: Action[] = JSON.parse(scenario.actions);
       this.executing = true;
       try {
+        await this.recordTriggerContextForActions(scenario.name, trigger, conditions, actions);
         await this.executeActions(actions);
         await this.prisma.scenario.update({
           where: { id: scenario.id },
@@ -302,6 +306,48 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
       case 'lt': return a < b;
       case 'lte': return a <= b;
       default: return false;
+    }
+  }
+
+  // Rassemble les valeurs des capteurs impliqués dans le déclencheur et les conditions
+  // d'un scénario (celles qui ont justifié son exécution), pour les attacher à l'entrée
+  // d'historique du/des appareil(s) actionné(s) — voir TriggerContextService.
+  private async captureTriggerValues(trigger: Trigger, conditions: Condition[]): Promise<TriggerContextValue[]> {
+    const refs: { deviceId: string; property: string }[] = [];
+    if (trigger.type === 'device_state') refs.push({ deviceId: trigger.deviceId, property: trigger.property });
+    for (const condition of conditions) {
+      if (condition.type === 'device_state') refs.push({ deviceId: condition.deviceId, property: condition.property });
+      if (condition.type === 'device_diff') {
+        refs.push({ deviceId: condition.deviceIdA, property: condition.propertyA });
+        refs.push({ deviceId: condition.deviceIdB, property: condition.propertyB });
+      }
+    }
+    if (refs.length === 0) return [];
+
+    const dedupedRefs = [...new Map(refs.map((r) => [`${r.deviceId}:${r.property}`, r])).values()];
+
+    const devices = await this.prisma.device.findMany({
+      where: { id: { in: [...new Set(dedupedRefs.map((r) => r.deviceId))] } },
+    });
+    const deviceById = new Map(devices.map((d) => [d.id, d]));
+
+    return dedupedRefs
+      .map(({ deviceId, property }) => {
+        const device = deviceById.get(deviceId);
+        if (!device) return null;
+        const state = JSON.parse(device.state || '{}');
+        return { deviceId, deviceName: device.name, property, value: state[property] };
+      })
+      .filter((v): v is TriggerContextValue => v !== null);
+  }
+
+  private async recordTriggerContextForActions(scenarioName: string, trigger: Trigger, conditions: Condition[], actions: Action[]) {
+    const values = await this.captureTriggerValues(trigger, conditions);
+    if (values.length === 0) return;
+    for (const action of actions) {
+      if (action.type === 'device_command') {
+        this.triggerContext.record(action.deviceId, { scenarioName, values });
+      }
     }
   }
 

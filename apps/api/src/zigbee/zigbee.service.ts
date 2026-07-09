@@ -6,6 +6,7 @@ import { MqttService } from '../mqtt/mqtt.service';
 import { SettingsService } from '../settings/settings.service';
 import { SystemEventsService } from '../system-events/system-events.service';
 import { hasSignificantChange } from '../devices/history-change.util';
+import { TriggerContextService } from '../scenarios/trigger-context.service';
 
 const execAsync = promisify(exec);
 
@@ -52,6 +53,7 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
     private readonly mqtt: MqttService,
     private readonly settings: SettingsService,
     private readonly events: SystemEventsService,
+    private readonly triggerContext: TriggerContextService,
   ) {}
 
   private async getHealthcheckTimeoutMs(): Promise<number> {
@@ -307,11 +309,12 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
     if (count === 0) return;
 
     if (device.trackHistory && hasSignificantChange(device.state, state, device.historyFieldConfig)) {
+      const scenarioContext = this.triggerContext.consume(device.id);
       await this.prisma.deviceEvent.create({
         data: {
           deviceId: device.id,
           event: 'state_update',
-          data: JSON.stringify(state),
+          data: JSON.stringify(scenarioContext ? { ...state, _scenario: scenarioContext } : state),
         },
       });
     }

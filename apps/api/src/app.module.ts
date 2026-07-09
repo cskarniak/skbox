@@ -15,11 +15,13 @@ import { BoilerModule } from './boiler/boiler.module';
 import { HistoryTemplatesModule } from './history-templates/history-templates.module';
 import { CameraModule } from './camera/camera.module';
 import { PrismaModule } from './prisma.module';
+import { TriggerContextModule } from './scenarios/trigger-context.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
+    TriggerContextModule,
     MqttModule,
     DevicesModule,
     RoomsModule,

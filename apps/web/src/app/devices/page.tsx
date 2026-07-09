@@ -179,17 +179,50 @@ function HistoryModal({ device, opened, onClose }: { device: Device; opened: boo
                 <Table.Tr>
                   <Table.Th w={140}>Date</Table.Th>
                   <Table.Th>Valeur</Table.Th>
+                  <Table.Th>Condition de déclenchement</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {[...history].reverse().map((entry) => (
-                  <Table.Tr key={entry.id}>
-                    <Table.Td>{new Date(entry.timestamp).toLocaleString('fr-FR')}</Table.Td>
-                    <Table.Td ff="monospace" style={{ wordBreak: 'break-all' }}>
-                      {entry.data}
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
+                {[...history].reverse().map((entry) => {
+                  let parsed: Record<string, unknown> = {};
+                  try {
+                    parsed = JSON.parse(entry.data);
+                  } catch {
+                    // valeur non-JSON (ancien format) : affichée telle quelle ci-dessous
+                  }
+                  const scenario = parsed._scenario as
+                    | { scenarioName: string; values: { deviceName: string; property: string; value: unknown }[] }
+                    | undefined;
+                  const { _scenario: _omit, ...rest } = parsed;
+                  const displayValue = scenario ? JSON.stringify(rest) : entry.data;
+
+                  return (
+                    <Table.Tr key={entry.id}>
+                      <Table.Td>{new Date(entry.timestamp).toLocaleString('fr-FR')}</Table.Td>
+                      <Table.Td ff="monospace" style={{ wordBreak: 'break-all' }}>
+                        {displayValue}
+                      </Table.Td>
+                      <Table.Td fz="xs">
+                        {scenario ? (
+                          <Stack gap={2}>
+                            <Text fz="xs" fw={600}>
+                              {scenario.scenarioName}
+                            </Text>
+                            {scenario.values.map((v, i) => (
+                              <Text fz="xs" c="dimmed" key={i}>
+                                {v.deviceName} ({v.property}) : {String(v.value)}
+                              </Text>
+                            ))}
+                          </Stack>
+                        ) : (
+                          <Text fz="xs" c="dimmed">
+                            —
+                          </Text>
+                        )}
+                      </Table.Td>
+                    </Table.Tr>
+                  );
+                })}
               </Table.Tbody>
             </Table>
           </ScrollArea>
