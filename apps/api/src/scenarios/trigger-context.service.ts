@@ -10,6 +10,11 @@ export interface TriggerContextValue {
 export interface TriggerContext {
   scenarioName: string;
   values: TriggerContextValue[];
+  // Description complète de chaque règle évaluée (déclencheur + conditions), seuil et
+  // opérateur inclus (ex. "Température sous-sol > 24 (28.4)"), pas seulement la valeur
+  // brute des capteurs — sinon impossible de voir a posteriori pourquoi le scénario
+  // s'est (ou non) déclenché.
+  conditions: string[];
 }
 
 interface StoredContext extends TriggerContext {

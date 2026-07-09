@@ -191,7 +191,7 @@ function HistoryModal({ device, opened, onClose }: { device: Device; opened: boo
                     // valeur non-JSON (ancien format) : affichée telle quelle ci-dessous
                   }
                   const scenario = parsed._scenario as
-                    | { scenarioName: string; values: { deviceName: string; property: string; value: unknown }[] }
+                    | { scenarioName: string; values: { deviceName: string; property: string; value: unknown }[]; conditions: string[] }
                     | undefined;
                   const { _scenario: _omit, ...rest } = parsed;
                   const displayValue = scenario ? JSON.stringify(rest) : entry.data;
@@ -208,9 +208,9 @@ function HistoryModal({ device, opened, onClose }: { device: Device; opened: boo
                             <Text fz="xs" fw={600}>
                               {scenario.scenarioName}
                             </Text>
-                            {scenario.values.map((v, i) => (
+                            {scenario.conditions.map((c, i) => (
                               <Text fz="xs" c="dimmed" key={i}>
-                                {v.deviceName} ({v.property}) : {String(v.value)}
+                                {c}
                               </Text>
                             ))}
                           </Stack>

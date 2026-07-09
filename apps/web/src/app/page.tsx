@@ -166,9 +166,9 @@ function HistoryValueTable({ series }: { series: SeriesPoint[] }) {
                       <Text fz="xs" fw={600}>
                         {point.scenario.scenarioName}
                       </Text>
-                      {point.scenario.values.map((v, i) => (
+                      {point.scenario.conditions.map((c, i) => (
                         <Text fz="xs" c="dimmed" key={i}>
-                          {v.deviceName} ({v.property}) : {String(v.value)}
+                          {c}
                         </Text>
                       ))}
                     </Stack>

@@ -312,10 +312,23 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  private static readonly OPERATOR_SYMBOLS: Record<string, string> = {
+    eq: '=',
+    gt: '>',
+    gte: '≥',
+    lt: '<',
+    lte: '≤',
+  };
+
   // Rassemble les valeurs des capteurs impliqués dans le déclencheur et les conditions
-  // d'un scénario (celles qui ont justifié son exécution), pour les attacher à l'entrée
-  // d'historique du/des appareil(s) actionné(s) — voir TriggerContextService.
-  private async captureTriggerValues(trigger: Trigger, conditions: Condition[]): Promise<TriggerContextValue[]> {
+  // d'un scénario (celles qui ont justifié son exécution) ainsi qu'une description
+  // complète de chaque règle (seuil + opérateur, pas juste la valeur brute), pour les
+  // attacher à l'entrée d'historique du/des appareil(s) actionné(s) — voir
+  // TriggerContextService.
+  private async captureTriggerValues(
+    trigger: Trigger,
+    conditions: Condition[],
+  ): Promise<{ values: TriggerContextValue[]; conditions: string[] }> {
     const refs: { deviceId: string; property: string }[] = [];
     if (trigger.type === 'device_state') refs.push({ deviceId: trigger.deviceId, property: trigger.property });
     for (const condition of conditions) {
@@ -325,7 +338,7 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
         refs.push({ deviceId: condition.deviceIdB, property: condition.propertyB });
       }
     }
-    if (refs.length === 0) return [];
+    if (refs.length === 0) return { values: [], conditions: [] };
 
     const dedupedRefs = [...new Map(refs.map((r) => [`${r.deviceId}:${r.property}`, r])).values()];
 
@@ -333,23 +346,62 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
       where: { id: { in: [...new Set(dedupedRefs.map((r) => r.deviceId))] } },
     });
     const deviceById = new Map(devices.map((d) => [d.id, d]));
+    const stateOf = (deviceId: string, property: string): unknown => {
+      const device = deviceById.get(deviceId);
+      if (!device) return undefined;
+      return JSON.parse(device.state || '{}')[property];
+    };
+    const op = (operator: string) => ScenariosService.OPERATOR_SYMBOLS[operator] ?? operator;
 
-    return dedupedRefs
+    const values = dedupedRefs
       .map(({ deviceId, property }) => {
         const device = deviceById.get(deviceId);
         if (!device) return null;
-        const state = JSON.parse(device.state || '{}');
-        return { deviceId, deviceName: device.name, property, value: state[property] };
+        return { deviceId, deviceName: device.name, property, value: stateOf(deviceId, property) };
       })
       .filter((v): v is TriggerContextValue => v !== null);
+
+    const descriptions: string[] = [];
+    if (trigger.type === 'device_state') {
+      const device = deviceById.get(trigger.deviceId);
+      if (device) {
+        descriptions.push(
+          `Déclencheur : ${device.name} (${trigger.property}) ${op(trigger.operator)} ${trigger.value} — valeur : ${stateOf(trigger.deviceId, trigger.property)}`,
+        );
+      }
+    }
+    for (const condition of conditions) {
+      if (condition.type === 'device_state') {
+        const device = deviceById.get(condition.deviceId);
+        if (device) {
+          descriptions.push(
+            `Condition : ${device.name} (${condition.property}) ${op(condition.operator)} ${condition.value} — valeur : ${stateOf(condition.deviceId, condition.property)}`,
+          );
+        }
+      }
+      if (condition.type === 'device_diff') {
+        const deviceA = deviceById.get(condition.deviceIdA);
+        const deviceB = deviceById.get(condition.deviceIdB);
+        if (deviceA && deviceB) {
+          const a = Number(stateOf(condition.deviceIdA, condition.propertyA));
+          const b = Number(stateOf(condition.deviceIdB, condition.propertyB));
+          const diff = Number.isNaN(a) || Number.isNaN(b) ? undefined : Math.round((a - b) * 100) / 100;
+          descriptions.push(
+            `Condition : écart ${deviceA.name} − ${deviceB.name} (${condition.propertyA}) ${op(condition.operator)} ${condition.threshold} — écart calculé : ${diff ?? 'N/A'}`,
+          );
+        }
+      }
+    }
+
+    return { values, conditions: descriptions };
   }
 
   private async recordTriggerContextForActions(scenarioName: string, trigger: Trigger, conditions: Condition[], actions: Action[]) {
-    const values = await this.captureTriggerValues(trigger, conditions);
+    const { values, conditions: conditionDescriptions } = await this.captureTriggerValues(trigger, conditions);
     if (values.length === 0) return;
     for (const action of actions) {
       if (action.type === 'device_command') {
-        this.triggerContext.record(action.deviceId, { scenarioName, values });
+        this.triggerContext.record(action.deviceId, { scenarioName, values, conditions: conditionDescriptions });
       }
     }
   }

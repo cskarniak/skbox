@@ -97,6 +97,7 @@ export function extractValueKeys(history: DeviceEvent[]): string[] {
 export interface ScenarioTriggerContext {
   scenarioName: string;
   values: { deviceName: string; property: string; value: unknown }[];
+  conditions: string[];
 }
 
 export interface SeriesPoint {
