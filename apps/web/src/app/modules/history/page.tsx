@@ -396,7 +396,7 @@ function ChartPanel({
                             <Text fz="xs" fw={600}>
                               {point.scenario.scenarioName}
                             </Text>
-                            {point.scenario.conditions.map((c, i) => (
+                            {(point.scenario.conditions ?? []).map((c, i) => (
                               <Text fz="xs" c="dimmed" key={i}>
                                 {c}
                               </Text>
