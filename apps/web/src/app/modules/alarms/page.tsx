@@ -30,8 +30,11 @@ import {
   IconBrandTelegram,
   IconMail,
   IconCheck,
+  IconSmartHome,
+  IconChevronLeft,
 } from '@tabler/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { api } from '@/lib/api';
 import { AppNav } from '@/components/AppNav';
@@ -405,6 +408,7 @@ function ActionsSummary({ actions }: { actions: Action[] }) {
 }
 
 export default function AlarmsPage() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [formOpened, setFormOpened] = useState(false);
   const [editingScenario, setEditingScenario] = useState<AlarmScenario | undefined>();
@@ -457,16 +461,26 @@ export default function AlarmsPage() {
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between" wrap="nowrap">
           <Group gap="xs" wrap="nowrap">
-            <IconAlertTriangle size={28} />
+            <IconSmartHome size={28} />
             <Title order={3} visibleFrom="sm">Skbox</Title>
           </Group>
           <Group gap="md" wrap="nowrap">
-            <AppNav active="alarms" />
+            <AppNav active="modules" />
           </Group>
         </Group>
       </AppShell.Header>
 
       <AppShell.Main>
+        <Group gap="xs" mb="md">
+          <ActionIcon variant="subtle" onClick={() => router.push('/modules')}>
+            <IconChevronLeft size={18} />
+          </ActionIcon>
+          <Text size="sm" c="dimmed">Modules</Text>
+          <Text size="sm" c="dimmed">/</Text>
+          <IconAlertTriangle size={18} />
+          <Text size="sm" fw={500}>Alarmes</Text>
+        </Group>
+
         {!!openEvents?.length && (
           <Stack gap="xs" mb="md">
             {openEvents.map((ev) => (

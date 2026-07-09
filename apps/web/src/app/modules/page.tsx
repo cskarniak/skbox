@@ -11,7 +11,7 @@ import {
   ThemeIcon,
   UnstyledButton,
 } from '@mantine/core';
-import { IconSmartHome, IconFlame, IconChevronRight, IconChartLine, IconVideo } from '@tabler/icons-react';
+import { IconSmartHome, IconFlame, IconChevronRight, IconChartLine, IconVideo, IconAlertTriangle } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import { AppNav } from '@/components/AppNav';
 
@@ -44,6 +44,13 @@ const MODULES: ModuleEntry[] = [
     description: 'Vue en direct des caméras IP (flux RTSP relayé via go2rtc).',
     icon: <IconVideo size={24} />,
     href: '/modules/cameras',
+  },
+  {
+    key: 'alarms',
+    label: 'Alarmes',
+    description: 'Surveillance de capteurs (eau, fumée...) avec notification et historique des déclenchements.',
+    icon: <IconAlertTriangle size={24} />,
+    href: '/modules/alarms',
   },
 ];
 
