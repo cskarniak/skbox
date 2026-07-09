@@ -17,6 +17,7 @@ import {
   TextInput,
   Textarea,
   Select,
+  Autocomplete,
   JsonInput,
   Popover,
   Card,
@@ -32,6 +33,7 @@ import {
   IconCheck,
   IconSmartHome,
   IconChevronLeft,
+  IconPencil,
 } from '@tabler/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
@@ -95,6 +97,16 @@ interface Device {
   id: string;
   name: string;
   room?: string | null;
+  state?: string;
+}
+
+function deviceStateKeys(device?: Device): string[] {
+  if (!device?.state) return [];
+  try {
+    return Object.keys(JSON.parse(device.state));
+  } catch {
+    return [];
+  }
 }
 
 function severityColor(severity?: string | null) {
@@ -299,11 +311,12 @@ function AlarmForm({
           searchable
         />
         <Group grow>
-          <TextInput
+          <Autocomplete
             label="Propriété"
             placeholder="Ex: water_leak, smoke"
+            data={deviceStateKeys((devices ?? []).find((d) => d.id === deviceId))}
             value={property}
-            onChange={(e) => setProperty(e.currentTarget.value)}
+            onChange={setProperty}
           />
           <Select
             label="Opérateur"
@@ -586,7 +599,19 @@ export default function AlarmsPage() {
                     <ActionsSummary actions={s.actions} />
                   </Table.Td>
                   <Table.Td onClick={(e) => e.stopPropagation()}>
-                    <DeleteAlarmButton onConfirm={() => deleteScenario.mutate(s.id)} />
+                    <Group gap="xs">
+                      <ActionIcon
+                        variant="subtle"
+                        onClick={() => {
+                          setEditingScenario(s);
+                          setFormOpened(true);
+                        }}
+                        title="Modifier"
+                      >
+                        <IconPencil size={16} />
+                      </ActionIcon>
+                      <DeleteAlarmButton onConfirm={() => deleteScenario.mutate(s.id)} />
+                    </Group>
                   </Table.Td>
                 </Table.Tr>
               ))}
