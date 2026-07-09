@@ -431,6 +431,10 @@ function DeviceCard({ device }: { device: Device }) {
               />
             </Tooltip>
           )}
+
+          <Text size="xs" c="dimmed">
+            Dernier changement : {formatDateTime(new Date(device.lastSeen).getTime())}
+          </Text>
         </Stack>
       )}
 
@@ -454,9 +458,14 @@ function DeviceCard({ device }: { device: Device }) {
       )}
 
       {device.type === 'sensor_motion' && (
-        <Badge size="lg" color={state.occupancy ? 'orange' : 'gray'} variant="light">
-          {state.occupancy ? 'Mouvement détecté' : 'Aucun mouvement'}
-        </Badge>
+        <Stack gap={4}>
+          <Badge size="lg" color={state.occupancy ? 'orange' : 'gray'} variant="light">
+            {state.occupancy ? 'Mouvement détecté' : 'Aucun mouvement'}
+          </Badge>
+          <Text size="xs" c="dimmed">
+            Dernier déclenchement : {formatDateTime(new Date(device.lastSeen).getTime())}
+          </Text>
+        </Stack>
       )}
 
       {device.type === 'sensor_door' && (
