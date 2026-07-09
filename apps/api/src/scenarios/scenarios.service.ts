@@ -110,7 +110,10 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
     const scenario = await this.prisma.scenario.findUniqueOrThrow({
       where: { id },
     });
+    const trigger: Trigger = JSON.parse(scenario.trigger);
+    const conditions: Condition[] = JSON.parse(scenario.conditions);
     const actions: Action[] = JSON.parse(scenario.actions);
+    await this.recordTriggerContextForActions(scenario.name, trigger, conditions, actions);
     await this.executeActions(actions);
     this.logger.log(`Test executed for scenario "${scenario.name}"`);
   }
