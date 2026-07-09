@@ -291,14 +291,20 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
 
     if (!device || !device.active) return;
 
-    await this.prisma.device.update({
-      where: { id: device.id },
+    // updateMany conditionné sur l'état lu ci-dessus : si un autre message pour ce même
+    // device a déjà été traité entre-temps (deux messages Z2M rapprochés, ex. publication
+    // optimiste + rapport réel de l'appareil), count vaut 0 et on n'écrit ni l'état ni un
+    // événement d'historique en double pour la même transition.
+    const { count } = await this.prisma.device.updateMany({
+      where: { id: device.id, state: device.state },
       data: {
         state: JSON.stringify(state),
         status: 'online',
         lastSeen: new Date(),
       },
     });
+
+    if (count === 0) return;
 
     if (device.trackHistory && hasSignificantChange(device.state, state, device.historyFieldConfig)) {
       await this.prisma.deviceEvent.create({
