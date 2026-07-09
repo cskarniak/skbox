@@ -1,5 +1,6 @@
 'use client';
 
+import { Button, Group, Stack, Text } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
@@ -35,11 +36,25 @@ export function AlarmWatcher() {
 
     for (const event of data) {
       if (seenIds.current.has(event.id)) continue;
+      const id = `alarm-${event.id}`;
       notifications.show({
+        id,
         color: event.scenario.severity === 'critical' ? 'red' : 'orange',
         title: event.scenario.name,
-        message: `Alarme déclenchée à ${new Date(event.triggeredAt).toLocaleTimeString('fr-FR')}`,
+        message: (
+          <Stack gap="xs">
+            <Text size="sm">
+              Alarme déclenchée à {new Date(event.triggeredAt).toLocaleTimeString('fr-FR')}
+            </Text>
+            <Group justify="flex-end">
+              <Button size="xs" variant="white" onClick={() => notifications.hide(id)}>
+                OK
+              </Button>
+            </Group>
+          </Stack>
+        ),
         autoClose: false,
+        withCloseButton: false,
       });
     }
 
