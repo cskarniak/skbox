@@ -213,6 +213,11 @@ function HistoryModal({ device, opened, onClose }: { device: Device; opened: boo
                                 {c}
                               </Text>
                             ))}
+                            {scenario.values.map((v, i) => (
+                              <Text fz="xs" c="dimmed" key={i}>
+                                {v.deviceName} ({v.property}) : {String(v.value)}
+                              </Text>
+                            ))}
                           </Stack>
                         ) : (
                           <Text fz="xs" c="dimmed">
