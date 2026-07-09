@@ -380,6 +380,7 @@ function ChartPanel({
                 <Table.Tr>
                   <Table.Th>Date / Heure</Table.Th>
                   <Table.Th>Valeur</Table.Th>
+                  <Table.Th>Condition de déclenchement</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -389,6 +390,24 @@ function ChartPanel({
                     <Table.Tr key={point.time}>
                       <Table.Td>{formatDateTime(point.time)}</Table.Td>
                       <Table.Td>{point.value}</Table.Td>
+                      <Table.Td fz="xs">
+                        {point.scenario ? (
+                          <Stack gap={2}>
+                            <Text fz="xs" fw={600}>
+                              {point.scenario.scenarioName}
+                            </Text>
+                            {point.scenario.values.map((v, i) => (
+                              <Text fz="xs" c="dimmed" key={i}>
+                                {v.deviceName} ({v.property}) : {String(v.value)}
+                              </Text>
+                            ))}
+                          </Stack>
+                        ) : (
+                          <Text fz="xs" c="dimmed">
+                            —
+                          </Text>
+                        )}
+                      </Table.Td>
                     </Table.Tr>
                   ))}
               </Table.Tbody>

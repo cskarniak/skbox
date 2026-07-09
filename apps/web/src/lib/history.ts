@@ -94,19 +94,32 @@ export function extractValueKeys(history: DeviceEvent[]): string[] {
   return [...keys].sort();
 }
 
-export function buildSeries(history: DeviceEvent[], valueKey: string) {
+export interface ScenarioTriggerContext {
+  scenarioName: string;
+  values: { deviceName: string; property: string; value: unknown }[];
+}
+
+export interface SeriesPoint {
+  time: number;
+  value: number;
+  scenario?: ScenarioTriggerContext;
+}
+
+export function buildSeries(history: DeviceEvent[], valueKey: string): SeriesPoint[] {
   return history
     .map((entry) => {
       let value: number | null = null;
+      let scenario: ScenarioTriggerContext | undefined;
       try {
         const parsed = JSON.parse(entry.data) as Record<string, unknown>;
         value = coerceValue(parsed[valueKey]);
+        scenario = parsed._scenario as ScenarioTriggerContext | undefined;
       } catch {
         value = null;
       }
-      return value === null ? null : { time: new Date(entry.timestamp).getTime(), value };
+      return value === null ? null : { time: new Date(entry.timestamp).getTime(), value, scenario };
     })
-    .filter((point): point is { time: number; value: number } => point !== null);
+    .filter((point): point is NonNullable<typeof point> => point !== null);
 }
 
 export function formatTime(ms: number) {
