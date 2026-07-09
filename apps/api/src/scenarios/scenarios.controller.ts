@@ -23,9 +23,13 @@ export class ScenariosController {
   }
 
   @Get('alarm-events')
-  findAlarmEvents(@Query('resolved') resolved?: string) {
+  findAlarmEvents(
+    @Query('resolved') resolved?: string,
+    @Query('acknowledged') acknowledged?: string,
+  ) {
     return this.scenarios.findAlarmEvents(
       resolved === undefined ? undefined : resolved === 'true',
+      acknowledged === undefined ? undefined : acknowledged === 'true',
     );
   }
 

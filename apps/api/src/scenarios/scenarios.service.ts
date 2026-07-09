@@ -119,9 +119,12 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
 
   // --- Alarm events ---
 
-  async findAlarmEvents(resolved?: boolean) {
+  async findAlarmEvents(resolved?: boolean, acknowledged?: boolean) {
     const events = await this.prisma.alarmEvent.findMany({
-      where: resolved === undefined ? undefined : { resolvedAt: resolved ? { not: null } : null },
+      where: {
+        ...(resolved === undefined ? {} : { resolvedAt: resolved ? { not: null } : null }),
+        ...(acknowledged === undefined ? {} : { acknowledgedAt: acknowledged ? { not: null } : null }),
+      },
       include: { scenario: true },
       orderBy: { triggeredAt: 'desc' },
     });

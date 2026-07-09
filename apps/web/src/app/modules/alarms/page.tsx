@@ -100,13 +100,17 @@ interface Device {
   state?: string;
 }
 
-function deviceStateKeys(device?: Device): string[] {
-  if (!device?.state) return [];
+function deviceState(device?: Device): Record<string, unknown> {
+  if (!device?.state) return {};
   try {
-    return Object.keys(JSON.parse(device.state));
+    return JSON.parse(device.state);
   } catch {
-    return [];
+    return {};
   }
+}
+
+function deviceStateKeys(device?: Device): string[] {
+  return Object.keys(deviceState(device));
 }
 
 function severityColor(severity?: string | null) {
@@ -274,6 +278,9 @@ function AlarmForm({
   };
 
   const deviceOptions = (devices ?? []).map((d) => ({ value: d.id, label: d.name }));
+  const selectedDevice = (devices ?? []).find((d) => d.id === deviceId);
+  const currentValue = property ? deviceState(selectedDevice)[property] : undefined;
+  const currentValueIsBoolean = typeof currentValue === 'boolean';
 
   return (
     <Modal
@@ -310,11 +317,11 @@ function AlarmForm({
           onChange={(v) => setDeviceId(v ?? '')}
           searchable
         />
-        <Group grow>
+        <Group grow align="flex-start">
           <Autocomplete
             label="Propriété"
             placeholder="Ex: water_leak, smoke"
-            data={deviceStateKeys((devices ?? []).find((d) => d.id === deviceId))}
+            data={deviceStateKeys(selectedDevice)}
             value={property}
             onChange={setProperty}
           />
@@ -324,13 +331,30 @@ function AlarmForm({
             value={operator}
             onChange={(v) => setOperator(v ?? 'eq')}
           />
-          <TextInput
-            label="Valeur d'alerte"
-            placeholder="Ex: true"
-            value={value}
-            onChange={(e) => setValue(e.currentTarget.value)}
-          />
+          {currentValueIsBoolean ? (
+            <Select
+              label="Valeur d'alerte"
+              data={[
+                { value: 'true', label: 'Vrai' },
+                { value: 'false', label: 'Faux' },
+              ]}
+              value={value || 'true'}
+              onChange={(v) => setValue(v ?? 'true')}
+            />
+          ) : (
+            <TextInput
+              label="Valeur d'alerte"
+              placeholder="Ex: true"
+              value={value}
+              onChange={(e) => setValue(e.currentTarget.value)}
+            />
+          )}
         </Group>
+        {property && (
+          <Text size="xs" c="dimmed">
+            Valeur actuelle du capteur : {JSON.stringify(currentValue)}
+          </Text>
+        )}
         <Text size="xs" c="dimmed">
           L&apos;alarme se déclenche quand cette condition devient vraie, et se résout
           automatiquement quand le capteur revient à la normale.
