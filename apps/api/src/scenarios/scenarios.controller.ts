@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ScenariosService } from './scenarios.service';
@@ -19,6 +20,18 @@ export class ScenariosController {
   @Get()
   findAll() {
     return this.scenarios.findAll();
+  }
+
+  @Get('alarm-events')
+  findAlarmEvents(@Query('resolved') resolved?: string) {
+    return this.scenarios.findAlarmEvents(
+      resolved === undefined ? undefined : resolved === 'true',
+    );
+  }
+
+  @Post('alarm-events/:id/acknowledge')
+  acknowledgeAlarmEvent(@Param('id') id: string) {
+    return this.scenarios.acknowledgeAlarmEvent(id);
   }
 
   @Get(':id')

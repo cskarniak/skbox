@@ -58,25 +58,59 @@ const deviceCommandActionSchema = z.object({
   command: z.record(z.unknown()),
 });
 
+const notifyTelegramActionSchema = z.object({
+  type: z.literal('notify_telegram'),
+  message: z.string().min(1),
+});
+
+const notifyEmailActionSchema = z.object({
+  type: z.literal('notify_email'),
+  subject: z.string().min(1),
+  message: z.string().min(1),
+});
+
 const actionSchema = z.discriminatedUnion('type', [
   deviceCommandActionSchema,
+  notifyTelegramActionSchema,
+  notifyEmailActionSchema,
 ]);
 
-export const createScenarioSchema = z.object({
-  name: z.string().min(1).max(200),
-  enabled: z.boolean().default(true),
-  trigger: triggerSchema,
-  conditions: z.array(conditionSchema).default([]),
-  actions: z.array(actionSchema).min(1),
-});
+const scenarioCategorySchema = z.enum(['automation', 'alarm']);
+const alarmSeveritySchema = z.enum(['critical', 'warning']);
 
-export const updateScenarioSchema = z.object({
-  name: z.string().min(1).max(200).optional(),
-  enabled: z.boolean().optional(),
-  trigger: triggerSchema.optional(),
-  conditions: z.array(conditionSchema).optional(),
-  actions: z.array(actionSchema).min(1).optional(),
-});
+const scenarioCategoryFields = {
+  category: scenarioCategorySchema.default('automation'),
+  severity: alarmSeveritySchema.optional(),
+};
+
+export const createScenarioSchema = z
+  .object({
+    name: z.string().min(1).max(200),
+    enabled: z.boolean().default(true),
+    ...scenarioCategoryFields,
+    trigger: triggerSchema,
+    conditions: z.array(conditionSchema).default([]),
+    actions: z.array(actionSchema).min(1),
+  })
+  .refine((dto) => dto.category !== 'alarm' || !!dto.severity, {
+    message: 'severity is required when category is "alarm"',
+    path: ['severity'],
+  });
+
+export const updateScenarioSchema = z
+  .object({
+    name: z.string().min(1).max(200).optional(),
+    enabled: z.boolean().optional(),
+    category: scenarioCategorySchema.optional(),
+    severity: alarmSeveritySchema.optional(),
+    trigger: triggerSchema.optional(),
+    conditions: z.array(conditionSchema).optional(),
+    actions: z.array(actionSchema).min(1).optional(),
+  })
+  .refine((dto) => dto.category !== 'alarm' || !!dto.severity, {
+    message: 'severity is required when category is "alarm"',
+    path: ['severity'],
+  });
 
 export type Trigger = z.infer<typeof triggerSchema>;
 export type Condition = z.infer<typeof conditionSchema>;

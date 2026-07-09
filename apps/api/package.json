@@ -20,6 +20,7 @@
     "cron-parser": "^5.6.1",
     "fast-xml-parser": "^5.9.3",
     "mqtt": "^5.10.0",
+    "nodemailer": "^9.0.3",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.0",
     "zod": "^3.24.0"
@@ -31,6 +32,7 @@
     "@swc/core": "^1.15.41",
     "@types/express": "^5",
     "@types/node": "^20",
+    "@types/nodemailer": "^8.0.1",
     "ts-node": "^10.9.0",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5"

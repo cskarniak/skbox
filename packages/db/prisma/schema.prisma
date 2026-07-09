@@ -68,6 +68,10 @@ model Scenario {
   id         String    @id @default(cuid())
   name       String
   enabled    Boolean   @default(true)
+  // "automation" (par défaut) ou "alarm" — un scénario "alarm" est journalisé dans
+  // AlarmEvent (déclenchement/résolution/acquittement) en plus d'exécuter ses actions.
+  category   String    @default("automation")
+  severity   String?
   trigger    String
   conditions String    @default("[]")
   actions    String    @default("[]")
@@ -75,6 +79,21 @@ model Scenario {
   runCount   Int       @default(0)
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
+
+  alarmEvents AlarmEvent[]
+}
+
+model AlarmEvent {
+  id             String    @id @default(cuid())
+  scenarioId     String
+  triggeredAt    DateTime  @default(now())
+  acknowledgedAt DateTime?
+  resolvedAt     DateTime?
+  triggerValue   String    @default("{}")
+
+  scenario Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  @@index([scenarioId, resolvedAt])
 }
 
 model Room {

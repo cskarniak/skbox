@@ -9,7 +9,13 @@ import {
 } from '@skbox/shared';
 import { CronExpressionParser } from 'cron-parser';
 import { MqttService } from '../mqtt/mqtt.service';
+import { NotificationService } from '../notifications/notification.service';
 import { TriggerContextService, TriggerContextValue } from './trigger-context.service';
+
+interface TriggerCapture {
+  values: TriggerContextValue[];
+  conditions: string[];
+}
 
 @Injectable()
 export class ScenariosService implements OnModuleInit, OnModuleDestroy {
@@ -23,6 +29,7 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
     @Inject('PRISMA') private readonly prisma: PrismaClient,
     private readonly mqtt: MqttService,
     private readonly triggerContext: TriggerContextService,
+    private readonly notifications: NotificationService,
   ) {}
 
   async onModuleInit() {
@@ -74,6 +81,8 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
       data: {
         name: dto.name,
         enabled: dto.enabled,
+        category: dto.category,
+        severity: dto.severity,
         trigger: JSON.stringify(dto.trigger),
         conditions: JSON.stringify(dto.conditions),
         actions: JSON.stringify(dto.actions),
@@ -87,6 +96,8 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
     const data: Record<string, unknown> = {};
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.enabled !== undefined) data.enabled = dto.enabled;
+    if (dto.category !== undefined) data.category = dto.category;
+    if (dto.severity !== undefined) data.severity = dto.severity;
     if (dto.trigger !== undefined) data.trigger = JSON.stringify(dto.trigger);
     if (dto.conditions !== undefined)
       data.conditions = JSON.stringify(dto.conditions);
@@ -106,6 +117,28 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
     await this.reloadScenarios();
   }
 
+  // --- Alarm events ---
+
+  async findAlarmEvents(resolved?: boolean) {
+    const events = await this.prisma.alarmEvent.findMany({
+      where: resolved === undefined ? undefined : { resolvedAt: resolved ? { not: null } : null },
+      include: { scenario: true },
+      orderBy: { triggeredAt: 'desc' },
+    });
+    return events.map((event) => ({
+      ...event,
+      triggerValue: JSON.parse(event.triggerValue) as TriggerContextValue[],
+      scenario: this.parseScenario(event.scenario),
+    }));
+  }
+
+  async acknowledgeAlarmEvent(id: string) {
+    return this.prisma.alarmEvent.update({
+      where: { id },
+      data: { acknowledgedAt: new Date() },
+    });
+  }
+
   async testScenario(id: string) {
     const scenario = await this.prisma.scenario.findUniqueOrThrow({
       where: { id },
@@ -113,8 +146,9 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
     const trigger: Trigger = JSON.parse(scenario.trigger);
     const conditions: Condition[] = JSON.parse(scenario.conditions);
     const actions: Action[] = JSON.parse(scenario.actions);
-    await this.recordTriggerContextForActions(scenario.name, trigger, conditions, actions);
-    await this.executeActions(actions);
+    const capture = await this.captureTriggerValues(trigger, conditions);
+    await this.recordTriggerContextForActions(scenario.name, capture, actions);
+    await this.executeActions(actions, capture);
     this.logger.log(`Test executed for scenario "${scenario.name}"`);
   }
 
@@ -192,8 +226,9 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
           return;
         }
 
-        await this.recordTriggerContextForActions(fresh.name, { type: 'cron' } as Trigger, conditions, actions);
-        await this.executeActions(actions);
+        const capture = await this.captureTriggerValues({ type: 'cron' } as Trigger, conditions);
+        await this.recordTriggerContextForActions(fresh.name, capture, actions);
+        await this.executeActions(actions, capture);
         await this.prisma.scenario.update({
           where: { id: fresh.id },
           data: { lastRun: new Date(), runCount: { increment: 1 } },
@@ -225,19 +260,40 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
 
       const triggerState = JSON.parse(triggerDevice.state || '{}');
       const currentValue = triggerState[trigger.property];
-      if (!this.compareValues(trigger.operator, currentValue, trigger.value)) continue;
+      const triggerMatches = this.compareValues(trigger.operator, currentValue, trigger.value);
+
+      if (scenario.category === 'alarm' && !triggerMatches) {
+        // Le capteur est revenu à un état normal : on résout silencieusement toute
+        // alerte ouverte pour ce scénario, sans ré-exécuter les actions.
+        await this.resolveOpenAlarmEvent(scenario.id);
+        continue;
+      }
+      if (!triggerMatches) continue;
 
       const conditions: Condition[] = JSON.parse(scenario.conditions);
       const conditionsMet = await this.evaluateConditions(conditions);
       if (!conditionsMet) continue;
+
+      if (scenario.category === 'alarm') {
+        const alreadyOpen = await this.prisma.alarmEvent.findFirst({
+          where: { scenarioId: scenario.id, resolvedAt: null },
+        });
+        if (alreadyOpen) continue; // déjà signalée, on n'alerte pas à chaque message répété
+      }
 
       this.logger.log(`Scenario "${scenario.name}" triggered`);
 
       const actions: Action[] = JSON.parse(scenario.actions);
       this.executing = true;
       try {
-        await this.recordTriggerContextForActions(scenario.name, trigger, conditions, actions);
-        await this.executeActions(actions);
+        const capture = await this.captureTriggerValues(trigger, conditions);
+        if (scenario.category === 'alarm') {
+          await this.prisma.alarmEvent.create({
+            data: { scenarioId: scenario.id, triggerValue: JSON.stringify(capture.values) },
+          });
+        }
+        await this.recordTriggerContextForActions(scenario.name, capture, actions);
+        await this.executeActions(actions, capture);
         await this.prisma.scenario.update({
           where: { id: scenario.id },
           data: {
@@ -249,6 +305,13 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
         this.executing = false;
       }
     }
+  }
+
+  private async resolveOpenAlarmEvent(scenarioId: string) {
+    await this.prisma.alarmEvent.updateMany({
+      where: { scenarioId, resolvedAt: null },
+      data: { resolvedAt: new Date() },
+    });
   }
 
   private async evaluateConditions(conditions: Condition[]): Promise<boolean> {
@@ -401,17 +464,16 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
     return { values, conditions: descriptions };
   }
 
-  private async recordTriggerContextForActions(scenarioName: string, trigger: Trigger, conditions: Condition[], actions: Action[]) {
-    const { values, conditions: conditionDescriptions } = await this.captureTriggerValues(trigger, conditions);
-    if (values.length === 0) return;
+  private async recordTriggerContextForActions(scenarioName: string, capture: TriggerCapture, actions: Action[]) {
+    if (capture.values.length === 0) return;
     for (const action of actions) {
       if (action.type === 'device_command') {
-        this.triggerContext.record(action.deviceId, { scenarioName, values, conditions: conditionDescriptions });
+        this.triggerContext.record(action.deviceId, { scenarioName, ...capture });
       }
     }
   }
 
-  private async executeActions(actions: Action[]) {
+  private async executeActions(actions: Action[], capture?: TriggerCapture) {
     for (const action of actions) {
       switch (action.type) {
         case 'device_command': {
@@ -433,8 +495,21 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
           );
           break;
         }
+        case 'notify_telegram': {
+          await this.notifications.sendTelegram(this.withTriggerDetails(action.message, capture));
+          break;
+        }
+        case 'notify_email': {
+          await this.notifications.sendEmail(action.subject, this.withTriggerDetails(action.message, capture));
+          break;
+        }
       }
     }
+  }
+
+  private withTriggerDetails(message: string, capture?: TriggerCapture): string {
+    if (!capture?.conditions.length) return message;
+    return `${message}\n\n${capture.conditions.join('\n')}`;
   }
 
   private parseScenario = (scenario: Scenario) => {
