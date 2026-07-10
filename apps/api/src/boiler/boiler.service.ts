@@ -63,6 +63,7 @@ interface BoilerState {
   override: BoilerOverride | null;
   lastChangeAt: string | null;
   lastCommandedState: 'ON' | 'OFF' | null;
+  enabled: boolean;
 }
 
 export interface BoilerConfig {
@@ -89,6 +90,7 @@ export interface BoilerStatus {
   scheduleActive: boolean;
   override: BoilerOverride | null;
   lastChangeAt: string | null;
+  enabled: boolean;
 }
 
 const STATE_KEY = 'boiler';
@@ -107,6 +109,7 @@ const DEFAULT_STATE: BoilerState = {
   override: null,
   lastChangeAt: null,
   lastCommandedState: null,
+  enabled: true,
 };
 
 @Injectable()
@@ -264,7 +267,30 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
       scheduleActive: this.levelFromProgram(state, new Date()) !== null,
       override: activeOverride,
       lastChangeAt: state.lastChangeAt,
+      enabled: state.enabled,
     };
+  }
+
+  // Coupure d'urgence : arrête la régulation automatique (plus aucune commande envoyée) et
+  // coupe immédiatement le relais, utile pour isoler un bug sans devoir désactiver l'appareil
+  // ou débrancher la sonde. La réactivation reprend la régulation au prochain cycle.
+  async setEnabled(enabled: boolean): Promise<BoilerStatus> {
+    const state = await this.loadState();
+    const next: BoilerState = { ...state, enabled };
+
+    if (!enabled && state.deviceId) {
+      const device = await this.prisma.device.findUnique({ where: { id: state.deviceId } });
+      if (device?.mqttTopic) {
+        this.mqtt.publish(`${device.mqttTopic}/set`, JSON.stringify({ state: 'OFF' }));
+        next.lastCommandedState = 'OFF';
+        next.lastChangeAt = new Date().toISOString();
+        this.logger.log(`Chaudière : arrêt d'urgence, ${device.name} → OFF`);
+      }
+    }
+
+    await this.saveState(next);
+    if (enabled) await this.evaluate();
+    return this.getStatus();
   }
 
   private activeOverride(state: BoilerState): BoilerOverride | null {
@@ -321,7 +347,7 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
 
   private async evaluate(): Promise<void> {
     const state = await this.loadState();
-    if (!state.deviceId) return;
+    if (!state.deviceId || !state.enabled) return;
 
     const activeOverride = this.activeOverride(state);
     // Dérogation expirée : on l'efface pour revenir proprement au planning.

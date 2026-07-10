@@ -14,6 +14,7 @@ import {
   NumberInput,
   ActionIcon,
   SimpleGrid,
+  Popover,
 } from '@mantine/core';
 import {
   IconSmartHome,
@@ -22,6 +23,8 @@ import {
   IconTrash,
   IconChevronLeft,
   IconTemperature,
+  IconPlayerStop,
+  IconPlayerPlay,
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -93,6 +96,50 @@ interface BoilerStatus {
   scheduleActive: boolean;
   override: BoilerOverride | null;
   lastChangeAt: string | null;
+  enabled: boolean;
+}
+
+function StopModuleButton({ enabled, loading, onConfirm }: { enabled: boolean; loading: boolean; onConfirm: () => void }) {
+  const [opened, setOpened] = useState(false);
+  if (!enabled) {
+    return (
+      <Button size="xs" color="teal" variant="light" leftSection={<IconPlayerPlay size={14} />} loading={loading} onClick={onConfirm}>
+        Réactiver le module
+      </Button>
+    );
+  }
+  return (
+    <Popover opened={opened} onClose={() => setOpened(false)} position="bottom-end" withArrow>
+      <Popover.Target>
+        <Button size="xs" color="red" variant="light" leftSection={<IconPlayerStop size={14} />} onClick={() => setOpened((o) => !o)}>
+          Arrêt du module
+        </Button>
+      </Popover.Target>
+      <Popover.Dropdown>
+        <Stack gap="xs">
+          <Text size="sm" maw={260}>
+            Coupe le relais immédiatement et arrête toute régulation automatique (planning, dérogations) jusqu'à réactivation manuelle.
+          </Text>
+          <Group gap="xs" justify="flex-end">
+            <Button size="xs" variant="subtle" onClick={() => setOpened(false)}>
+              Non
+            </Button>
+            <Button
+              size="xs"
+              color="red"
+              loading={loading}
+              onClick={() => {
+                setOpened(false);
+                onConfirm();
+              }}
+            >
+              Oui, arrêter
+            </Button>
+          </Group>
+        </Stack>
+      </Popover.Dropdown>
+    </Popover>
+  );
 }
 
 const DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
@@ -183,6 +230,17 @@ export default function BoilerPage() {
   const clearBoost = useMutation({
     mutationFn: () => api.delete('/boiler/boost').then((r) => r.data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['boiler-status'] }),
+  });
+
+  const setEnabled = useMutation({
+    mutationFn: (enabled: boolean) => api.put('/boiler/enabled', { enabled }).then((r) => r.data),
+    onSuccess: (_, enabled) => {
+      queryClient.invalidateQueries({ queryKey: ['boiler-status'] });
+      notifications.show({
+        color: enabled ? 'teal' : 'red',
+        message: enabled ? 'Module chaudière réactivé' : "Module chaudière arrêté — relais coupé",
+      });
+    },
   });
 
   const handleSaveConfig = () => {
@@ -328,12 +386,26 @@ export default function BoilerPage() {
           {status && (
             <Card shadow="sm" padding="lg" withBorder>
               <Group justify="space-between" mb="xs">
-                <Text size="sm" c="dimmed">
-                  État actuel
-                </Text>
-                <Badge color={status.commandedState === 'ON' ? 'teal' : 'gray'} variant="light">
-                  {status.commandedState ?? 'inconnu'}
-                </Badge>
+                <Group gap="xs">
+                  <Text size="sm" c="dimmed">
+                    État actuel
+                  </Text>
+                  {!status.enabled && (
+                    <Badge color="red" variant="filled">
+                      Module arrêté
+                    </Badge>
+                  )}
+                </Group>
+                <Group gap="xs">
+                  <Badge color={status.commandedState === 'ON' ? 'teal' : 'gray'} variant="light">
+                    {status.commandedState ?? 'inconnu'}
+                  </Badge>
+                  <StopModuleButton
+                    enabled={status.enabled}
+                    loading={setEnabled.isPending}
+                    onConfirm={() => setEnabled.mutate(!status.enabled)}
+                  />
+                </Group>
               </Group>
               <Stack gap={6}>
                 <Group justify="space-between">

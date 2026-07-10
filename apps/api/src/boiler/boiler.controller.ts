@@ -36,4 +36,9 @@ export class BoilerController {
   clearBoost() {
     return this.boiler.clearBoost();
   }
+
+  @Put('enabled')
+  setEnabled(@Body('enabled') enabled: boolean) {
+    return this.boiler.setEnabled(enabled);
+  }
 }
