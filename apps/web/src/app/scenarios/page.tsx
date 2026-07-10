@@ -16,6 +16,7 @@ import {
   Modal,
   TextInput,
   Select,
+  Autocomplete,
   JsonInput,
   NumberInput,
   Popover,
@@ -105,6 +106,17 @@ interface Device {
   id: string;
   name: string;
   type: string;
+  state?: string | null;
+}
+
+function devicePropertyOptions(devices: Device[] | undefined, deviceId: string): string[] {
+  const device = devices?.find((d) => d.id === deviceId);
+  if (!device?.state) return [];
+  try {
+    return Object.keys(JSON.parse(device.state));
+  } catch {
+    return [];
+  }
 }
 
 function ScenarioForm({
@@ -304,11 +316,12 @@ function ScenarioForm({
               searchable
             />
             <Group grow>
-              <TextInput
+              <Autocomplete
                 label="Propriété"
                 placeholder="Ex: occupancy, state, temperature"
+                data={devicePropertyOptions(devices, triggerDeviceId)}
                 value={triggerProperty}
-                onChange={(e) => setTriggerProperty(e.currentTarget.value)}
+                onChange={setTriggerProperty}
               />
               <Select
                 label="Opérateur"
@@ -434,11 +447,12 @@ function ScenarioForm({
                   searchable
                 />
                 <Group grow>
-                  <TextInput
+                  <Autocomplete
                     label="Propriété"
                     placeholder="Ex: temperature"
+                    data={devicePropertyOptions(devices, c.deviceId ?? '')}
                     value={c.property ?? ''}
-                    onChange={(e) => updateCondition(i, { property: e.currentTarget.value })}
+                    onChange={(v) => updateCondition(i, { property: v })}
                   />
                   <Select
                     label="Opérateur"
@@ -467,11 +481,12 @@ function ScenarioForm({
                     onChange={(v) => updateCondition(i, { deviceIdA: v ?? '' })}
                     searchable
                   />
-                  <TextInput
+                  <Autocomplete
                     label="Propriété A"
                     placeholder="Ex: temperature"
+                    data={devicePropertyOptions(devices, c.deviceIdA ?? '')}
                     value={c.propertyA ?? ''}
-                    onChange={(e) => updateCondition(i, { propertyA: e.currentTarget.value })}
+                    onChange={(v) => updateCondition(i, { propertyA: v })}
                   />
                 </Group>
                 <Group grow>
@@ -483,11 +498,12 @@ function ScenarioForm({
                     onChange={(v) => updateCondition(i, { deviceIdB: v ?? '' })}
                     searchable
                   />
-                  <TextInput
+                  <Autocomplete
                     label="Propriété B"
                     placeholder="Ex: temperature"
+                    data={devicePropertyOptions(devices, c.deviceIdB ?? '')}
                     value={c.propertyB ?? ''}
-                    onChange={(e) => updateCondition(i, { propertyB: e.currentTarget.value })}
+                    onChange={(v) => updateCondition(i, { propertyB: v })}
                   />
                 </Group>
                 <Group grow>
