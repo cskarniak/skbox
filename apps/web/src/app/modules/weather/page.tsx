@@ -38,7 +38,6 @@ import { api } from '@/lib/api';
 import { AppNav } from '@/components/AppNav';
 import { ValueChart, OverlayChart } from '@/components/ValueChart';
 import { CHART_COLORS } from '@/lib/history';
-import { WeatherMap } from './WeatherMap';
 
 interface WeatherLocation {
   lat: number;
@@ -321,8 +320,6 @@ export default function WeatherModulePage() {
               )}
             </Stack>
           </Card>
-
-          <WeatherMap />
 
           {!location && !homeLocationQuery.isLoading && (
             <Alert icon={<IconAlertCircle size={16} />} color="blue">

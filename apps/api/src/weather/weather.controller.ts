@@ -31,9 +31,4 @@ export class WeatherController {
   getForecast(@Query('lat') lat: string, @Query('lon') lon: string, @Query('label') label?: string) {
     return this.weather.getForecast(Number(lat), Number(lon), label ?? 'Lieu recherché');
   }
-
-  @Get('air-mass-map')
-  getAirMassMap() {
-    return this.weather.getAirMassMap();
-  }
 }

@@ -45,13 +45,6 @@ export interface WeatherForecast {
   hourly: HourlyForecast[];
 }
 
-export interface AirMassMap {
-  url: string;
-  title: string;
-  validAt: string;
-  copyright: string;
-}
-
 const HOME_LOCATION_KEY = 'weather.homeLocation';
 const FORECAST_DAYS = 7;
 const HOURLY_HOURS = 48;
@@ -221,27 +214,6 @@ export class WeatherService {
     });
     sums.forEach((entry, date) => result.set(date, entry.total / entry.count));
     return result;
-  }
-
-  // Carte "masses d'air" : le produit officiel ECMWF OpenCharts "medium-z500-t850" (géopotentiel
-  // 500hPa + température 850hPa, la référence standard pour caractériser une masse d'air,
-  // indépendante du réchauffement diurne de la surface) sur l'Europe — licence CC-BY-4.0, mise
-  // à jour à chaque run du modèle. L'API renvoie l'URL de l'image du run courant, qui change à
-  // chaque appel : on la résout donc à la demande plutôt que de la coder en dur.
-  async getAirMassMap(): Promise<AirMassMap> {
-    const url = new URL('https://charts.ecmwf.int/opencharts-api/v1/products/medium-z500-t850/');
-    const res = await this.fetchJson(url);
-    const attrs = res?.data?.attributes;
-    const href = res?.data?.link?.href;
-    if (!href) {
-      throw new ServiceUnavailableException("Impossible de récupérer la carte ECMWF");
-    }
-    return {
-      url: href,
-      title: attrs?.title ?? "Masses d'air (ECMWF)",
-      validAt: attrs?.description ?? '',
-      copyright: res.meta?.copyright ?? '© ECMWF',
-    };
   }
 
   private async fetchJson(url: URL): Promise<any> {
