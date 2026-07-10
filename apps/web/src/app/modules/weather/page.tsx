@@ -15,6 +15,7 @@ import {
   Loader,
   Alert,
   Paper,
+  Anchor,
 } from '@mantine/core';
 import {
   IconSmartHome,
@@ -29,6 +30,7 @@ import {
   IconCloudStorm,
   IconAlertCircle,
   IconStar,
+  IconExternalLink,
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -320,6 +322,17 @@ export default function WeatherModulePage() {
               )}
             </Stack>
           </Card>
+
+          <Anchor
+            href="https://www.meteociel.fr/modeles/ecmwf_ctrl.php?ech=6&mode=0&carte=2&type="
+            target="_blank"
+            rel="noopener noreferrer"
+            size="sm"
+          >
+            <Group gap={4} wrap="nowrap">
+              Voir les cartes de masses d'air (modèle ECMWF) sur Meteociel <IconExternalLink size={14} />
+            </Group>
+          </Anchor>
 
           {!location && !homeLocationQuery.isLoading && (
             <Alert icon={<IconAlertCircle size={16} />} color="blue">
