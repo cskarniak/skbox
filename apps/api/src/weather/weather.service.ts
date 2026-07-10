@@ -30,13 +30,24 @@ export interface DailyForecast {
   pressureMean: number | null;
 }
 
+export interface HourlyForecast {
+  time: string; // ISO local, ex: 2026-07-10T14:00
+  weatherCode: number;
+  temperature: number;
+  precipitationProbability: number;
+  precipitation: number;
+  windSpeed: number;
+}
+
 export interface WeatherForecast {
   location: WeatherLocation;
   daily: DailyForecast[];
+  hourly: HourlyForecast[];
 }
 
 const HOME_LOCATION_KEY = 'weather.homeLocation';
 const FORECAST_DAYS = 7;
+const HOURLY_HOURS = 48;
 
 @Injectable()
 export class WeatherService {
@@ -117,12 +128,12 @@ export class WeatherService {
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
       throw new BadRequestException('Coordonnées invalides');
     }
-    const url = new URL('https://api.open-meteo.com/v1/forecast');
-    url.searchParams.set('latitude', String(lat));
-    url.searchParams.set('longitude', String(lon));
-    url.searchParams.set('timezone', 'auto');
-    url.searchParams.set('forecast_days', String(FORECAST_DAYS));
-    url.searchParams.set(
+    const dailyUrl = new URL('https://api.open-meteo.com/v1/forecast');
+    dailyUrl.searchParams.set('latitude', String(lat));
+    dailyUrl.searchParams.set('longitude', String(lon));
+    dailyUrl.searchParams.set('timezone', 'auto');
+    dailyUrl.searchParams.set('forecast_days', String(FORECAST_DAYS));
+    dailyUrl.searchParams.set(
       'daily',
       [
         'weathercode',
@@ -136,11 +147,24 @@ export class WeatherService {
         'sunshine_duration',
       ].join(','),
     );
-    url.searchParams.set('hourly', 'pressure_msl');
+    dailyUrl.searchParams.set('hourly', 'pressure_msl');
 
-    const res = await this.fetchJson(url);
-    const daily = this.buildDailyForecast(res);
-    return { location: { lat, lon, label }, daily };
+    // Requête séparée avec forecast_hours (plutôt que forecast_days) pour aligner les
+    // données horaires sur l'heure actuelle plutôt que sur le début de la journée.
+    const hourlyUrl = new URL('https://api.open-meteo.com/v1/forecast');
+    hourlyUrl.searchParams.set('latitude', String(lat));
+    hourlyUrl.searchParams.set('longitude', String(lon));
+    hourlyUrl.searchParams.set('timezone', 'auto');
+    hourlyUrl.searchParams.set('forecast_hours', String(HOURLY_HOURS));
+    hourlyUrl.searchParams.set(
+      'hourly',
+      ['weathercode', 'temperature_2m', 'precipitation_probability', 'precipitation', 'windspeed_10m'].join(','),
+    );
+
+    const [dailyRes, hourlyRes] = await Promise.all([this.fetchJson(dailyUrl), this.fetchJson(hourlyUrl)]);
+    const daily = this.buildDailyForecast(dailyRes);
+    const hourly = this.buildHourlyForecast(hourlyRes);
+    return { location: { lat, lon, label }, daily, hourly };
   }
 
   private buildDailyForecast(res: any): DailyForecast[] {
@@ -159,6 +183,18 @@ export class WeatherService {
       uvIndexMax: res.daily.uv_index_max[i],
       sunshineHours: res.daily.sunshine_duration[i] / 3600,
       pressureMean: pressureByDate.get(date) ?? null,
+    }));
+  }
+
+  private buildHourlyForecast(res: any): HourlyForecast[] {
+    const times: string[] = res.hourly?.time ?? [];
+    return times.map((time, i) => ({
+      time,
+      weatherCode: res.hourly.weathercode[i],
+      temperature: res.hourly.temperature_2m[i],
+      precipitationProbability: res.hourly.precipitation_probability[i],
+      precipitation: res.hourly.precipitation[i],
+      windSpeed: res.hourly.windspeed_10m[i],
     }));
   }
 

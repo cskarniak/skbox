@@ -26,12 +26,14 @@ export function ValueChart({
   color,
   valueKey,
   height = 280,
+  tickFormatter = formatDate,
 }: {
   series: { time: number; value: number }[];
   chartType: ChartType;
   color: string;
   valueKey: string;
   height?: number;
+  tickFormatter?: (ms: number) => string;
 }) {
   const gradientId = `value-chart-gradient-${useId().replace(/[:]/g, '')}`;
   const { unit } = getValueMeta(valueKey);
@@ -63,11 +65,11 @@ export function ValueChart({
       {effectiveChartType === 'bar' ? (
         <BarChart data={series}>
           <CartesianGrid strokeDasharray="0" stroke="var(--mantine-color-dark-4)" />
-          <XAxis dataKey="time" type="number" domain={['dataMin', 'dataMax']} ticks={xTicks} tickFormatter={formatDate} tick={{ fontSize: 11 }} />
+          <XAxis dataKey="time" type="number" domain={['dataMin', 'dataMax']} ticks={xTicks} tickFormatter={tickFormatter} tick={{ fontSize: 11 }} />
           <YAxis tick={{ fontSize: 11 }} width={48} tickFormatter={formatValue} {...yAxisProps} />
           <RechartsTooltip labelFormatter={(v) => formatTime(v as number)} formatter={(v) => [formatValue(v as number), '']} />
           <Bar dataKey="value" fill={color} radius={[4, 4, 0, 0]} maxBarSize={24} />
-          <Brush dataKey="time" height={32} tickFormatter={formatDate} travellerWidth={18} />
+          <Brush dataKey="time" height={32} tickFormatter={tickFormatter} travellerWidth={18} />
         </BarChart>
       ) : effectiveChartType === 'area' ? (
         <AreaChart data={series}>
@@ -78,20 +80,20 @@ export function ValueChart({
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="0" stroke="var(--mantine-color-dark-4)" />
-          <XAxis dataKey="time" type="number" domain={['dataMin', 'dataMax']} ticks={xTicks} tickFormatter={formatDate} tick={{ fontSize: 11 }} />
+          <XAxis dataKey="time" type="number" domain={['dataMin', 'dataMax']} ticks={xTicks} tickFormatter={tickFormatter} tick={{ fontSize: 11 }} />
           <YAxis tick={{ fontSize: 11 }} width={48} tickFormatter={formatValue} {...yAxisProps} />
           <RechartsTooltip labelFormatter={(v) => formatTime(v as number)} formatter={(v) => [formatValue(v as number), '']} />
           <Area type={lineType} dataKey="value" stroke={color} strokeWidth={2} fill={`url(#${gradientId})`} />
-          <Brush dataKey="time" height={32} tickFormatter={formatDate} travellerWidth={18} />
+          <Brush dataKey="time" height={32} tickFormatter={tickFormatter} travellerWidth={18} />
         </AreaChart>
       ) : (
         <LineChart data={series}>
           <CartesianGrid strokeDasharray="0" stroke="var(--mantine-color-dark-4)" />
-          <XAxis dataKey="time" type="number" domain={['dataMin', 'dataMax']} ticks={xTicks} tickFormatter={formatDate} tick={{ fontSize: 11 }} />
+          <XAxis dataKey="time" type="number" domain={['dataMin', 'dataMax']} ticks={xTicks} tickFormatter={tickFormatter} tick={{ fontSize: 11 }} />
           <YAxis tick={{ fontSize: 11 }} width={48} tickFormatter={formatValue} {...yAxisProps} />
           <RechartsTooltip labelFormatter={(v) => formatTime(v as number)} formatter={(v) => [formatValue(v as number), '']} />
           <Line type={lineType} dataKey="value" stroke={color} strokeWidth={2} dot={false} />
-          <Brush dataKey="time" height={32} tickFormatter={formatDate} travellerWidth={18} />
+          <Brush dataKey="time" height={32} tickFormatter={tickFormatter} travellerWidth={18} />
         </LineChart>
       )}
     </ResponsiveContainer>
@@ -115,7 +117,15 @@ function isBinarySeries(s: OverlaySeries): boolean {
   return s.data.length > 0 && s.data.every((p) => p.value === 0 || p.value === 1);
 }
 
-export function OverlayChart({ series, height = 280 }: { series: OverlaySeries[]; height?: number }) {
+export function OverlayChart({
+  series,
+  height = 280,
+  tickFormatter = formatDate,
+}: {
+  series: OverlaySeries[];
+  height?: number;
+  tickFormatter?: (ms: number) => string;
+}) {
   const allTimes = series.flatMap((s) => s.data.map((p) => p.time));
   const xTicks = useMemo(() => {
     if (allTimes.length === 0) return [];
@@ -190,7 +200,7 @@ export function OverlayChart({ series, height = 280 }: { series: OverlaySeries[]
           type="number"
           domain={['dataMin', 'dataMax']}
           ticks={xTicks}
-          tickFormatter={formatDate}
+          tickFormatter={tickFormatter}
           tick={{ fontSize: 11 }}
           allowDuplicatedCategory={false}
         />
@@ -237,7 +247,7 @@ export function OverlayChart({ series, height = 280 }: { series: OverlaySeries[]
             yAxisId={yAxisIdFor(s)}
           />
         ))}
-        <Brush dataKey="time" height={32} tickFormatter={formatDate} travellerWidth={18} />
+        <Brush dataKey="time" height={32} tickFormatter={tickFormatter} travellerWidth={18} />
       </LineChart>
     </ResponsiveContainer>
   );

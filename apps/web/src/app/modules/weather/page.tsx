@@ -67,9 +67,19 @@ interface DailyForecast {
   pressureMean: number | null;
 }
 
+interface HourlyForecast {
+  time: string;
+  weatherCode: number;
+  temperature: number;
+  precipitationProbability: number;
+  precipitation: number;
+  windSpeed: number;
+}
+
 interface WeatherForecast {
   location: WeatherLocation;
   daily: DailyForecast[];
+  hourly: HourlyForecast[];
 }
 
 const WEATHER_CODES: Record<number, { label: string; icon: React.ReactNode }> = {
@@ -113,6 +123,12 @@ function formatDayLabel(date: string) {
     day: '2-digit',
     month: '2-digit',
   });
+}
+
+function formatHourTick(ms: number) {
+  const d = new Date(ms);
+  const weekday = d.toLocaleDateString('fr-FR', { weekday: 'short' });
+  return `${weekday} ${String(d.getHours()).padStart(2, '0')}h`;
 }
 
 export default function WeatherModulePage() {
@@ -196,6 +212,29 @@ export default function WeatherModulePage() {
     time: new Date(`${d.date}T12:00:00`).getTime(),
     value: d.precipitationSum,
   }));
+
+  const hourly = forecastQuery.data?.hourly ?? [];
+
+  const hourlySeries = hourly.length
+    ? [
+        {
+          id: 'hourlyTemp',
+          label: 'Température',
+          color: CHART_COLORS[5],
+          valueKey: 'temperature',
+          data: hourly.map((h) => ({ time: new Date(h.time).getTime(), value: h.temperature })),
+        },
+        {
+          id: 'hourlyPrecipProb',
+          label: 'Probabilité de pluie',
+          color: CHART_COLORS[0],
+          valueKey: 'precipitationProbability',
+          data: hourly.map((h) => ({ time: new Date(h.time).getTime(), value: h.precipitationProbability })),
+        },
+      ]
+    : [];
+
+  const hourlyStrip = hourly.filter((_, i) => i % 3 === 0);
 
   return (
     <AppShell header={{ height: 60 }} padding="md">
@@ -294,6 +333,29 @@ export default function WeatherModulePage() {
             <Alert icon={<IconAlertCircle size={16} />} color="red">
               Impossible de récupérer les prévisions météo pour ce lieu.
             </Alert>
+          )}
+
+          {hourly.length > 0 && (
+            <Card shadow="sm" padding="lg" withBorder>
+              <Stack gap="xs">
+                <Text fw={500}>Prochaines 48 heures</Text>
+                <Group gap="md" wrap="nowrap" style={{ overflowX: 'auto', paddingBottom: 4 }}>
+                  {hourlyStrip.map((h) => {
+                    const meta = weatherMeta(h.weatherCode);
+                    const d = new Date(h.time);
+                    return (
+                      <Stack key={h.time} gap={2} align="center" style={{ minWidth: 56, flexShrink: 0 }}>
+                        <Text size="xs" c="dimmed">{String(d.getHours()).padStart(2, '0')}h</Text>
+                        {meta.icon}
+                        <Text size="xs" fw={500}>{Math.round(h.temperature)}°</Text>
+                        <Text size="xs" c="dimmed">{h.precipitationProbability}%</Text>
+                      </Stack>
+                    );
+                  })}
+                </Group>
+                <OverlayChart series={hourlySeries} height={260} tickFormatter={formatHourTick} />
+              </Stack>
+            </Card>
           )}
 
           {daily.length > 0 && (

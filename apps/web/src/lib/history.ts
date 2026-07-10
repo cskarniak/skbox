@@ -234,6 +234,7 @@ const VALUE_META: Record<string, { label: string; unit: string }> = {
   contact: { label: 'Contact', unit: '' },
   pressure: { label: 'Pression', unit: 'hPa' },
   precipitation: { label: 'Précipitations', unit: 'mm' },
+  precipitationProbability: { label: 'Probabilité de pluie', unit: '%' },
 };
 
 export function getValueMeta(key: string): { label: string; unit: string } {
