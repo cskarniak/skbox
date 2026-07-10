@@ -578,10 +578,13 @@ function CameraTile({ camera, host, onEdit, onRemove }: { camera: Camera; host: 
             style={{ cursor: 'pointer', aspectRatio: '16/9', overflow: 'hidden', borderRadius: 'var(--mantine-radius-sm)' }}
             onClick={expand}
           >
+            {/* Pas de permission "autoplay" ici : le lecteur go2rtc tente une lecture avec
+                son, échoue (autoplay non autorisé sans cette permission) puis repasse
+                automatiquement en muet — les vignettes de la grille restent donc silencieuses,
+                seule la vue agrandie (modal ci-dessous) a la permission et joue le son. */}
             <iframe
               src={streamSrc}
               style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
-              allow="autoplay"
             />
           </div>
         ) : (
