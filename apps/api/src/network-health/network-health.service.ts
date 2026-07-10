@@ -3,7 +3,10 @@ import { MqttService } from '../mqtt/mqtt.service';
 
 const SCAN_TOPIC = 'zigbee2mqtt/bridge/request/networkmap';
 const RESPONSE_TOPIC = 'zigbee2mqtt/bridge/response/networkmap';
-const SCAN_TIMEOUT_MS = 20_000;
+// Z2M interroge réellement chaque routeur par radio pour construire le relevé "raw" du
+// maillage — sur ce réseau (9 appareils) ça a pris ~23s en pratique, donc une marge large
+// pour rester fiable si le réseau grandit ou qu'une requête radio traîne davantage.
+const SCAN_TIMEOUT_MS = 45_000;
 const AUTO_SCAN_INTERVAL_MS = 30 * 60_000;
 // Sous ce seuil (sur une échelle 0-255), un lien est considéré fragile — repère visuel,
 // pas une limite stricte : le maillage Zigbee peut rester fonctionnel avec des valeurs
