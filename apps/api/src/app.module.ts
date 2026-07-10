@@ -17,6 +17,7 @@ import { HistoryTemplatesModule } from './history-templates/history-templates.mo
 import { CameraModule } from './camera/camera.module';
 import { PrismaModule } from './prisma.module';
 import { TriggerContextModule } from './scenarios/trigger-context.module';
+import { WeatherModule } from './weather/weather.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { TriggerContextModule } from './scenarios/trigger-context.module';
     BoilerModule,
     HistoryTemplatesModule,
     CameraModule,
+    WeatherModule,
   ],
 })
 export class AppModule {}
