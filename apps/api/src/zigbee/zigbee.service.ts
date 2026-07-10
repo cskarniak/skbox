@@ -6,6 +6,7 @@ import { MqttService } from '../mqtt/mqtt.service';
 import { SettingsService } from '../settings/settings.service';
 import { SystemEventsService } from '../system-events/system-events.service';
 import { hasSignificantChange } from '../devices/history-change.util';
+import { applySensorCalibration } from '../devices/calibration.util';
 import { TriggerContextService } from '../scenarios/trigger-context.service';
 
 const execAsync = promisify(exec);
@@ -292,6 +293,8 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
     });
 
     if (!device || !device.active) return;
+
+    state = applySensorCalibration(state, device);
 
     // updateMany conditionné sur l'état lu ci-dessus : si un autre message pour ce même
     // device a déjà été traité entre-temps (deux messages Z2M rapprochés, ex. publication

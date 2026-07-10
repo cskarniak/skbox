@@ -6,6 +6,7 @@ import { MqttService } from '../mqtt/mqtt.service';
 import { SettingsService } from '../settings/settings.service';
 import { SystemEventsService } from '../system-events/system-events.service';
 import { hasSignificantChange } from '../devices/history-change.util';
+import { applySensorCalibration } from '../devices/calibration.util';
 import { TriggerContextService } from '../scenarios/trigger-context.service';
 
 const execAsync = promisify(exec);
@@ -200,12 +201,14 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
+    const calibratedState = existing ? applySensorCalibration(stateData, existing) : stateData;
+
     const device = await this.prisma.device.upsert({
       where: existing ? { id: existing.id } : { rfxcomId },
       update: {
         rfxcomId,
         mqttTopic: `rfxcom2mqtt/devices/${data.id}`,
-        state: JSON.stringify(stateData),
+        state: JSON.stringify(calibratedState),
         status: 'online',
         lastSeen: new Date(),
         batteryChangePendingUntil: null,
@@ -219,11 +222,11 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
         model: modelName,
         mqttTopic: `rfxcom2mqtt/devices/${data.id}`,
         status: 'online',
-        state: JSON.stringify(stateData),
+        state: JSON.stringify(calibratedState),
       },
     });
 
-    if (device.trackHistory && hasSignificantChange(existing?.state, stateData, existing?.historyFieldConfig)) {
+    if (device.trackHistory && hasSignificantChange(existing?.state, calibratedState, existing?.historyFieldConfig)) {
       const scenarioContext = this.triggerContext.consume(device.id);
       await this.prisma.deviceEvent.create({
         data: {

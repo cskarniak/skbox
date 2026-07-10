@@ -52,6 +52,9 @@ interface Device {
   vendor: string | null;
   model: string | null;
   lastSeen: string;
+  state: string;
+  temperatureOffset: number;
+  humidityOffset: number;
 }
 
 const DEVICE_TYPE_LABELS: Record<string, string> = {
@@ -396,9 +399,28 @@ function DeviceFicheModal({
   const [room, setRoom] = useState<string | null>(device.room);
   const [parentObject, setParentObject] = useState<string | null>(device.parentObject);
   const [type, setType] = useState<string | null>(device.type);
+  const [temperatureOffset, setTemperatureOffset] = useState<number>(device.temperatureOffset ?? 0);
+  const [humidityOffset, setHumidityOffset] = useState<number>(device.humidityOffset ?? 0);
+
+  let deviceState: Record<string, unknown> = {};
+  try {
+    deviceState = JSON.parse(device.state || '{}');
+  } catch {
+    deviceState = {};
+  }
+  const hasTemperature = 'temperature' in deviceState;
+  const hasHumidity = 'humidity' in deviceState;
 
   const save = useMutation({
-    mutationFn: () => api.patch(`/devices/${device.id}`, { name, room, parentObject, type }),
+    mutationFn: () =>
+      api.patch(`/devices/${device.id}`, {
+        name,
+        room,
+        parentObject,
+        type,
+        temperatureOffset,
+        humidityOffset,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['devices'] });
       onClose();
@@ -431,6 +453,34 @@ function DeviceFicheModal({
           value={type}
           onChange={setType}
         />
+
+        {(hasTemperature || hasHumidity) && (
+          <>
+            <Divider label="Calibration" />
+            <Group grow>
+              {hasTemperature && (
+                <NumberInput
+                  label="Correction température (°C)"
+                  description="Ajouté à chaque lecture, ex: +0.5"
+                  value={temperatureOffset}
+                  onChange={(v) => setTemperatureOffset(Number(v) || 0)}
+                  decimalScale={1}
+                  step={0.1}
+                />
+              )}
+              {hasHumidity && (
+                <NumberInput
+                  label="Correction humidité (%)"
+                  description="Ajouté à chaque lecture, ex: -3"
+                  value={humidityOffset}
+                  onChange={(v) => setHumidityOffset(Number(v) || 0)}
+                  decimalScale={1}
+                  step={0.1}
+                />
+              )}
+            </Group>
+          </>
+        )}
 
         <Divider label="Caractéristiques" />
         <Stack gap={4}>

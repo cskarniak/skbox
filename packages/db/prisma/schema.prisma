@@ -25,6 +25,8 @@ model Device {
   visible      Boolean  @default(true)
   active       Boolean  @default(true)
   trackHistory Boolean  @default(false)
+  temperatureOffset Float @default(0)
+  humidityOffset    Float @default(0)
   displayPreferences String @default("[]")
   historyFieldConfig String @default("[]")
   batteryChangePendingUntil DateTime?

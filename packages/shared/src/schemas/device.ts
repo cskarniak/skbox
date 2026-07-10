@@ -16,6 +16,8 @@ export const updateDeviceSchema = z.object({
   visible: z.boolean().optional(),
   active: z.boolean().optional(),
   trackHistory: z.boolean().optional(),
+  temperatureOffset: z.number().optional(),
+  humidityOffset: z.number().optional(),
 });
 
 export const updateDeviceThemesSchema = z.object({
