@@ -45,31 +45,9 @@ export interface WeatherForecast {
   hourly: HourlyForecast[];
 }
 
-export type MapVariable = 'pressure' | 'temperature';
-
-export interface MapGridPoint {
-  lat: number;
-  lon: number;
-  value: number;
-}
-
-export interface WeatherMap {
-  variable: MapVariable;
-  unit: string;
-  generatedAt: string;
-  bounds: { latMin: number; latMax: number; lonMin: number; lonMax: number };
-  points: MapGridPoint[];
-}
-
 const HOME_LOCATION_KEY = 'weather.homeLocation';
 const FORECAST_DAYS = 7;
 const HOURLY_HOURS = 48;
-
-// Europe de l'Ouest centrée sur la France — assez large pour voir arriver les systèmes
-// (dépressions atlantiques, remontées méditerranéennes) avant qu'ils n'atteignent le pays.
-const MAP_BOUNDS = { latMin: 41, latMax: 51, lonMin: -5, lonMax: 10 };
-const MAP_GRID_LAT_POINTS = 13;
-const MAP_GRID_LON_POINTS = 17;
 
 @Injectable()
 export class WeatherService {
@@ -236,47 +214,6 @@ export class WeatherService {
     });
     sums.forEach((entry, date) => result.set(date, entry.total / entry.count));
     return result;
-  }
-
-  // Carte "masses d'air" maison : Open-Meteo accepte une liste de lieux en un seul appel
-  // (latitude/longitude en listes parallèles séparées par des virgules), ce qui permet de
-  // récupérer une grille de points en une requête plutôt qu'un appel par point. On en tire
-  // une carte de pression (proxy des masses d'air : dépressions/anticyclones) ou de
-  // température, interpolée côté client.
-  async getMap(variable: MapVariable): Promise<WeatherMap> {
-    const field = variable === 'pressure' ? 'pressure_msl' : 'temperature_2m';
-    const unit = variable === 'pressure' ? 'hPa' : '°C';
-
-    const lats: number[] = [];
-    const lons: number[] = [];
-    for (let i = 0; i < MAP_GRID_LAT_POINTS; i++) {
-      const lat = MAP_BOUNDS.latMin + (i * (MAP_BOUNDS.latMax - MAP_BOUNDS.latMin)) / (MAP_GRID_LAT_POINTS - 1);
-      for (let j = 0; j < MAP_GRID_LON_POINTS; j++) {
-        const lon = MAP_BOUNDS.lonMin + (j * (MAP_BOUNDS.lonMax - MAP_BOUNDS.lonMin)) / (MAP_GRID_LON_POINTS - 1);
-        lats.push(Math.round(lat * 100) / 100);
-        lons.push(Math.round(lon * 100) / 100);
-      }
-    }
-
-    const url = new URL('https://api.open-meteo.com/v1/forecast');
-    url.searchParams.set('latitude', lats.join(','));
-    url.searchParams.set('longitude', lons.join(','));
-    url.searchParams.set('hourly', field);
-    url.searchParams.set('forecast_hours', '1');
-    url.searchParams.set('timezone', 'auto');
-
-    const res = await this.fetchJson(url);
-    const results: any[] = Array.isArray(res) ? res : [res];
-
-    const points: MapGridPoint[] = [];
-    results.forEach((r, i) => {
-      const value = r.hourly?.[field]?.[0];
-      if (Number.isFinite(value)) {
-        points.push({ lat: lats[i], lon: lons[i], value });
-      }
-    });
-
-    return { variable, unit, generatedAt: new Date().toISOString(), bounds: MAP_BOUNDS, points };
   }
 
   private async fetchJson(url: URL): Promise<any> {
