@@ -58,6 +58,9 @@ export default function NetworkHealthPage() {
   });
 
   const weakCount = report?.links.filter((l) => l.weak).length ?? 0;
+  const linksByDevice = report
+    ? [...report.links].sort((a, b) => a.targetName.localeCompare(b.targetName))
+    : [];
 
   return (
     <AppShell header={{ height: 60 }} padding="md">
@@ -142,16 +145,16 @@ export default function NetworkHealthPage() {
                   <Table striped highlightOnHover>
                     <Table.Thead>
                       <Table.Tr>
+                        <Table.Th>Device</Table.Th>
                         <Table.Th>Depuis</Table.Th>
-                        <Table.Th>Vers</Table.Th>
                         <Table.Th>Qualité</Table.Th>
                       </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
-                      {report.links.map((link, i) => (
+                      {linksByDevice.map((link, i) => (
                         <Table.Tr key={i}>
-                          <Table.Td>{link.sourceName}</Table.Td>
                           <Table.Td>{link.targetName}</Table.Td>
+                          <Table.Td>{link.sourceName}</Table.Td>
                           <Table.Td>
                             <Badge color={link.weak ? 'orange' : 'teal'} variant="light">
                               {link.linkquality}/255
