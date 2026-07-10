@@ -13,6 +13,7 @@ export interface LocationSearchResult {
   country: string | null;
   lat: number;
   lon: number;
+  population: number | null;
 }
 
 export interface DailyForecast {
@@ -67,11 +68,36 @@ export class WeatherService {
     return this.getForecast(location.lat, location.lon, location.label);
   }
 
+  // Le géocodage Open-Meteo (GeoNames) fait une correspondance quasi exacte sur le nom en
+  // base, qui pour les communes françaises composées est écrit avec des tirets
+  // ("Saint-Étienne"). Une recherche "St Etienne" ou "Saint Etienne" (espaces, abréviation)
+  // ne renvoie donc rien ou un hameau homonyme au lieu de la ville. On essaie donc plusieurs
+  // variantes de la requête (abréviations développées, espaces remplacés par des tirets) et
+  // on fusionne les résultats, triés par population décroissante pour faire remonter la
+  // ville plutôt qu'un hameau du même nom.
   async searchLocations(query: string): Promise<LocationSearchResult[]> {
-    if (!query.trim()) return [];
+    const trimmed = query.trim();
+    if (!trimmed) return [];
+
+    const expanded = trimmed.replace(/\bste\.?\b/gi, 'Sainte').replace(/\bst\.?\b/gi, 'Saint');
+    const candidates = [...new Set([expanded, expanded.replace(/\s+/g, '-')])];
+
+    const resultsByCandidate = await Promise.all(candidates.map((c) => this.fetchLocations(c)));
+
+    const merged = new Map<string, LocationSearchResult>();
+    for (const results of resultsByCandidate) {
+      for (const r of results) {
+        merged.set(`${r.lat.toFixed(3)},${r.lon.toFixed(3)}`, r);
+      }
+    }
+
+    return [...merged.values()].sort((a, b) => (b.population ?? 0) - (a.population ?? 0)).slice(0, 8);
+  }
+
+  private async fetchLocations(name: string): Promise<LocationSearchResult[]> {
     const url = new URL('https://geocoding-api.open-meteo.com/v1/search');
-    url.searchParams.set('name', query.trim());
-    url.searchParams.set('count', '8');
+    url.searchParams.set('name', name);
+    url.searchParams.set('count', '10');
     url.searchParams.set('language', 'fr');
     url.searchParams.set('format', 'json');
 
@@ -83,6 +109,7 @@ export class WeatherService {
       country: r.country ?? null,
       lat: r.latitude,
       lon: r.longitude,
+      population: r.population ?? null,
     }));
   }
 
