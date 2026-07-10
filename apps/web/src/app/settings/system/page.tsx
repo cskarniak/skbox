@@ -112,6 +112,7 @@ const EVENT_LABELS: Record<string, string> = {
   auto_restart: 'Relance auto',
   manual_stop: 'Arrêt manuel (test)',
   manual_start: 'Démarrage manuel',
+  manual_restart: 'Redémarrage manuel',
   boot: 'Démarrage machine',
 };
 
@@ -121,6 +122,7 @@ const EVENT_COLOR: Record<string, string> = {
   auto_restart: 'blue',
   manual_stop: 'orange',
   manual_start: 'teal',
+  manual_restart: 'blue',
   boot: 'grape',
 };
 
@@ -328,6 +330,32 @@ export default function SettingsSystemPage() {
       return;
     }
     stopBridge.mutate(bridge);
+  };
+
+  const restartBridge = useMutation({
+    mutationFn: (bridge: 'zigbee' | 'rfxcom') => api.post(`/system/bridges/${bridge}/restart`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['system-health'] });
+      queryClient.invalidateQueries({ queryKey: ['system-events'] });
+      notifications.show({ color: 'teal', message: 'Redémarrage lancé' });
+    },
+    onError: (error: any) => {
+      notifications.show({
+        color: 'red',
+        title: 'Échec de la commande',
+        message:
+          error?.response?.data?.message ??
+          "La commande sudo a échoué sur le serveur (règle sudoers manquante ?)",
+      });
+    },
+  });
+
+  const handleRestartBridge = (bridge: 'zigbee' | 'rfxcom') => {
+    const serviceName = bridge === 'zigbee' ? 'skbox-z2m' : 'skbox-rfxcom';
+    if (!window.confirm(`Redémarrer le service ${serviceName} ? Le bridge sera brièvement hors-ligne le temps du redémarrage.`)) {
+      return;
+    }
+    restartBridge.mutate(bridge);
   };
 
   const stopTailscale = useMutation({
@@ -567,8 +595,18 @@ export default function SettingsSystemPage() {
                   <Button
                     size="xs"
                     variant="light"
+                    color="blue"
+                    loading={restartBridge.isPending && restartBridge.variables === 'zigbee'}
+                    disabled={stopBridge.isPending || restartBridge.isPending}
+                    onClick={() => handleRestartBridge('zigbee')}
+                  >
+                    Redémarrer
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="light"
                     color="orange"
-                    disabled={!health.bridges.zigbee}
+                    disabled={!health.bridges.zigbee || stopBridge.isPending || restartBridge.isPending}
                     loading={stopBridge.isPending && stopBridge.variables === 'zigbee'}
                     onClick={() => handleStopBridge('zigbee')}
                   >
@@ -583,8 +621,18 @@ export default function SettingsSystemPage() {
                   <Button
                     size="xs"
                     variant="light"
+                    color="blue"
+                    loading={restartBridge.isPending && restartBridge.variables === 'rfxcom'}
+                    disabled={stopBridge.isPending || restartBridge.isPending}
+                    onClick={() => handleRestartBridge('rfxcom')}
+                  >
+                    Redémarrer
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="light"
                     color="orange"
-                    disabled={!health.bridges.rfxcom}
+                    disabled={!health.bridges.rfxcom || stopBridge.isPending || restartBridge.isPending}
                     loading={stopBridge.isPending && stopBridge.variables === 'rfxcom'}
                     onClick={() => handleStopBridge('rfxcom')}
                   >

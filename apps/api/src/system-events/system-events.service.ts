@@ -3,7 +3,14 @@ import { PrismaClient } from '@skbox/db';
 import * as os from 'os';
 
 export type SystemEventService = 'zigbee' | 'rfxcom' | 'tailscale' | 'system';
-export type SystemEventType = 'offline' | 'reconnected' | 'auto_restart' | 'manual_stop' | 'manual_start' | 'boot';
+export type SystemEventType =
+  | 'offline'
+  | 'reconnected'
+  | 'auto_restart'
+  | 'manual_stop'
+  | 'manual_start'
+  | 'manual_restart'
+  | 'boot';
 
 // Tolérance utilisée pour distinguer un vrai redémarrage machine d'un simple redémarrage
 // de skbox-api (ex. après un déploiement) : l'horodatage de boot calculé à partir de

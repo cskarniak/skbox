@@ -49,6 +49,19 @@ export class SystemController {
     return this.system.getHealth();
   }
 
+  @Post('bridges/:bridge/restart')
+  async restartBridge(@Param('bridge') bridge: string) {
+    if (bridge !== 'zigbee' && bridge !== 'rfxcom') {
+      throw new BadRequestException('bridge must be "zigbee" or "rfxcom"');
+    }
+    try {
+      await this.system.restartBridgeService(bridge);
+    } catch (err: any) {
+      throw new BadRequestException(err.message);
+    }
+    return this.system.getHealth();
+  }
+
   @Post('tailscale/stop')
   async stopTailscale() {
     try {

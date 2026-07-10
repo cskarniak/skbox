@@ -171,6 +171,16 @@ export class SystemService {
     await this.events.log(bridge, 'manual_stop', `${service} arrêté manuellement (test)`);
   }
 
+  // Redémarrage manuel d'un bridge (ex: dongle qui ne répond plus, bridge planté) sans
+  // attendre le healthcheck automatique. `restart` plutôt que `stop` + `start` séparés :
+  // c'est la seule forme whitelistée sans mot de passe dans les sudoers pour ces services,
+  // et `systemctl restart` démarre aussi bien un service déjà arrêté qu'actif.
+  async restartBridgeService(bridge: 'zigbee' | 'rfxcom'): Promise<void> {
+    const service = bridge === 'zigbee' ? 'skbox-z2m' : 'skbox-rfxcom';
+    await this.runOrThrow(`sudo systemctl restart ${service}`);
+    await this.events.log(bridge, 'manual_restart', `${service} redémarré manuellement`);
+  }
+
   // Empêche deux start/stop tailscaled de s'exécuter en même temps (ex. double-clic, ou
   // clic pendant qu'un `restart` précédent est encore en train de se négocier) : lancer
   // `systemctl restart` par-dessus un restart déjà en cours peut laisser tailscaled dans
