@@ -18,6 +18,7 @@ import { CameraModule } from './camera/camera.module';
 import { PrismaModule } from './prisma.module';
 import { TriggerContextModule } from './scenarios/trigger-context.module';
 import { WeatherModule } from './weather/weather.module';
+import { NetworkHealthModule } from './network-health/network-health.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { WeatherModule } from './weather/weather.module';
     HistoryTemplatesModule,
     CameraModule,
     WeatherModule,
+    NetworkHealthModule,
   ],
 })
 export class AppModule {}

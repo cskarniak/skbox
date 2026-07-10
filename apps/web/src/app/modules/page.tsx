@@ -11,7 +11,7 @@ import {
   ThemeIcon,
   UnstyledButton,
 } from '@mantine/core';
-import { IconSmartHome, IconFlame, IconChevronRight, IconChartLine, IconVideo, IconAlertTriangle, IconCloudRain } from '@tabler/icons-react';
+import { IconSmartHome, IconFlame, IconChevronRight, IconChartLine, IconVideo, IconAlertTriangle, IconCloudRain, IconAntenna } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import { AppNav } from '@/components/AppNav';
 
@@ -58,6 +58,13 @@ const MODULES: ModuleEntry[] = [
     description: 'Prévisions à 7 jours, tendance des températures et de la pression, pour préparer vos sorties à vélo.',
     icon: <IconCloudRain size={24} />,
     href: '/modules/weather',
+  },
+  {
+    key: 'network-health',
+    label: 'Santé réseau',
+    description: 'Qualité des liaisons du maillage Zigbee, pour repérer les appareils mal reliés avant qu\'ils ne posent problème.',
+    icon: <IconAntenna size={24} />,
+    href: '/modules/network-health',
   },
 ];
 
