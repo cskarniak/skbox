@@ -8,6 +8,7 @@ import { ThemesModule } from './themes/themes.module';
 import { ZigbeeModule } from './zigbee/zigbee.module';
 import { RfxcomModule } from './rfxcom/rfxcom.module';
 import { ScenariosModule } from './scenarios/scenarios.module';
+import { ScenarioGroupsModule } from './scenario-groups/scenario-groups.module';
 import { SystemModule } from './system/system.module';
 import { SettingsModule } from './settings/settings.module';
 import { BackupModule } from './backup/backup.module';
@@ -30,6 +31,7 @@ import { TriggerContextModule } from './scenarios/trigger-context.module';
     ZigbeeModule,
     RfxcomModule,
     ScenariosModule,
+    ScenarioGroupsModule,
     SystemModule,
     SettingsModule,
     BackupModule,

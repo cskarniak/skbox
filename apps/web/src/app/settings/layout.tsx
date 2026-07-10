@@ -12,9 +12,6 @@ import {
   IconCategory,
   IconLogs,
   IconTool,
-  IconMapPin,
-  IconPalette,
-  IconLayoutGrid,
 } from '@tabler/icons-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -23,10 +20,7 @@ import { AppNav } from '@/components/AppNav';
 const SUB_TABS = [
   { value: 'preferences', label: 'Préférences', icon: <IconAdjustments size={16} />, href: '/settings/preferences' },
   { value: 'pairing', label: 'Appairage', icon: <IconDevicesPc size={16} />, href: '/settings/pairing' },
-  { value: 'parent-objects', label: 'Objets', icon: <IconCategory size={16} />, href: '/settings/parent-objects' },
-  { value: 'rooms', label: 'Pièces', icon: <IconMapPin size={16} />, href: '/settings/rooms' },
-  { value: 'themes', label: 'Thèmes', icon: <IconPalette size={16} />, href: '/settings/themes' },
-  { value: 'scenario-groups', label: 'Groupes de scénarios', icon: <IconLayoutGrid size={16} />, href: '/settings/scenario-groups' },
+  { value: 'parametres', label: 'Paramètres', icon: <IconCategory size={16} />, href: '/settings/parametres' },
   { value: 'mqtt-logs', label: 'Logs MQTT', icon: <IconLogs size={16} />, href: '/settings/mqtt-logs' },
   { value: 'tools', label: 'Outils', icon: <IconTool size={16} />, href: '/settings/tools' },
   { value: 'system', label: 'Système', icon: <IconServer size={16} />, href: '/settings/system' },

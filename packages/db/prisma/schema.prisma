@@ -74,8 +74,10 @@ model Scenario {
   // AlarmEvent (déclenchement/résolution/acquittement) en plus d'exécuter ses actions.
   category   String    @default("automation")
   severity   String?
-  // Regroupement libre pour l'affichage (ex: "Ventilation sous-sol") — les scénarios
-  // partageant le même group sont repliés ensemble dans la liste.
+  // Nom du ScenarioGroup pour l'affichage (ex: "Ventilation sous-sol") — les scénarios
+  // partageant le même group sont repliés ensemble dans la liste. Référence par nom
+  // (pas de FK) pour rester simple : la table ScenarioGroup n'est qu'un registre des
+  // noms valides, gérée depuis les paramètres.
   group      String?
   trigger    String
   conditions String    @default("[]")
@@ -86,6 +88,13 @@ model Scenario {
   updatedAt  DateTime  @updatedAt
 
   alarmEvents AlarmEvent[]
+}
+
+model ScenarioGroup {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model AlarmEvent {

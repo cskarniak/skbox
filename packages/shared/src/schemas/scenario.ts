@@ -120,13 +120,8 @@ export const updateScenarioSchema = z
     path: ['severity'],
   });
 
-export const renameScenarioGroupSchema = z.object({
-  name: z.string().min(1).max(100),
-});
-
 export type Trigger = z.infer<typeof triggerSchema>;
 export type Condition = z.infer<typeof conditionSchema>;
 export type Action = z.infer<typeof actionSchema>;
 export type CreateScenarioDto = z.infer<typeof createScenarioSchema>;
 export type UpdateScenarioDto = z.infer<typeof updateScenarioSchema>;
-export type RenameScenarioGroupDto = z.infer<typeof renameScenarioGroupSchema>;

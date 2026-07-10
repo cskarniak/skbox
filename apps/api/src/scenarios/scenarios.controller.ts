@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ScenariosService } from './scenarios.service';
-import { createScenarioSchema, updateScenarioSchema, renameScenarioGroupSchema } from '@skbox/shared';
+import { createScenarioSchema, updateScenarioSchema } from '@skbox/shared';
 
 @ApiTags('scenarios')
 @Controller('scenarios')
@@ -36,17 +36,6 @@ export class ScenariosController {
   @Post('alarm-events/:id/acknowledge')
   acknowledgeAlarmEvent(@Param('id') id: string) {
     return this.scenarios.acknowledgeAlarmEvent(id);
-  }
-
-  @Patch('groups/:name')
-  renameGroup(@Param('name') name: string, @Body() body: unknown) {
-    const dto = renameScenarioGroupSchema.parse(body);
-    return this.scenarios.renameGroup(name, dto.name);
-  }
-
-  @Delete('groups/:name')
-  ungroup(@Param('name') name: string) {
-    return this.scenarios.ungroup(name);
   }
 
   @Get(':id')

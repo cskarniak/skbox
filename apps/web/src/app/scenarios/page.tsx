@@ -135,16 +135,13 @@ function ScenarioForm({
     queryKey: ['devices'],
     queryFn: () => api.get('/devices').then((r) => r.data),
   });
-  const { data: allScenarios } = useQuery<Scenario[]>({
-    queryKey: ['scenarios'],
-    queryFn: () => api.get('/scenarios').then((r) => r.data),
+  const { data: scenarioGroups } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ['scenario-groups'],
+    queryFn: () => api.get('/scenario-groups').then((r) => r.data),
   });
-  const existingGroups = [
-    ...new Set((allScenarios ?? []).map((s) => s.group).filter((g): g is string => !!g)),
-  ];
 
   const [name, setName] = useState(scenario?.name ?? '');
-  const [group, setGroup] = useState(scenario?.group ?? '');
+  const [group, setGroup] = useState<string | null>(scenario?.group ?? null);
   const [triggerType, setTriggerType] = useState<string>(
     scenario?.trigger?.type ?? 'device_state',
   );
@@ -270,7 +267,7 @@ function ScenarioForm({
     save.mutate({
       name,
       enabled: scenario?.enabled ?? true,
-      group: group.trim() || null,
+      group,
       trigger,
       conditions: validConditions,
       actions: [
@@ -303,13 +300,15 @@ function ScenarioForm({
           onChange={(e) => setName(e.currentTarget.value)}
           required
         />
-        <Autocomplete
+        <Select
           label="Groupe (optionnel)"
-          description="Regroupe ce scénario avec d'autres traitant le même sujet dans la liste"
-          placeholder="Ex: Ventilation sous-sol"
-          data={existingGroups}
+          description="Regroupe ce scénario avec d'autres traitant le même sujet dans la liste. Se gère depuis Paramètres → Groupes de scénarios."
+          placeholder="Aucun groupe"
+          data={(scenarioGroups ?? []).map((g) => ({ value: g.name, label: g.name }))}
           value={group}
           onChange={setGroup}
+          clearable
+          searchable
         />
 
         <Title order={5}>Déclencheur</Title>
