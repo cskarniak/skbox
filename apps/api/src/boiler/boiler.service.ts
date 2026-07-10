@@ -96,6 +96,11 @@ export interface BoilerStatus {
 const STATE_KEY = 'boiler';
 const TICK_MS = 60_000;
 
+function toMinutes(t: string): number {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+
 const DEFAULT_STATE: BoilerState = {
   deviceId: null,
   temperatureSensorId: null,
@@ -212,6 +217,13 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
       throw new BadRequestException("L'hystérésis ne peut pas être négative");
     }
 
+    // Trie les créneaux par heure de début : l'utilisateur peut les saisir dans n'importe quel
+    // ordre, l'affichage (et la relecture après sauvegarde) reste toujours chronologique.
+    const sortedPrograms = config.programs.map((program) => ({
+      ...program,
+      slots: [...program.slots].sort((a, b) => toMinutes(a.from) - toMinutes(b.from)),
+    }));
+
     const state = await this.loadState();
     const next: BoilerState = {
       ...state,
@@ -220,7 +232,7 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
       hysteresis: config.hysteresis,
       levels: config.levels,
       defaultLevel: config.defaultLevel,
-      programs: config.programs,
+      programs: sortedPrograms,
       dayPrograms: config.dayPrograms,
       minOnMinutes: config.minOnMinutes,
       minOffMinutes: config.minOffMinutes,
@@ -300,10 +312,6 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
   // l'enregistrement plutôt que de laisser un comportement ambigu.
   private assertNoOverlap(program: BoilerProgram): void {
     const toMinuteRanges = (slot: ProgramSlot): [number, number][] => {
-      const toMinutes = (t: string) => {
-        const [h, m] = t.split(':').map(Number);
-        return h * 60 + m;
-      };
       const start = toMinutes(slot.from);
       const end = toMinutes(slot.to);
       if (start < end) return [[start, end]];
