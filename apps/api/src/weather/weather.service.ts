@@ -68,8 +68,8 @@ const HOURLY_HOURS = 48;
 // Europe de l'Ouest centrée sur la France — assez large pour voir arriver les systèmes
 // (dépressions atlantiques, remontées méditerranéennes) avant qu'ils n'atteignent le pays.
 const MAP_BOUNDS = { latMin: 41, latMax: 51, lonMin: -5, lonMax: 10 };
-const MAP_GRID_LAT_POINTS = 9;
-const MAP_GRID_LON_POINTS = 11;
+const MAP_GRID_LAT_POINTS = 13;
+const MAP_GRID_LON_POINTS = 17;
 
 @Injectable()
 export class WeatherService {

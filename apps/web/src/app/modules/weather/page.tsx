@@ -181,10 +181,15 @@ export default function WeatherModulePage() {
 
   const mapMarkers: MapMarker[] = [];
   if (homeLocationQuery.data) {
-    mapMarkers.push({ lat: homeLocationQuery.data.lat, lon: homeLocationQuery.data.lon, color: CHART_COLORS[1] });
+    mapMarkers.push({
+      lat: homeLocationQuery.data.lat,
+      lon: homeLocationQuery.data.lon,
+      color: CHART_COLORS[1],
+      label: homeLocationQuery.data.label.split(',')[0],
+    });
   }
   if (location && !isHome) {
-    mapMarkers.push({ lat: location.lat, lon: location.lon, color: CHART_COLORS[0] });
+    mapMarkers.push({ lat: location.lat, lon: location.lon, color: CHART_COLORS[0], label: location.label.split(',')[0] });
   }
 
   const daily = forecastQuery.data?.daily ?? [];

@@ -26,11 +26,16 @@ export interface MapMarker {
   lat: number;
   lon: number;
   color: string;
+  label: string;
 }
 
 const CANVAS_WIDTH = 600;
 const CANVAS_HEIGHT = 480;
-const BLOCK_SIZE = 6;
+const BLOCK_SIZE = 3;
+// Écart-type du noyau gaussien, en degrés — calé sur l'espacement de la grille source
+// (~1.2° de latitude) pour que les points voisins se fondent en un dégradé continu au lieu
+// de "bulles" isolées (défaut classique de l'interpolation par distance inverse pure).
+const GAUSSIAN_SIGMA_DEG = 1.4;
 
 // Échelle divergente : bleu (dépression / plus frais) -> gris neutre -> orange (anticyclone /
 // plus chaud). Pour la pression, le point neutre est la pression atmosphérique standard
@@ -75,10 +80,12 @@ export function WeatherMap({ markers }: { markers: MapMarker[] }) {
 
     const { bounds, points } = data;
     const imageData = ctx.createImageData(CANVAS_WIDTH, CANVAS_HEIGHT);
+    const twoSigmaSq = 2 * GAUSSIAN_SIGMA_DEG * GAUSSIAN_SIGMA_DEG;
 
-    // Interpolation par pondération inverse à la distance (IDW) : chaque pixel prend une
-    // moyenne des points de grille pondérée par 1/distance², ce qui donne un dégradé lisse
-    // plutôt qu'une mosaïque de cellules brutes.
+    // Interpolation par noyau gaussien : chaque pixel prend une moyenne des points de
+    // grille pondérée par une exponentielle décroissante de la distance, ce qui fond les
+    // points voisins en un dégradé continu (contrairement à 1/distance², qui crée des
+    // "bulles" isolées autour de chaque point source).
     for (let py = 0; py < CANVAS_HEIGHT; py += BLOCK_SIZE) {
       const lat = bounds.latMax - (py / CANVAS_HEIGHT) * (bounds.latMax - bounds.latMin);
       for (let px = 0; px < CANVAS_WIDTH; px += BLOCK_SIZE) {
@@ -90,7 +97,7 @@ export function WeatherMap({ markers }: { markers: MapMarker[] }) {
           const dLat = p.lat - lat;
           const dLon = p.lon - lon;
           const distSq = dLat * dLat + dLon * dLon;
-          const weight = distSq < 1e-6 ? 1e6 : 1 / distSq;
+          const weight = Math.exp(-distSq / twoSigmaSq);
           weightedSum += p.value * weight;
           weightTotal += weight;
         }
@@ -109,6 +116,29 @@ export function WeatherMap({ markers }: { markers: MapMarker[] }) {
     }
     ctx.putImageData(imageData, 0, 0);
 
+    // Graticule (lignes de latitude/longitude) : sans contour de côte disponible, ces
+    // repères sont le seul moyen de situer les couleurs géographiquement.
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+    ctx.font = '11px sans-serif';
+    ctx.lineWidth = 1;
+    for (let lat = Math.ceil(bounds.latMin / 2) * 2; lat < bounds.latMax; lat += 2) {
+      const y = ((bounds.latMax - lat) / (bounds.latMax - bounds.latMin)) * CANVAS_HEIGHT;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(CANVAS_WIDTH, y);
+      ctx.stroke();
+      ctx.fillText(`${lat}°N`, 4, y - 3);
+    }
+    for (let lon = Math.ceil(bounds.lonMin / 2) * 2; lon < bounds.lonMax; lon += 2) {
+      const x = ((lon - bounds.lonMin) / (bounds.lonMax - bounds.lonMin)) * CANVAS_WIDTH;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, CANVAS_HEIGHT);
+      ctx.stroke();
+      ctx.fillText(`${lon}°E`, x + 3, 12);
+    }
+
     for (const m of markers) {
       const x = ((m.lon - bounds.lonMin) / (bounds.lonMax - bounds.lonMin)) * CANVAS_WIDTH;
       const y = ((bounds.latMax - m.lat) / (bounds.latMax - bounds.latMin)) * CANVAS_HEIGHT;
@@ -119,6 +149,13 @@ export function WeatherMap({ markers }: { markers: MapMarker[] }) {
       ctx.lineWidth = 1.5;
       ctx.strokeStyle = '#ffffff';
       ctx.stroke();
+
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+      ctx.lineWidth = 3;
+      ctx.strokeText(m.label, x + 9, y + 4);
+      ctx.fillText(m.label, x + 9, y + 4);
     }
   }, [data, markers, min, mid, max]);
 
