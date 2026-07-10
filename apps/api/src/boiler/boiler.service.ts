@@ -186,6 +186,7 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
           throw new BadRequestException(`Niveau invalide dans "${program.name}": ${slot.level}`);
         }
       }
+      this.assertNoOverlap(program);
     }
     for (const [day, programId] of Object.entries(config.dayPrograms)) {
       const dayNum = Number(day);
@@ -291,6 +292,42 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
     await this.saveState(next);
     if (enabled) await this.evaluate();
     return this.getStatus();
+  }
+
+  // Le matching de créneau (levelFromProgram) prend le premier créneau qui correspond dans
+  // l'ordre du tableau : deux créneaux qui se chevauchent donneraient un résultat dépendant de
+  // cet ordre, silencieusement, sans que l'utilisateur s'en rende compte. On l'interdit donc à
+  // l'enregistrement plutôt que de laisser un comportement ambigu.
+  private assertNoOverlap(program: BoilerProgram): void {
+    const toMinuteRanges = (slot: ProgramSlot): [number, number][] => {
+      const toMinutes = (t: string) => {
+        const [h, m] = t.split(':').map(Number);
+        return h * 60 + m;
+      };
+      const start = toMinutes(slot.from);
+      const end = toMinutes(slot.to);
+      if (start < end) return [[start, end]];
+      return [
+        [start, 24 * 60],
+        [0, end],
+      ]; // créneau traversant minuit, scindé en deux plages
+    };
+    const overlaps = (a: [number, number], b: [number, number]) => a[0] < b[1] && b[0] < a[1];
+
+    for (let i = 0; i < program.slots.length; i++) {
+      for (let j = i + 1; j < program.slots.length; j++) {
+        const a = program.slots[i];
+        const b = program.slots[j];
+        const aRanges = toMinuteRanges(a);
+        const bRanges = toMinuteRanges(b);
+        const conflict = aRanges.some((ra) => bRanges.some((rb) => overlaps(ra, rb)));
+        if (conflict) {
+          throw new BadRequestException(
+            `Créneaux qui se chevauchent dans "${program.name}" : ${a.from}-${a.to} et ${b.from}-${b.to}`,
+          );
+        }
+      }
+    }
   }
 
   private activeOverride(state: BoilerState): BoilerOverride | null {
