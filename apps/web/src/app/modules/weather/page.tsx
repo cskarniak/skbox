@@ -38,7 +38,7 @@ import { api } from '@/lib/api';
 import { AppNav } from '@/components/AppNav';
 import { ValueChart, OverlayChart } from '@/components/ValueChart';
 import { CHART_COLORS } from '@/lib/history';
-import { WeatherMap, type MapMarker } from './WeatherMap';
+import { WeatherMap } from './WeatherMap';
 
 interface WeatherLocation {
   lat: number;
@@ -178,19 +178,6 @@ export default function WeatherModulePage() {
 
   const isHome =
     !!location && !!homeLocationQuery.data && location.lat === homeLocationQuery.data.lat && location.lon === homeLocationQuery.data.lon;
-
-  const mapMarkers: MapMarker[] = [];
-  if (homeLocationQuery.data) {
-    mapMarkers.push({
-      lat: homeLocationQuery.data.lat,
-      lon: homeLocationQuery.data.lon,
-      color: CHART_COLORS[1],
-      label: homeLocationQuery.data.label.split(',')[0],
-    });
-  }
-  if (location && !isHome) {
-    mapMarkers.push({ lat: location.lat, lon: location.lon, color: CHART_COLORS[0], label: location.label.split(',')[0] });
-  }
 
   const daily = forecastQuery.data?.daily ?? [];
 
@@ -335,7 +322,7 @@ export default function WeatherModulePage() {
             </Stack>
           </Card>
 
-          <WeatherMap markers={mapMarkers} />
+          <WeatherMap />
 
           {!location && !homeLocationQuery.isLoading && (
             <Alert icon={<IconAlertCircle size={16} />} color="blue">

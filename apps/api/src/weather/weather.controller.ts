@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Put, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { MapVariable, WeatherLocation, WeatherService } from './weather.service';
+import { WeatherLocation, WeatherService } from './weather.service';
 
 @ApiTags('weather')
 @Controller('weather')
@@ -32,9 +32,8 @@ export class WeatherController {
     return this.weather.getForecast(Number(lat), Number(lon), label ?? 'Lieu recherché');
   }
 
-  @Get('map')
-  getMap(@Query('variable') variable?: string) {
-    const v: MapVariable = variable === 'pressure' ? 'pressure' : 'temperature850';
-    return this.weather.getMap(v);
+  @Get('air-mass-map')
+  getAirMassMap() {
+    return this.weather.getAirMassMap();
   }
 }
