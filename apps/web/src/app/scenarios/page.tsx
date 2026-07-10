@@ -230,6 +230,11 @@ function ScenarioForm({
         randomDelayMin,
         randomDelayMax,
       };
+    } else if (triggerType === 'device_update') {
+      trigger = {
+        type: 'device_update',
+        deviceId: triggerDeviceId,
+      };
     } else {
       trigger = {
         type: 'device_state',
@@ -281,6 +286,7 @@ function ScenarioForm({
           label="Type"
           data={[
             { value: 'device_state', label: 'État d\'un appareil' },
+            { value: 'device_update', label: 'Mise à jour d\'un appareil' },
             { value: 'cron', label: 'Planification horaire' },
           ]}
           value={triggerType}
@@ -317,6 +323,25 @@ function ScenarioForm({
                 onChange={(e) => setTriggerValue(e.currentTarget.value)}
               />
             </Group>
+          </>
+        )}
+
+        {triggerType === 'device_update' && (
+          <>
+            <Select
+              label="Appareil"
+              placeholder="Sélectionner un appareil"
+              data={deviceOptions}
+              value={triggerDeviceId}
+              onChange={(v) => setTriggerDeviceId(v ?? '')}
+              searchable
+            />
+            <Text size="sm" c="dimmed">
+              Le scénario est réévalué à chaque mise à jour de cet appareil, quelle que
+              soit la valeur reçue. La décision se fait entièrement dans les Conditions
+              ci-dessous — utile par exemple pour réagir aux variations d&apos;un capteur
+              utilisé uniquement en comparaison avec un autre.
+            </Text>
           </>
         )}
 
@@ -529,6 +554,13 @@ function ScenarioTypeBadge({ trigger }: { trigger: Trigger }) {
       </Badge>
     );
   }
+  if (trigger.type === 'device_update') {
+    return (
+      <Badge size="sm" variant="light" color="cyan" leftSection={<IconDeviceDesktop size={12} />}>
+        Mise à jour d&apos;un appareil
+      </Badge>
+    );
+  }
   return (
     <Badge size="sm" variant="light" color="teal" leftSection={<IconDeviceDesktop size={12} />}>
       État d&apos;un appareil
@@ -559,6 +591,16 @@ function TriggerSummary({
   }
 
   const device = devices.find((d) => d.id === trigger.deviceId);
+
+  if (trigger.type === 'device_update') {
+    return (
+      <Group gap={6}>
+        <IconDeviceDesktop size={14} />
+        <Text size="sm">Mise à jour de {device?.name ?? trigger.deviceId}</Text>
+      </Group>
+    );
+  }
+
   return (
     <Group gap={6}>
       <IconDeviceDesktop size={14} />

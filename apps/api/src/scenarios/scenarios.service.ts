@@ -172,7 +172,7 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
       const conditions: Condition[] = JSON.parse(scenario.conditions);
       const watchedDeviceIds = new Set<string>();
 
-      if (trigger.type === 'device_state') {
+      if (trigger.type === 'device_state' || trigger.type === 'device_update') {
         watchedDeviceIds.add(trigger.deviceId);
       } else if (trigger.type === 'cron') {
         this.scheduleCron(scenario, trigger);
@@ -254,16 +254,21 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
 
     for (const scenario of scenarios) {
       const trigger: Trigger = JSON.parse(scenario.trigger);
-      if (trigger.type !== 'device_state') continue;
+      if (trigger.type !== 'device_state' && trigger.type !== 'device_update') continue;
 
       const triggerDevice = await this.prisma.device.findUnique({
         where: { id: trigger.deviceId },
       });
       if (!triggerDevice) continue;
 
-      const triggerState = JSON.parse(triggerDevice.state || '{}');
-      const currentValue = triggerState[trigger.property];
-      const triggerMatches = this.compareValues(trigger.operator, currentValue, trigger.value);
+      // device_update se contente de réveiller le scénario à chaque mise à jour de
+      // l'appareil ; la vraie décision est prise par les Conditions ci-dessous.
+      let triggerMatches = true;
+      if (trigger.type === 'device_state') {
+        const triggerState = JSON.parse(triggerDevice.state || '{}');
+        const currentValue = triggerState[trigger.property];
+        triggerMatches = this.compareValues(trigger.operator, currentValue, trigger.value);
+      }
 
       if (scenario.category === 'alarm' && !triggerMatches) {
         // Le capteur est revenu à un état normal : on résout silencieusement toute
@@ -434,6 +439,12 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
         descriptions.push(
           `Déclencheur : ${device.name} (${trigger.property}) ${op(trigger.operator)} ${trigger.value} — valeur : ${stateOf(trigger.deviceId, trigger.property)}`,
         );
+      }
+    }
+    if (trigger.type === 'device_update') {
+      const device = deviceById.get(trigger.deviceId);
+      if (device) {
+        descriptions.push(`Déclencheur : mise à jour de ${device.name}`);
       }
     }
     for (const condition of conditions) {

@@ -17,9 +17,15 @@ const cronTriggerSchema = z.object({
   randomDelayMax: z.number().min(0).max(120).default(0),
 });
 
+const deviceUpdateTriggerSchema = z.object({
+  type: z.literal('device_update'),
+  deviceId: z.string().min(1),
+});
+
 const triggerSchema = z.discriminatedUnion('type', [
   deviceStateTriggerSchema,
   cronTriggerSchema,
+  deviceUpdateTriggerSchema,
 ]);
 
 const timeRangeConditionSchema = z.object({
