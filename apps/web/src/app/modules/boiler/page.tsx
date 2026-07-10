@@ -578,21 +578,21 @@ export default function BoilerPage() {
                       {program.slots.map((slot, index) => (
                         <Group key={index} gap="xs">
                           <TextInput
+                            type="time"
                             size="xs"
-                            w={80}
+                            w={110}
                             value={slot.from}
                             onChange={(e) => updateSlot(program.id, index, { from: e.currentTarget.value })}
-                            placeholder="06:00"
                           />
                           <Text size="xs" c="dimmed">
                             à
                           </Text>
                           <TextInput
+                            type="time"
                             size="xs"
-                            w={80}
+                            w={110}
                             value={slot.to}
                             onChange={(e) => updateSlot(program.id, index, { to: e.currentTarget.value })}
-                            placeholder="08:00"
                           />
                           <Select
                             size="xs"
