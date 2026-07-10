@@ -67,6 +67,14 @@ interface BoilerProgram {
 
 type DayPrograms = Record<number, string | null>;
 
+interface DateException {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  programId: string;
+}
+
 interface BoilerConfig {
   deviceId: string | null;
   temperatureSensorId: string | null;
@@ -75,6 +83,7 @@ interface BoilerConfig {
   defaultLevel: LevelKey;
   programs: BoilerProgram[];
   dayPrograms: DayPrograms;
+  dateExceptions: DateException[];
   minOnMinutes: number;
   minOffMinutes: number;
 }
@@ -97,6 +106,7 @@ interface BoilerStatus {
   override: BoilerOverride | null;
   lastChangeAt: string | null;
   enabled: boolean;
+  activeDateException: { id: string; name: string } | null;
 }
 
 function StopModuleButton({ enabled, loading, onConfirm }: { enabled: boolean; loading: boolean; onConfirm: () => void }) {
@@ -165,6 +175,7 @@ export default function BoilerPage() {
   const [defaultLevel, setDefaultLevel] = useState<LevelKey>('eco');
   const [programs, setPrograms] = useState<BoilerProgram[]>([]);
   const [dayPrograms, setDayPrograms] = useState<DayPrograms>({});
+  const [dateExceptions, setDateExceptions] = useState<DateException[]>([]);
   const [minOnMinutes, setMinOnMinutes] = useState(10);
   const [minOffMinutes, setMinOffMinutes] = useState(5);
   const [boostMinutes, setBoostMinutes] = useState(60);
@@ -195,6 +206,7 @@ export default function BoilerPage() {
       setDefaultLevel(config.defaultLevel);
       setPrograms(config.programs);
       setDayPrograms(config.dayPrograms);
+      setDateExceptions(config.dateExceptions);
       setMinOnMinutes(config.minOnMinutes);
       setMinOffMinutes(config.minOffMinutes);
     }
@@ -252,6 +264,7 @@ export default function BoilerPage() {
       defaultLevel,
       programs,
       dayPrograms,
+      dateExceptions,
       minOnMinutes,
       minOffMinutes,
     });
@@ -301,6 +314,23 @@ export default function BoilerPage() {
 
   const setDayProgram = (day: number, programId: string | null) => {
     setDayPrograms((prev) => ({ ...prev, [day]: programId }));
+  };
+
+  const addDateException = () => {
+    const id = generateId();
+    const today = new Date().toISOString().slice(0, 10);
+    setDateExceptions((prev) => [
+      ...prev,
+      { id, name: `Période ${prev.length + 1}`, startDate: today, endDate: today, programId: programs[0]?.id ?? '' },
+    ]);
+  };
+
+  const updateDateException = (id: string, patch: Partial<DateException>) => {
+    setDateExceptions((prev) => prev.map((ex) => (ex.id === id ? { ...ex, ...patch } : ex)));
+  };
+
+  const removeDateException = (id: string) => {
+    setDateExceptions((prev) => prev.filter((ex) => ex.id !== id));
   };
 
   const deviceOptions = (devices ?? [])
@@ -422,8 +452,12 @@ export default function BoilerPage() {
                 </Group>
                 <Group justify="space-between">
                   <Text size="sm">Mode</Text>
-                  <Badge color={status.override ? 'orange' : 'blue'} variant="light">
-                    {status.override ? 'dérogation manuelle' : 'planning'}
+                  <Badge color={status.override ? 'orange' : status.activeDateException ? 'grape' : 'blue'} variant="light">
+                    {status.override
+                      ? 'dérogation manuelle'
+                      : status.activeDateException
+                        ? `période : ${status.activeDateException.name}`
+                        : 'planning'}
                   </Badge>
                 </Group>
                 {status.override && (
@@ -642,6 +676,69 @@ export default function BoilerPage() {
                 />
               ))}
             </SimpleGrid>
+          </Card>
+
+          <Card shadow="sm" padding="lg" withBorder>
+            <Group justify="space-between" mb="sm">
+              <Text size="sm" c="dimmed">
+                Périodes dérogatoires (vacances...)
+              </Text>
+              <ActionIcon variant="subtle" size="sm" onClick={addDateException} disabled={programs.length === 0}>
+                <IconPlus size={14} />
+              </ActionIcon>
+            </Group>
+            {status?.activeDateException && (
+              <Text size="xs" c="orange" mb="xs">
+                Période active en ce moment : {status.activeDateException.name}
+              </Text>
+            )}
+            {programs.length === 0 && (
+              <Text size="xs" c="dimmed">
+                Crée d'abord un programme ci-dessus pour pouvoir l'associer à une période.
+              </Text>
+            )}
+            <Stack gap={6}>
+              {dateExceptions.map((ex) => (
+                <Group key={ex.id} gap="xs">
+                  <TextInput
+                    size="xs"
+                    w={140}
+                    value={ex.name}
+                    onChange={(e) => updateDateException(ex.id, { name: e.currentTarget.value })}
+                    placeholder="Vacances d'été"
+                  />
+                  <TextInput
+                    type="date"
+                    size="xs"
+                    w={150}
+                    value={ex.startDate}
+                    onChange={(e) => updateDateException(ex.id, { startDate: e.currentTarget.value })}
+                  />
+                  <Text size="xs" c="dimmed">
+                    à
+                  </Text>
+                  <TextInput
+                    type="date"
+                    size="xs"
+                    w={150}
+                    value={ex.endDate}
+                    onChange={(e) => updateDateException(ex.id, { endDate: e.currentTarget.value })}
+                  />
+                  <Select
+                    size="xs"
+                    w={160}
+                    placeholder="Programme"
+                    data={programs.map((p) => ({ value: p.id, label: p.name }))}
+                    value={ex.programId || null}
+                    onChange={(v) => updateDateException(ex.id, { programId: v ?? '' })}
+                    allowDeselect={false}
+                  />
+                  <ActionIcon variant="subtle" color="red" size="sm" onClick={() => removeDateException(ex.id)}>
+                    <IconTrash size={14} />
+                  </ActionIcon>
+                </Group>
+              ))}
+            </Stack>
           </Card>
 
           <Group justify="flex-end">

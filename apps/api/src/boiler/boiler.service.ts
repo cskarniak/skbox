@@ -45,6 +45,16 @@ export interface BoilerProgram {
 // jour de la semaine (0 = lundi ... 6 = dimanche) -> id de programme, ou null (niveau par défaut toute la journée)
 export type DayPrograms = Record<number, string | null>;
 
+// Période dérogatoire (ex: vacances) : tant que la date du jour est dans [startDate, endDate]
+// (inclus), le programme associé remplace le planning hebdomadaire habituel.
+export interface DateException {
+  id: string;
+  name: string;
+  startDate: string; // "YYYY-MM-DD"
+  endDate: string; // "YYYY-MM-DD", inclus
+  programId: string;
+}
+
 export interface BoilerOverride {
   level: LevelKey;
   until: string; // ISO
@@ -58,6 +68,7 @@ interface BoilerState {
   defaultLevel: LevelKey;
   programs: BoilerProgram[];
   dayPrograms: DayPrograms;
+  dateExceptions: DateException[];
   minOnMinutes: number;
   minOffMinutes: number;
   override: BoilerOverride | null;
@@ -74,6 +85,7 @@ export interface BoilerConfig {
   defaultLevel: LevelKey;
   programs: BoilerProgram[];
   dayPrograms: DayPrograms;
+  dateExceptions: DateException[];
   minOnMinutes: number;
   minOffMinutes: number;
 }
@@ -91,6 +103,7 @@ export interface BoilerStatus {
   override: BoilerOverride | null;
   lastChangeAt: string | null;
   enabled: boolean;
+  activeDateException: { id: string; name: string } | null;
 }
 
 const STATE_KEY = 'boiler';
@@ -109,6 +122,7 @@ const DEFAULT_STATE: BoilerState = {
   defaultLevel: 'eco',
   programs: [],
   dayPrograms: {},
+  dateExceptions: [],
   minOnMinutes: 10,
   minOffMinutes: 5,
   override: null,
@@ -148,6 +162,7 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
         levels: { ...DEFAULT_LEVEL_TEMPS, ...parsed.levels },
         programs: Array.isArray(parsed.programs) ? parsed.programs : [],
         dayPrograms: parsed.dayPrograms ?? {},
+        dateExceptions: Array.isArray(parsed.dateExceptions) ? parsed.dateExceptions : [],
       };
     } catch {
       return { ...DEFAULT_STATE, levels: { ...DEFAULT_LEVEL_TEMPS } };
@@ -168,6 +183,7 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
       defaultLevel: state.defaultLevel,
       programs: state.programs,
       dayPrograms: state.dayPrograms,
+      dateExceptions: state.dateExceptions,
       minOnMinutes: state.minOnMinutes,
       minOffMinutes: state.minOffMinutes,
     };
@@ -202,6 +218,32 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
         throw new BadRequestException(`Programme introuvable pour le jour ${day}: ${programId}`);
       }
     }
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    for (const ex of config.dateExceptions) {
+      if (!ex.id || !ex.name.trim()) {
+        throw new BadRequestException('Une période dérogatoire doit avoir un id et un nom');
+      }
+      if (!dateRe.test(ex.startDate) || !dateRe.test(ex.endDate)) {
+        throw new BadRequestException(`Dates invalides pour "${ex.name}" : ${ex.startDate} - ${ex.endDate}`);
+      }
+      if (ex.startDate > ex.endDate) {
+        throw new BadRequestException(`Période invalide pour "${ex.name}" : la date de début est après la date de fin`);
+      }
+      if (!programIds.has(ex.programId)) {
+        throw new BadRequestException(`Programme introuvable pour la période "${ex.name}"`);
+      }
+    }
+    // Deux périodes dérogatoires qui se chevauchent seraient ambiguës (quel programme
+    // s'applique ?) — interdit pour la même raison que les créneaux qui se chevauchent.
+    const sortedExceptions = [...config.dateExceptions].sort((a, b) => (a.startDate < b.startDate ? -1 : 1));
+    for (let i = 0; i < sortedExceptions.length - 1; i++) {
+      if (sortedExceptions[i].endDate >= sortedExceptions[i + 1].startDate) {
+        throw new BadRequestException(
+          `Périodes dérogatoires qui se chevauchent : "${sortedExceptions[i].name}" et "${sortedExceptions[i + 1].name}"`,
+        );
+      }
+    }
+
     if (!LEVEL_KEYS.includes(config.defaultLevel)) {
       throw new BadRequestException(`Niveau par défaut invalide: ${config.defaultLevel}`);
     }
@@ -234,6 +276,7 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
       defaultLevel: config.defaultLevel,
       programs: sortedPrograms,
       dayPrograms: config.dayPrograms,
+      dateExceptions: sortedExceptions,
       minOnMinutes: config.minOnMinutes,
       minOffMinutes: config.minOffMinutes,
     };
@@ -281,6 +324,7 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
       override: activeOverride,
       lastChangeAt: state.lastChangeAt,
       enabled: state.enabled,
+      activeDateException: this.activeDateException(state, new Date()),
     };
   }
 
@@ -349,9 +393,24 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
     return this.levelFromProgram(state, new Date()) ?? state.defaultLevel;
   }
 
+  // Le jour est au format "YYYY-MM-DD" local (pas UTC) pour correspondre au sens calendaire
+  // d'une période de vacances plutôt qu'à un instant précis.
+  private todayDateString(now: Date): string {
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  }
+
+  private activeDateException(state: BoilerState, now: Date): { id: string; name: string } | null {
+    const today = this.todayDateString(now);
+    const match = state.dateExceptions.find((ex) => ex.startDate <= today && today <= ex.endDate);
+    return match ? { id: match.id, name: match.name } : null;
+  }
+
   private levelFromProgram(state: BoilerState, now: Date): LevelKey | null {
-    const day = (now.getDay() + 6) % 7; // JS: 0=dimanche -> 0=lundi..6=dimanche
-    const programId = state.dayPrograms[day];
+    const today = this.todayDateString(now);
+    const exception = state.dateExceptions.find((ex) => ex.startDate <= today && today <= ex.endDate);
+    // Une période dérogatoire (vacances...) remplace le planning hebdomadaire habituel tant
+    // qu'elle est active, plutôt que de s'y ajouter.
+    const programId = exception ? exception.programId : state.dayPrograms[(now.getDay() + 6) % 7]; // JS: 0=dimanche -> 0=lundi..6=dimanche
     if (!programId) return null;
     const program = state.programs.find((p) => p.id === programId);
     if (!program) return null;
