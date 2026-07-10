@@ -21,6 +21,7 @@ import {
   NumberInput,
   Popover,
   Card,
+  Accordion,
 } from '@mantine/core';
 import {
   IconSmartHome,
@@ -93,6 +94,7 @@ interface Scenario {
   id: string;
   name: string;
   enabled: boolean;
+  group: string | null;
   trigger: Trigger;
   conditions: Condition[];
   actions: Action[];
@@ -133,8 +135,16 @@ function ScenarioForm({
     queryKey: ['devices'],
     queryFn: () => api.get('/devices').then((r) => r.data),
   });
+  const { data: allScenarios } = useQuery<Scenario[]>({
+    queryKey: ['scenarios'],
+    queryFn: () => api.get('/scenarios').then((r) => r.data),
+  });
+  const existingGroups = [
+    ...new Set((allScenarios ?? []).map((s) => s.group).filter((g): g is string => !!g)),
+  ];
 
   const [name, setName] = useState(scenario?.name ?? '');
+  const [group, setGroup] = useState(scenario?.group ?? '');
   const [triggerType, setTriggerType] = useState<string>(
     scenario?.trigger?.type ?? 'device_state',
   );
@@ -260,6 +270,7 @@ function ScenarioForm({
     save.mutate({
       name,
       enabled: scenario?.enabled ?? true,
+      group: group.trim() || null,
       trigger,
       conditions: validConditions,
       actions: [
@@ -291,6 +302,14 @@ function ScenarioForm({
           value={name}
           onChange={(e) => setName(e.currentTarget.value)}
           required
+        />
+        <Autocomplete
+          label="Groupe (optionnel)"
+          description="Regroupe ce scénario avec d'autres traitant le même sujet dans la liste"
+          placeholder="Ex: Ventilation sous-sol"
+          data={existingGroups}
+          value={group}
+          onChange={setGroup}
         />
 
         <Title order={5}>Déclencheur</Title>
@@ -693,6 +712,103 @@ function ActionSummary({
   );
 }
 
+function ScenarioTable({
+  scenarios,
+  devices,
+  onEdit,
+  onToggleEnabled,
+  onDelete,
+  onTest,
+  testPending,
+}: {
+  scenarios: Scenario[];
+  devices: Device[];
+  onEdit: (s: Scenario) => void;
+  onToggleEnabled: (id: string, enabled: boolean) => void;
+  onDelete: (id: string) => void;
+  onTest: (id: string) => void;
+  testPending: boolean;
+}) {
+  return (
+    <Table striped highlightOnHover>
+      <Table.Thead>
+        <Table.Tr>
+          <Table.Th>Actif</Table.Th>
+          <Table.Th>Nom</Table.Th>
+          <Table.Th>Type de scénario</Table.Th>
+          <Table.Th>Déclencheur</Table.Th>
+          <Table.Th>Conditions</Table.Th>
+          <Table.Th>Action</Table.Th>
+          <Table.Th>Prochaine exécution</Table.Th>
+          <Table.Th>Dernière exécution</Table.Th>
+          <Table.Th />
+        </Table.Tr>
+      </Table.Thead>
+      <Table.Tbody>
+        {scenarios.map((s) => (
+          <Table.Tr
+            key={s.id}
+            style={{ cursor: 'pointer' }}
+            onClick={() => onEdit(s)}
+          >
+            <Table.Td onClick={(e) => e.stopPropagation()}>
+              <Switch
+                checked={s.enabled}
+                onChange={(e) => onToggleEnabled(s.id, e.currentTarget.checked)}
+              />
+            </Table.Td>
+            <Table.Td>
+              <Text fw={500}>{s.name}</Text>
+            </Table.Td>
+            <Table.Td>
+              <ScenarioTypeBadge trigger={s.trigger} />
+            </Table.Td>
+            <Table.Td>
+              <TriggerSummary trigger={s.trigger} devices={devices} />
+            </Table.Td>
+            <Table.Td>
+              <ConditionsSummary conditions={s.conditions} devices={devices} />
+            </Table.Td>
+            <Table.Td>
+              <ActionSummary actions={s.actions} devices={devices} />
+            </Table.Td>
+            <Table.Td>
+              <Text size="sm" c="dimmed">
+                {s.nextRun ? new Date(s.nextRun).toLocaleString('fr-FR') : '—'}
+              </Text>
+            </Table.Td>
+            <Table.Td>
+              <Stack gap={0}>
+                <Text size="sm" c="dimmed">
+                  {s.lastRun ? new Date(s.lastRun).toLocaleString('fr-FR') : '—'}
+                </Text>
+                {s.runCount > 0 && (
+                  <Text size="xs" c="dimmed">
+                    {s.runCount} exécution{s.runCount > 1 ? 's' : ''}
+                  </Text>
+                )}
+              </Stack>
+            </Table.Td>
+            <Table.Td onClick={(e) => e.stopPropagation()}>
+              <Group gap="xs">
+                <TestButton scenarioId={s.id} onTest={onTest} loading={testPending} />
+                <ActionIcon
+                  variant="subtle"
+                  color="red"
+                  onClick={() => onDelete(s.id)}
+                  title="Supprimer"
+                >
+                  <IconTrash size={16} />
+                </ActionIcon>
+              </Group>
+            </Table.Td>
+          </Table.Tr>
+        ))}
+      </Table.Tbody>
+    </Table>
+  );
+}
+
 function TestButton({
   scenarioId,
   onTest,
@@ -776,6 +892,11 @@ export default function ScenariosPage() {
     mutationFn: (id: string) => api.post(`/scenarios/${id}/test`),
   });
 
+  const groupNames = [
+    ...new Set((scenarios ?? []).map((s) => s.group).filter((g): g is string => !!g)),
+  ].sort((a, b) => a.localeCompare(b));
+  const ungroupedScenarios = (scenarios ?? []).filter((s) => !s.group);
+
   return (
     <AppShell header={{ height: 60 }} padding="md">
       <AppShell.Header>
@@ -819,104 +940,56 @@ export default function ScenariosPage() {
             </Stack>
           </Center>
         ) : (
-          <Table striped highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Actif</Table.Th>
-                <Table.Th>Nom</Table.Th>
-                <Table.Th>Type de scénario</Table.Th>
-                <Table.Th>Déclencheur</Table.Th>
-                <Table.Th>Conditions</Table.Th>
-                <Table.Th>Action</Table.Th>
-                <Table.Th>Prochaine exécution</Table.Th>
-                <Table.Th>Dernière exécution</Table.Th>
-                <Table.Th />
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {scenarios.map((s) => (
-                <Table.Tr
-                  key={s.id}
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => {
-                    setEditingScenario(s);
-                    setFormOpened(true);
-                  }}
-                >
-                  <Table.Td onClick={(e) => e.stopPropagation()}>
-                    <Switch
-                      checked={s.enabled}
-                      onChange={(e) =>
-                        toggleEnabled.mutate({
-                          id: s.id,
-                          enabled: e.currentTarget.checked,
-                        })
-                      }
-                    />
-                  </Table.Td>
-                  <Table.Td>
-                    <Text fw={500}>{s.name}</Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <ScenarioTypeBadge trigger={s.trigger} />
-                  </Table.Td>
-                  <Table.Td>
-                    <TriggerSummary
-                      trigger={s.trigger}
-                      devices={devices ?? []}
-                    />
-                  </Table.Td>
-                  <Table.Td>
-                    <ConditionsSummary conditions={s.conditions} devices={devices ?? []} />
-                  </Table.Td>
-                  <Table.Td>
-                    <ActionSummary
-                      actions={s.actions}
-                      devices={devices ?? []}
-                    />
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm" c="dimmed">
-                      {s.nextRun
-                        ? new Date(s.nextRun).toLocaleString('fr-FR')
-                        : '—'}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Stack gap={0}>
-                      <Text size="sm" c="dimmed">
-                        {s.lastRun
-                          ? new Date(s.lastRun).toLocaleString('fr-FR')
-                          : '—'}
-                      </Text>
-                      {s.runCount > 0 && (
-                        <Text size="xs" c="dimmed">
-                          {s.runCount} exécution{s.runCount > 1 ? 's' : ''}
-                        </Text>
-                      )}
-                    </Stack>
-                  </Table.Td>
-                  <Table.Td onClick={(e) => e.stopPropagation()}>
-                    <Group gap="xs">
-                      <TestButton
-                        scenarioId={s.id}
-                        onTest={(id) => testScenario.mutate(id)}
-                        loading={testScenario.isPending}
-                      />
-                      <ActionIcon
-                        variant="subtle"
-                        color="red"
-                        onClick={() => deleteScenario.mutate(s.id)}
-                        title="Supprimer"
-                      >
-                        <IconTrash size={16} />
-                      </ActionIcon>
-                    </Group>
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+          <Stack gap="md">
+            {groupNames.length > 0 && (
+              <Accordion multiple defaultValue={[]} variant="separated">
+                {groupNames.map((groupName) => {
+                  const groupScenarios = scenarios.filter((s) => s.group === groupName);
+                  return (
+                    <Accordion.Item key={groupName} value={groupName}>
+                      <Accordion.Control>
+                        <Group gap="xs">
+                          <Text fw={500}>{groupName}</Text>
+                          <Badge size="sm" variant="light" color="gray">
+                            {groupScenarios.length}
+                          </Badge>
+                        </Group>
+                      </Accordion.Control>
+                      <Accordion.Panel>
+                        <ScenarioTable
+                          scenarios={groupScenarios}
+                          devices={devices ?? []}
+                          onEdit={(s) => {
+                            setEditingScenario(s);
+                            setFormOpened(true);
+                          }}
+                          onToggleEnabled={(id, enabled) => toggleEnabled.mutate({ id, enabled })}
+                          onDelete={(id) => deleteScenario.mutate(id)}
+                          onTest={(id) => testScenario.mutate(id)}
+                          testPending={testScenario.isPending}
+                        />
+                      </Accordion.Panel>
+                    </Accordion.Item>
+                  );
+                })}
+              </Accordion>
+            )}
+
+            {ungroupedScenarios.length > 0 && (
+              <ScenarioTable
+                scenarios={ungroupedScenarios}
+                devices={devices ?? []}
+                onEdit={(s) => {
+                  setEditingScenario(s);
+                  setFormOpened(true);
+                }}
+                onToggleEnabled={(id, enabled) => toggleEnabled.mutate({ id, enabled })}
+                onDelete={(id) => deleteScenario.mutate(id)}
+                onTest={(id) => testScenario.mutate(id)}
+                testPending={testScenario.isPending}
+              />
+            )}
+          </Stack>
         )}
 
         <ScenarioForm

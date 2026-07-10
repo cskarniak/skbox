@@ -74,6 +74,9 @@ model Scenario {
   // AlarmEvent (déclenchement/résolution/acquittement) en plus d'exécuter ses actions.
   category   String    @default("automation")
   severity   String?
+  // Regroupement libre pour l'affichage (ex: "Ventilation sous-sol") — les scénarios
+  // partageant le même group sont repliés ensemble dans la liste.
+  group      String?
   trigger    String
   conditions String    @default("[]")
   actions    String    @default("[]")

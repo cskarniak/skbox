@@ -93,6 +93,7 @@ export const createScenarioSchema = z
   .object({
     name: z.string().min(1).max(200),
     enabled: z.boolean().default(true),
+    group: z.string().max(100).nullable().optional(),
     ...scenarioCategoryFields,
     trigger: triggerSchema,
     conditions: z.array(conditionSchema).default([]),
@@ -107,6 +108,7 @@ export const updateScenarioSchema = z
   .object({
     name: z.string().min(1).max(200).optional(),
     enabled: z.boolean().optional(),
+    group: z.string().max(100).nullable().optional(),
     category: scenarioCategorySchema.optional(),
     severity: alarmSeveritySchema.optional(),
     trigger: triggerSchema.optional(),

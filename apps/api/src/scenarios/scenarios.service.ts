@@ -81,6 +81,7 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
       data: {
         name: dto.name,
         enabled: dto.enabled,
+        group: dto.group,
         category: dto.category,
         severity: dto.severity,
         trigger: JSON.stringify(dto.trigger),
@@ -96,6 +97,7 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
     const data: Record<string, unknown> = {};
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.enabled !== undefined) data.enabled = dto.enabled;
+    if (dto.group !== undefined) data.group = dto.group;
     if (dto.category !== undefined) data.category = dto.category;
     if (dto.severity !== undefined) data.severity = dto.severity;
     if (dto.trigger !== undefined) data.trigger = JSON.stringify(dto.trigger);
