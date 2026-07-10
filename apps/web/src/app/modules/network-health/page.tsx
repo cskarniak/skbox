@@ -34,10 +34,18 @@ interface NetworkDevice {
   type: 'Coordinator' | 'Router' | 'EndDevice';
 }
 
+interface BestLink {
+  device: string;
+  bestNeighbor: string;
+  linkquality: number;
+  weak: boolean;
+}
+
 interface NetworkHealthReport {
   scannedAt: string;
   devices: NetworkDevice[];
   links: NetworkLink[];
+  bestLinks: BestLink[];
 }
 
 export default function NetworkHealthPage() {
@@ -131,6 +139,42 @@ export default function NetworkHealthPage() {
                   {weakCount} liaison{weakCount !== 1 ? 's' : ''} faible{weakCount !== 1 ? 's' : ''}
                 </Badge>
               </Group>
+
+              <Card shadow="sm" padding="lg" withBorder>
+                <Text fw={500} mb="xs">Meilleure liaison par appareil</Text>
+                <Text size="xs" c="dimmed" mb="sm">
+                  Pour chaque appareil, son voisin direct offrant la meilleure qualité de signal — pas
+                  nécessairement la route effectivement empruntée par Zigbee (le protocole a sa propre logique de
+                  routage), mais une indication simple d'avec qui il communique le mieux. Si même ce "meilleur"
+                  lien reste faible, l'appareil n'a aucune bonne route disponible.
+                </Text>
+                {(!report.bestLinks || report.bestLinks.length === 0) ? (
+                  <Text size="sm" c="dimmed">Aucune donnée.</Text>
+                ) : (
+                  <Table striped highlightOnHover>
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th>Device</Table.Th>
+                        <Table.Th>Meilleur voisin</Table.Th>
+                        <Table.Th>Qualité</Table.Th>
+                      </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {report.bestLinks.map((bl, i) => (
+                        <Table.Tr key={i}>
+                          <Table.Td>{bl.device}</Table.Td>
+                          <Table.Td>{bl.bestNeighbor}</Table.Td>
+                          <Table.Td>
+                            <Badge color={bl.weak ? 'orange' : 'teal'} variant="light">
+                              {bl.linkquality}/255
+                            </Badge>
+                          </Table.Td>
+                        </Table.Tr>
+                      ))}
+                    </Table.Tbody>
+                  </Table>
+                )}
+              </Card>
 
               <Card shadow="sm" padding="lg" withBorder>
                 <Text fw={500} mb="xs">Liaisons du maillage</Text>

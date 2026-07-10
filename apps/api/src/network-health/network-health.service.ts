@@ -40,10 +40,18 @@ export interface NetworkDevice {
   type: 'Coordinator' | 'Router' | 'EndDevice';
 }
 
+export interface BestLink {
+  device: string;
+  bestNeighbor: string;
+  linkquality: number;
+  weak: boolean;
+}
+
 export interface NetworkHealthReport {
   scannedAt: string;
   devices: NetworkDevice[];
   links: NetworkLink[]; // triés du plus faible au plus fort
+  bestLinks: BestLink[]; // pour chaque appareil, son meilleur voisin direct — triés par nom d'appareil
 }
 
 @Injectable()
@@ -154,6 +162,28 @@ export class NetworkHealthService implements OnModuleInit, OnModuleDestroy {
       type: n.type,
     }));
 
-    return { scannedAt: new Date().toISOString(), devices, links };
+    return { scannedAt: new Date().toISOString(), devices, links, bestLinks: this.computeBestLinks(links) };
+  }
+
+  // Le voisin direct offrant la meilleure qualité de signal vers chaque appareil — pas
+  // nécessairement la route effectivement empruntée par Zigbee (le protocole a sa propre
+  // logique de routage, indépendante du LQI brut), mais une indication simple et fiable de
+  // "avec qui cet appareil communique le mieux", utile pour savoir où placer un répéteur.
+  private computeBestLinks(links: NetworkLink[]): BestLink[] {
+    const bestByDevice = new Map<string, NetworkLink>();
+    for (const link of links) {
+      const current = bestByDevice.get(link.targetName);
+      if (!current || link.linkquality > current.linkquality) {
+        bestByDevice.set(link.targetName, link);
+      }
+    }
+    return [...bestByDevice.values()]
+      .map((link) => ({
+        device: link.targetName,
+        bestNeighbor: link.sourceName,
+        linkquality: link.linkquality,
+        weak: link.weak,
+      }))
+      .sort((a, b) => a.device.localeCompare(b.device));
   }
 }
