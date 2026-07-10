@@ -8,7 +8,6 @@ import { useState } from 'react';
 import { api } from '@/lib/api';
 import { errorMessage } from '@/lib/errors';
 import { DeleteConfirmButton } from '@/components/DeleteConfirmButton';
-import { NamedListManager } from '@/components/NamedListManager';
 
 interface Theme {
   id: string;
@@ -18,7 +17,7 @@ interface Theme {
   devices: { id: string }[];
 }
 
-export default function SettingsParametresPage() {
+export default function SettingsThemesPage() {
   const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -70,37 +69,10 @@ export default function SettingsParametresPage() {
   return (
     <Stack gap="lg">
       <div>
-        <Title order={4}>Paramètres</Title>
+        <Title order={4}>Thèmes</Title>
         <Text size="sm" c="dimmed">
-          Thèmes, pièces et objets utilisés pour organiser et regrouper les appareils. L'assignation des
-          appareils se fait depuis l'onglet Appareils.
-        </Text>
-      </div>
-
-      <Group align="flex-start" grow>
-        <Card shadow="sm" padding="lg" withBorder>
-          <NamedListManager
-            title="Objets"
-            description="Regroupements de haut niveau (ex: Maison, Garage, Jardin)."
-            queryKey="parent-objects"
-            endpoint="/parent-objects"
-          />
-        </Card>
-        <Card shadow="sm" padding="lg" withBorder>
-          <NamedListManager
-            title="Pièces"
-            description="Pièces disponibles pour l'affectation des appareils."
-            queryKey="rooms"
-            endpoint="/rooms"
-          />
-        </Card>
-      </Group>
-
-      <div>
-        <Title order={5}>Thèmes</Title>
-        <Text size="sm" c="dimmed">
-          Groupes libres d'appareils utilisés pour organiser les sections du dashboard, indépendants des
-          pièces.
+          Groupes libres d&apos;appareils utilisés pour organiser les sections du dashboard, indépendants
+          des pièces.
         </Text>
       </div>
 

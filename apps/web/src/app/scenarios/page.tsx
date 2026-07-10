@@ -942,7 +942,13 @@ export default function ScenariosPage() {
         ) : (
           <Stack gap="md">
             {groupNames.length > 0 && (
-              <Accordion multiple defaultValue={[]} variant="separated">
+              <Accordion
+                multiple
+                defaultValue={[]}
+                variant="separated"
+                chevronPosition="left"
+                chevronSize={24}
+              >
                 {groupNames.map((groupName) => {
                   const groupScenarios = scenarios.filter((s) => s.group === groupName);
                   return (

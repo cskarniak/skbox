@@ -119,6 +119,23 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
     await this.reloadScenarios();
   }
 
+  async renameGroup(oldName: string, newName: string) {
+    await this.prisma.scenario.updateMany({
+      where: { group: oldName },
+      data: { group: newName },
+    });
+    await this.reloadScenarios();
+  }
+
+  // Détache tous les scénarios de ce groupe (ils redeviennent "sans groupe") sans les supprimer.
+  async ungroup(name: string) {
+    await this.prisma.scenario.updateMany({
+      where: { group: name },
+      data: { group: null },
+    });
+    await this.reloadScenarios();
+  }
+
   // --- Alarm events ---
 
   async findAlarmEvents(resolved?: boolean, acknowledged?: boolean) {
