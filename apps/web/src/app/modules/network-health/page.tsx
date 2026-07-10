@@ -107,7 +107,7 @@ export default function NetworkHealthPage() {
             </Group>
             {scan.isError && (
               <Alert mt="sm" icon={<IconAlertCircle size={16} />} color="red">
-                Échec du scan — vérifie que Zigbee2MQTT est bien démarré.
+                Échec du scan : {(scan.error as any)?.response?.data?.message ?? (scan.error as any)?.message ?? 'erreur inconnue'}
               </Alert>
             )}
           </Card>

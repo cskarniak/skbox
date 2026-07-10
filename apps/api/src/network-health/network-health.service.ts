@@ -57,6 +57,9 @@ export class NetworkHealthService implements OnModuleInit, OnModuleDestroy {
   // chaque scan (ce qui les accumulerait indéfiniment).
   private pending: { resolve: (v: { nodes: RawNode[]; links: RawLink[] }) => void; reject: (e: Error) => void } | null =
     null;
+  // Un scan manuel qui tombe pile pendant le scan automatique périodique (ou un double-clic)
+  // partage ce même scan en cours plutôt que d'échouer immédiatement avec "déjà en cours".
+  private inFlight: Promise<NetworkHealthReport> | null = null;
 
   constructor(private readonly mqtt: MqttService) {}
 
@@ -79,6 +82,14 @@ export class NetworkHealthService implements OnModuleInit, OnModuleDestroy {
   // "Schéma" de son interface), plutôt que de se fier au dernier `linkquality` connu par
   // appareil — qui ne se met à jour que si du trafic passe justement par ce lien.
   async scan(): Promise<NetworkHealthReport> {
+    if (this.inFlight) return this.inFlight;
+    this.inFlight = this.runScan().finally(() => {
+      this.inFlight = null;
+    });
+    return this.inFlight;
+  }
+
+  private async runScan(): Promise<NetworkHealthReport> {
     const raw = await this.requestNetworkMap();
     const report = this.buildReport(raw);
     this.lastReport = report;
