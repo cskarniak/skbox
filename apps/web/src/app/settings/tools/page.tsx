@@ -1,7 +1,7 @@
 'use client';
 
-import { Card, Title, Text, Stack, Button, Table, Group, Badge, Loader, Center, Popover } from '@mantine/core';
-import { IconSearch, IconTrash, IconPlayerPlay, IconPlayerStop } from '@tabler/icons-react';
+import { Card, Title, Text, Stack, Button, Table, Group, Badge, Loader, Center, Popover, Spoiler } from '@mantine/core';
+import { IconSearch, IconTrash, IconPlayerPlay, IconPlayerStop, IconTestPipe } from '@tabler/icons-react';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notifications } from '@mantine/notifications';
@@ -23,6 +23,13 @@ interface SystemHealth {
     backendState: string | null;
     ips: string[];
   };
+}
+
+interface TestRunResult {
+  success: boolean;
+  summary: string;
+  output: string;
+  durationMs: number;
 }
 
 function ConfirmButton({
@@ -138,6 +145,19 @@ export default function ToolsPage() {
   });
 
   const totalRedundant = results?.reduce((sum, r) => sum + r.redundant, 0) ?? 0;
+
+  const runTests = useMutation({
+    mutationFn: () => api.post<TestRunResult>('/system/run-tests').then((r) => r.data),
+    onSuccess: (data) => {
+      notifications.show({
+        color: data.success ? 'teal' : 'red',
+        title: data.success ? 'Tests réussis' : 'Échec des tests',
+        message: data.summary || `Terminé en ${(data.durationMs / 1000).toFixed(1)} s`,
+      });
+    },
+    onError: (err) =>
+      notifications.show({ color: 'red', title: 'Échec', message: errorMessage(err, "Impossible de lancer les tests.") }),
+  });
 
   return (
     <Stack gap="lg">
@@ -257,6 +277,51 @@ export default function ToolsPage() {
                 ))}
               </Table.Tbody>
             </Table>
+          ) : null}
+        </Stack>
+      </Card>
+
+      <Card shadow="sm" padding="lg" withBorder>
+        <Stack gap="md">
+          <div>
+            <Title order={4}>Tests automatisés</Title>
+            <Text size="sm" c="dimmed">
+              Lance la suite de tests unitaires du moteur de chaudière et de scénarios (<code>pnpm --filter api test</code>)
+              directement depuis le serveur, sans rien exécuter sur les appareils réels.
+            </Text>
+          </div>
+
+          <Group gap="sm">
+            <Button
+              leftSection={<IconTestPipe size={16} />}
+              variant="light"
+              onClick={() => runTests.mutate()}
+              loading={runTests.isPending}
+            >
+              Lancer les tests
+            </Button>
+            {runTests.data && (
+              <>
+                <Badge color={runTests.data.success ? 'teal' : 'red'} variant="light">
+                  {runTests.data.success ? 'Succès' : 'Échec'}
+                </Badge>
+                <Text size="sm" c="dimmed">
+                  {runTests.data.summary} · {(runTests.data.durationMs / 1000).toFixed(1)} s
+                </Text>
+              </>
+            )}
+          </Group>
+
+          {runTests.isPending ? (
+            <Center h={80}>
+              <Loader size="sm" />
+            </Center>
+          ) : runTests.data ? (
+            <Spoiler maxHeight={160} showLabel="Voir le détail complet" hideLabel="Réduire">
+              <Text component="pre" size="xs" ff="monospace" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                {runTests.data.output}
+              </Text>
+            </Spoiler>
           ) : null}
         </Stack>
       </Card>

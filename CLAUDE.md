@@ -17,6 +17,7 @@
 - `pnpm db:seed` — seed rooms
 - `pnpm db:studio` — Prisma Studio
 - `pnpm docker:up` — start Mosquitto + Redis
+- `pnpm test` — run unit tests (Vitest; currently `apps/api` only: `BoilerService`, `ScenariosService`)
 
 ## Zigbee2MQTT (native)
 - Install: `~/zigbee2mqtt` (v1.42.0, git clone + npm ci + npm run build)

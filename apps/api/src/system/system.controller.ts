@@ -81,4 +81,9 @@ export class SystemController {
     }
     return this.system.getHealth();
   }
+
+  @Post('run-tests')
+  runTests() {
+    return this.system.runTests();
+  }
 }

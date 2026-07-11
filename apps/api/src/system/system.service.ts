@@ -19,6 +19,13 @@ export interface DockerContainer {
   status: string;
 }
 
+export interface TestRunResult {
+  success: boolean;
+  summary: string;
+  output: string;
+  durationMs: number;
+}
+
 export interface SystemHealth {
   hostname: string;
   timestamp: string;
@@ -159,6 +166,46 @@ export class SystemService {
   async setThermalShutdownActive(active: boolean): Promise<void> {
     const action = active ? 'start' : 'stop';
     await this.runOrThrow(`sudo systemctl ${action} thermal-shutdown.timer`);
+  }
+
+  // Lance la suite de tests unitaires (Vitest, voir apps/api/src/**/*.spec.ts) depuis le
+  // dashboard, sans shell distant. `pnpm --filter api test` fonctionne quel que soit le
+  // cwd du process API (pnpm remonte jusqu'à la racine du workspace) — pas de chemin en dur.
+  // Un échec de tests n'est pas une erreur HTTP : c'est un résultat normal à afficher.
+  async runTests(): Promise<TestRunResult> {
+    const start = Date.now();
+    try {
+      const { stdout, stderr } = await execAsync('pnpm --filter api test', {
+        timeout: 120_000,
+        maxBuffer: 10 * 1024 * 1024,
+      });
+      const output = this.stripAnsi(`${stdout}\n${stderr}`.trim());
+      return { success: true, summary: this.extractTestSummary(output), output, durationMs: Date.now() - start };
+    } catch (err: any) {
+      const raw = [err?.stdout, err?.stderr].filter(Boolean).join('\n') || err?.message || 'Erreur inconnue';
+      const output = this.stripAnsi(raw);
+      return {
+        success: false,
+        summary: this.extractTestSummary(output) || 'Échec de l\'exécution des tests',
+        output,
+        durationMs: Date.now() - start,
+      };
+    }
+  }
+
+  private stripAnsi(text: string): string {
+    // eslint-disable-next-line no-control-regex
+    return text.replace(/\x1b\[[0-9;]*m/g, '');
+  }
+
+  // Vitest imprime un récapitulatif du type "Test Files  2 passed (2)" / "Tests  25 passed (25)"
+  // — on l'extrait pour un affichage compact, le détail complet restant disponible en dessous.
+  private extractTestSummary(output: string): string {
+    const summaryLines = output
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => /^(Test Files|Tests)\s/.test(l));
+    return summaryLines.join(' · ');
   }
 
   // Arrêt volontaire d'un bridge pour vérifier en conditions réelles que la relance

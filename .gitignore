@@ -17,3 +17,4 @@ backups/
 restored-deploy-*/
 *.db.backup-*
 .env.backup-*
+.DS_Store

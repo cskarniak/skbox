@@ -1,0 +1,97 @@
+<mxfile host="app.diagrams.net" agent="Skbox docs">
+  <diagram id="skbox-architecture" name="Architecture Skbox">
+    <mxGraphModel dx="1571" dy="928" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1650" pageHeight="920" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;fontSize=22;fontStyle=1;align=left;verticalAlign=middle;fontFamily=Helvetica;" value="Skbox — Architecture technique (v1.0.0)" vertex="1">
+          <mxGeometry height="30" width="700" x="40" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="host" parent="1" style="rounded=0;whiteSpace=wrap;html=1;dashed=1;dashPattern=8 4;fillColor=none;strokeColor=#999999;verticalAlign=top;align=left;spacingLeft=12;spacingTop=8;fontColor=#666666;fontSize=12;fontStyle=1;" value="Hôte skbox-mini — Mac mini 2011 / Ubuntu 22.04 (systemd, sans Docker)" vertex="1">
+          <mxGeometry height="460" width="1100" x="260" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="zigbee-devices" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;" value="Appareils Zigbee&#xa;(lampes, prises, capteurs...)" vertex="1">
+          <mxGeometry height="70" width="170" x="40" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="rf433-devices" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;" value="Capteurs RF433&#xa;(Oregon Scientific, Chacon/DIO)" vertex="1">
+          <mxGeometry height="70" width="170" x="40" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="z2m" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" value="Zigbee2MQTT&#xa;dongle Sonoff ZBDongle-E&#xa;(processus natif systemd)" vertex="1">
+          <mxGeometry height="70" width="190" x="300" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="rfxcom" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" value="rfxcom2mqtt&#xa;dongle RFXtrx433E&#xa;(processus natif systemd)" vertex="1">
+          <mxGeometry height="70" width="190" x="300" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="mosquitto" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;fontStyle=1;" value="Mosquitto&#xa;(broker MQTT — port 1883 / 9001 ws)" vertex="1">
+          <mxGeometry height="70" width="190" x="560" y="235" as="geometry" />
+        </mxCell>
+        <mxCell id="api" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;align=center;verticalAlign=middle;spacingTop=4;" value="apps/api — NestJS 11&#xa;(port 3001, préfixe /api)&#xa;&#xa;devices · rooms · zigbee · rfxcom&#xa;scenarios · alarm-events · system&#xa;boiler · cameras · weather&#xa;backup · notifications · settings" vertex="1">
+          <mxGeometry height="220" width="230" x="820" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="db" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;align=center;verticalAlign=bottom;spacingBottom=8;" value="packages/db — @skbox/db&#xa;Prisma / SQLite (skbox.db)" vertex="1">
+          <mxGeometry height="80" width="160" x="855" y="410" as="geometry" />
+        </mxCell>
+        <mxCell id="web" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" value="apps/web — Next.js 16&#xa;(port 3002, proxy /api/*)&#xa;React 19 · Mantine 7 · TanStack Query" vertex="1">
+          <mxGeometry height="80" width="220" x="1120" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="browser" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=12;" value="Navigateur&#xa;(dashboard utilisateur)" vertex="1">
+          <mxGeometry height="60" width="180" x="1420" y="160" as="geometry" />
+        </mxCell>
+        <mxCell id="ext-title" parent="1" style="text;html=1;fontSize=12;fontStyle=1;align=left;fontColor=#666666;" value="Services externes" vertex="1">
+          <mxGeometry height="20" width="200" x="1120" y="620" as="geometry" />
+        </mxCell>
+        <mxCell id="telegram" parent="1" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;" value="Telegram&#xa;(notifications)" vertex="1">
+          <mxGeometry height="55" width="150" x="820" y="650" as="geometry" />
+        </mxCell>
+        <mxCell id="smtp" parent="1" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;" value="SMTP&#xa;(email)" vertex="1">
+          <mxGeometry height="55" width="150" x="1000" y="650" as="geometry" />
+        </mxCell>
+        <mxCell id="weather-api" parent="1" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;" value="API météo&#xa;(prévisions externes)" vertex="1">
+          <mxGeometry height="55" width="150" x="1180" y="650" as="geometry" />
+        </mxCell>
+        <mxCell id="tailscale" parent="1" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;" value="Tailscale&#xa;(VPN accès distant)" vertex="1">
+          <mxGeometry height="55" width="150" x="1360" y="650" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="zigbee-devices" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;" target="z2m" value="radio Zigbee">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="rf433-devices" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;" target="rfxcom" value="radio 433 MHz">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="z2m" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;" target="mosquitto" value="zigbee2mqtt/#">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="rfxcom" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;" target="mosquitto" value="rfxcom2mqtt/#">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="mosquitto" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=block;endArrow=block;startFill=1;endFill=1;fontSize=11;" target="api" value="skbox/# · zigbee2mqtt/# · rfxcom2mqtt/#">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="api" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;startArrow=block;endArrow=block;startFill=1;endFill=1;fontSize=11;" target="db" value="Prisma">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="web" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;" target="api" value="/api/* (rewrite Next.js)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="browser" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;" target="web" value="HTTP :3002">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" edge="1" parent="1" source="api" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;fontSize=11;" target="telegram" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" edge="1" parent="1" source="api" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;fontSize=11;" target="smtp" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" edge="1" parent="1" source="api" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;fontSize=11;" target="weather-api" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e12" edge="1" parent="1" source="api" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;startArrow=block;endArrow=block;startFill=1;endFill=1;fontSize=11;" target="tailscale" value="accès distant">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="legend" parent="1" style="text;html=1;fontSize=11;fontStyle=2;align=left;fontColor=#888888;" value="Trait plein = flux applicatif interne · Trait pointillé = service externe / optionnel" vertex="1">
+          <mxGeometry height="20" width="600" x="40" y="850" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
