@@ -86,6 +86,7 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
         severity: dto.severity,
         trigger: JSON.stringify(dto.trigger),
         conditions: JSON.stringify(dto.conditions),
+        conditionsOperator: dto.conditionsOperator,
         actions: JSON.stringify(dto.actions),
       },
     });
@@ -103,6 +104,7 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
     if (dto.trigger !== undefined) data.trigger = JSON.stringify(dto.trigger);
     if (dto.conditions !== undefined)
       data.conditions = JSON.stringify(dto.conditions);
+    if (dto.conditionsOperator !== undefined) data.conditionsOperator = dto.conditionsOperator;
     if (dto.actions !== undefined) data.actions = JSON.stringify(dto.actions);
 
     const scenario = await this.prisma.scenario.update({
@@ -225,7 +227,7 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
         const actions: Action[] = JSON.parse(fresh.actions);
         const conditions: Condition[] = JSON.parse(fresh.conditions);
 
-        const conditionsMet = await this.evaluateConditions(conditions);
+        const conditionsMet = await this.evaluateConditions(conditions, fresh.conditionsOperator);
         if (!conditionsMet) {
           this.logger.log(`Cron scenario "${fresh.name}" skipped (conditions not met)`);
           this.scheduleCron(fresh, trigger);
@@ -282,7 +284,7 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
       if (!triggerMatches) continue;
 
       const conditions: Condition[] = JSON.parse(scenario.conditions);
-      const conditionsMet = await this.evaluateConditions(conditions);
+      const conditionsMet = await this.evaluateConditions(conditions, scenario.conditionsOperator);
       if (!conditionsMet) continue;
 
       if (scenario.category === 'alarm') {
@@ -325,49 +327,51 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  private async evaluateConditions(conditions: Condition[]): Promise<boolean> {
-    for (const condition of conditions) {
-      switch (condition.type) {
-        case 'time_range': {
-          const now = new Date();
-          const current = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-          const { from, to } = condition;
-          if (from <= to) {
-            if (current < from || current > to) return false;
-          } else {
-            // Midnight crossing: 22:00 → 06:00
-            if (current < from && current > to) return false;
-          }
-          break;
-        }
-        case 'device_state': {
-          const device = await this.prisma.device.findUnique({
-            where: { id: condition.deviceId },
-          });
-          if (!device) return false;
-          const deviceState = JSON.parse(device.state);
-          const currentValue = deviceState[condition.property];
-          if (!this.compareValues(condition.operator, currentValue, condition.value)) return false;
-          break;
-        }
-        case 'device_diff': {
-          const [deviceA, deviceB] = await Promise.all([
-            this.prisma.device.findUnique({ where: { id: condition.deviceIdA } }),
-            this.prisma.device.findUnique({ where: { id: condition.deviceIdB } }),
-          ]);
-          if (!deviceA || !deviceB) return false;
+  private async evaluateConditions(
+    conditions: Condition[],
+    operator: string = 'AND',
+  ): Promise<boolean> {
+    if (conditions.length === 0) return true;
+    const results = await Promise.all(conditions.map((c) => this.evaluateCondition(c)));
+    return operator === 'OR' ? results.some(Boolean) : results.every(Boolean);
+  }
 
-          const valueA = Number(JSON.parse(deviceA.state)[condition.propertyA]);
-          const valueB = Number(JSON.parse(deviceB.state)[condition.propertyB]);
-          if (Number.isNaN(valueA) || Number.isNaN(valueB)) return false;
-
-          const diff = valueA - valueB;
-          if (!this.compareValues(condition.operator, diff, condition.threshold)) return false;
-          break;
+  private async evaluateCondition(condition: Condition): Promise<boolean> {
+    switch (condition.type) {
+      case 'time_range': {
+        const now = new Date();
+        const current = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        const { from, to } = condition;
+        if (from <= to) {
+          return current >= from && current <= to;
         }
+        // Midnight crossing: 22:00 → 06:00
+        return current >= from || current <= to;
+      }
+      case 'device_state': {
+        const device = await this.prisma.device.findUnique({
+          where: { id: condition.deviceId },
+        });
+        if (!device) return false;
+        const deviceState = JSON.parse(device.state);
+        const currentValue = deviceState[condition.property];
+        return this.compareValues(condition.operator, currentValue, condition.value);
+      }
+      case 'device_diff': {
+        const [deviceA, deviceB] = await Promise.all([
+          this.prisma.device.findUnique({ where: { id: condition.deviceIdA } }),
+          this.prisma.device.findUnique({ where: { id: condition.deviceIdB } }),
+        ]);
+        if (!deviceA || !deviceB) return false;
+
+        const valueA = Number(JSON.parse(deviceA.state)[condition.propertyA]);
+        const valueB = Number(JSON.parse(deviceB.state)[condition.propertyB]);
+        if (Number.isNaN(valueA) || Number.isNaN(valueB)) return false;
+
+        const diff = valueA - valueB;
+        return this.compareValues(condition.operator, diff, condition.threshold);
       }
     }
-    return true;
   }
 
   private compareValues(operator: string, current: unknown, target: unknown): boolean {

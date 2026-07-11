@@ -22,6 +22,7 @@ import {
   Popover,
   Card,
   Accordion,
+  SegmentedControl,
 } from '@mantine/core';
 import {
   IconSmartHome,
@@ -33,7 +34,7 @@ import {
   IconDeviceDesktop,
 } from '@tabler/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { api } from '@/lib/api';
 import { AppNav } from '@/components/AppNav';
 
@@ -97,6 +98,7 @@ interface Scenario {
   group: string | null;
   trigger: Trigger;
   conditions: Condition[];
+  conditionsOperator: 'AND' | 'OR';
   actions: Action[];
   lastRun: string | null;
   nextRun: string | null;
@@ -170,6 +172,9 @@ function ScenarioForm({
   );
   const [conditions, setConditions] = useState<Condition[]>(
     scenario?.conditions ?? [],
+  );
+  const [conditionsOperator, setConditionsOperator] = useState<'AND' | 'OR'>(
+    scenario?.conditionsOperator ?? 'AND',
   );
 
   const updateCondition = (index: number, patch: Partial<Condition>) => {
@@ -270,6 +275,7 @@ function ScenarioForm({
       group,
       trigger,
       conditions: validConditions,
+      conditionsOperator,
       actions: [
         {
           type: 'device_command',
@@ -412,6 +418,17 @@ function ScenarioForm({
         )}
 
         <Title order={5}>Conditions (optionnel)</Title>
+        {conditions.length > 1 && (
+          <SegmentedControl
+            size="xs"
+            data={[
+              { value: 'AND', label: 'Toutes les conditions (ET)' },
+              { value: 'OR', label: 'Au moins une condition (OU)' },
+            ]}
+            value={conditionsOperator}
+            onChange={(v) => setConditionsOperator(v as 'AND' | 'OR')}
+          />
+        )}
         {conditions.map((c, i) => (
           <Card key={i} withBorder padding="sm">
             <Group justify="space-between" mb="xs">
@@ -648,9 +665,11 @@ function TriggerSummary({
 
 function ConditionsSummary({
   conditions,
+  conditionsOperator,
   devices,
 }: {
   conditions: Condition[];
+  conditionsOperator: 'AND' | 'OR';
   devices: Device[];
 }) {
   if (!conditions.length) return null;
@@ -658,33 +677,42 @@ function ConditionsSummary({
   return (
     <Stack gap={2} mt={4}>
       {conditions.map((c, i) => {
+        let badge: ReactNode = null;
         if (c.type === 'time_range') {
-          return (
-            <Badge key={i} size="xs" variant="outline">
+          badge = (
+            <Badge size="xs" variant="outline">
               {c.from}–{c.to}
             </Badge>
           );
-        }
-        if (c.type === 'device_state') {
+        } else if (c.type === 'device_state') {
           const device = devices.find((d) => d.id === c.deviceId);
-          return (
-            <Badge key={i} size="xs" variant="outline">
+          badge = (
+            <Badge size="xs" variant="outline">
               {device?.name ?? c.deviceId} {c.property} {operatorSymbol(c.operator)}{' '}
               {String(c.value)}
             </Badge>
           );
-        }
-        if (c.type === 'device_diff') {
+        } else if (c.type === 'device_diff') {
           const deviceA = devices.find((d) => d.id === c.deviceIdA);
           const deviceB = devices.find((d) => d.id === c.deviceIdB);
-          return (
-            <Badge key={i} size="xs" variant="outline">
+          badge = (
+            <Badge size="xs" variant="outline">
               {deviceA?.name ?? c.deviceIdA} − {deviceB?.name ?? c.deviceIdB}{' '}
               {operatorSymbol(c.operator)} {c.threshold}
             </Badge>
           );
         }
-        return null;
+        if (!badge) return null;
+        return (
+          <Group key={i} gap={4}>
+            {i > 0 && (
+              <Text size="xs" c="dimmed" fw={700}>
+                {conditionsOperator === 'OR' ? 'OU' : 'ET'}
+              </Text>
+            )}
+            {badge}
+          </Group>
+        );
       })}
     </Stack>
   );
@@ -766,7 +794,7 @@ function ScenarioTable({
               <TriggerSummary trigger={s.trigger} devices={devices} />
             </Table.Td>
             <Table.Td>
-              <ConditionsSummary conditions={s.conditions} devices={devices} />
+              <ConditionsSummary conditions={s.conditions} conditionsOperator={s.conditionsOperator} devices={devices} />
             </Table.Td>
             <Table.Td>
               <ActionSummary actions={s.actions} devices={devices} />

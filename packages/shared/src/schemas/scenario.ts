@@ -97,6 +97,7 @@ export const createScenarioSchema = z
     ...scenarioCategoryFields,
     trigger: triggerSchema,
     conditions: z.array(conditionSchema).default([]),
+    conditionsOperator: z.enum(['AND', 'OR']).default('AND'),
     actions: z.array(actionSchema).min(1),
   })
   .refine((dto) => dto.category !== 'alarm' || !!dto.severity, {
@@ -113,6 +114,7 @@ export const updateScenarioSchema = z
     severity: alarmSeveritySchema.optional(),
     trigger: triggerSchema.optional(),
     conditions: z.array(conditionSchema).optional(),
+    conditionsOperator: z.enum(['AND', 'OR']).optional(),
     actions: z.array(actionSchema).min(1).optional(),
   })
   .refine((dto) => dto.category !== 'alarm' || !!dto.severity, {

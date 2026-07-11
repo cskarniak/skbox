@@ -81,6 +81,8 @@ model Scenario {
   group      String?
   trigger    String
   conditions String    @default("[]")
+  // "AND" (défaut) ou "OR" — combine les éléments de `conditions` entre eux.
+  conditionsOperator String @default("AND")
   actions    String    @default("[]")
   lastRun    DateTime?
   runCount   Int       @default(0)
