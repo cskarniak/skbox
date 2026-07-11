@@ -271,6 +271,11 @@ export default function WeatherModulePage() {
                   <IconMapPin size={18} />
                   <Text fw={500}>{location?.label ?? 'Aucun lieu sélectionné'}</Text>
                   {isHome && <Badge variant="light">Lieu par défaut</Badge>}
+                  {forecastQuery.dataUpdatedAt > 0 && (
+                    <Text size="xs" c="dimmed">
+                      Mis à jour à {new Date(forecastQuery.dataUpdatedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                  )}
                 </Group>
                 {location && !isHome && (
                   <Button
