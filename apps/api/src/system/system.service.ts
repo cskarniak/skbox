@@ -179,11 +179,11 @@ export class SystemService {
         timeout: 120_000,
         maxBuffer: 10 * 1024 * 1024,
       });
-      const output = this.stripAnsi(`${stdout}\n${stderr}`.trim());
+      const output = this.filterNestLogs(this.stripAnsi(`${stdout}\n${stderr}`.trim()));
       return { success: true, summary: this.extractTestSummary(output), output, durationMs: Date.now() - start };
     } catch (err: any) {
       const raw = [err?.stdout, err?.stderr].filter(Boolean).join('\n') || err?.message || 'Erreur inconnue';
-      const output = this.stripAnsi(raw);
+      const output = this.filterNestLogs(this.stripAnsi(raw));
       return {
         success: false,
         summary: this.extractTestSummary(output) || 'Échec de l\'exécution des tests',
@@ -196,6 +196,17 @@ export class SystemService {
   private stripAnsi(text: string): string {
     // eslint-disable-next-line no-control-regex
     return text.replace(/\x1b\[[0-9;]*m/g, '');
+  }
+
+  // Les services testés (BoilerService, ScenariosService...) utilisent le Logger Nest, qui
+  // écrit sur stdout pendant les tests comme en prod. Ce bruit ("[Nest] 1234 - ... LOG ...")
+  // noie le résultat Vitest utile (résumé, erreurs, stack traces) dans la carte Outils.
+  private filterNestLogs(output: string): string {
+    return output
+      .split('\n')
+      .filter((line) => !/^\[Nest\]\s/.test(line))
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n');
   }
 
   // Vitest imprime un récapitulatif du type "Test Files  2 passed (2)" / "Tests  25 passed (25)"
