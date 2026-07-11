@@ -838,10 +838,10 @@ export default function DevicesPage() {
   const [parentObjectFilter, setParentObjectFilter] = useState<string | null>(null);
   const [themeFilter, setThemeFilter] = useState<string | null>(null);
 
-  const deviceThemeOrder = (device: Device): number => {
+  const deviceThemeName = (device: Device): string => {
     const deviceThemes = (themes ?? []).filter((t) => t.devices.some((d) => d.id === device.id));
-    if (deviceThemes.length === 0) return Number.MAX_SAFE_INTEGER;
-    return Math.min(...deviceThemes.map((t) => t.order));
+    if (deviceThemes.length === 0) return '￿';
+    return deviceThemes.map((t) => t.name).sort((a, b) => a.localeCompare(b))[0];
   };
 
   const filteredDevices = (devices ?? [])
@@ -849,7 +849,7 @@ export default function DevicesPage() {
     .filter((d) => !parentObjectFilter || d.parentObject === parentObjectFilter)
     .filter((d) => !themeFilter || (themes ?? []).some((t) => t.id === themeFilter && t.devices.some((dev) => dev.id === d.id)))
     .sort((a, b) => {
-      if (sortBy === 'theme') return deviceThemeOrder(a) - deviceThemeOrder(b);
+      if (sortBy === 'theme') return deviceThemeName(a).localeCompare(deviceThemeName(b));
       if (sortBy === 'objet') return (a.parentObject ?? '').localeCompare(b.parentObject ?? '');
       return (a.room ?? '').localeCompare(b.room ?? '');
     });
