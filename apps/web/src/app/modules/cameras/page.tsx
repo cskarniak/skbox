@@ -581,11 +581,16 @@ function CameraTile({ camera, host, onEdit, onRemove }: { camera: Camera; host: 
             {/* Pas de permission "autoplay" ici : le lecteur go2rtc tente une lecture avec
                 son, échoue (autoplay non autorisé sans cette permission) puis repasse
                 automatiquement en muet — les vignettes de la grille restent donc silencieuses,
-                seule la vue agrandie (modal ci-dessous) a la permission et joue le son. */}
-            <iframe
-              src={streamSrc}
-              style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
-            />
+                seule la vue agrandie (modal ci-dessous) a la permission et joue le son.
+                On coupe cette vignette pendant que le modal est ouvert : sinon les deux
+                iframes tirent chacune un flux go2rtc séparé pour la même caméra, ce qui
+                dégrade la vue agrandie (l'image devient quasi figée). */}
+            {!expanded && (
+              <iframe
+                src={streamSrc}
+                style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
+              />
+            )}
           </div>
         ) : (
           <Center h={180} style={{ opacity: 0.5 }}>
