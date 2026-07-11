@@ -23,6 +23,7 @@ import {
 interface Theme {
   id: string;
   name: string;
+  order: number;
   devices: { id: string }[];
 }
 
@@ -832,6 +833,27 @@ export default function DevicesPage() {
     queryFn: () => api.get('/parent-objects').then((r) => r.data),
   });
 
+  const [sortBy, setSortBy] = useState<'theme' | 'objet' | 'piece'>('theme');
+  const [roomFilter, setRoomFilter] = useState<string | null>(null);
+  const [parentObjectFilter, setParentObjectFilter] = useState<string | null>(null);
+  const [themeFilter, setThemeFilter] = useState<string | null>(null);
+
+  const deviceThemeOrder = (device: Device): number => {
+    const deviceThemes = (themes ?? []).filter((t) => t.devices.some((d) => d.id === device.id));
+    if (deviceThemes.length === 0) return Number.MAX_SAFE_INTEGER;
+    return Math.min(...deviceThemes.map((t) => t.order));
+  };
+
+  const filteredDevices = (devices ?? [])
+    .filter((d) => !roomFilter || d.room === roomFilter)
+    .filter((d) => !parentObjectFilter || d.parentObject === parentObjectFilter)
+    .filter((d) => !themeFilter || (themes ?? []).some((t) => t.id === themeFilter && t.devices.some((dev) => dev.id === d.id)))
+    .sort((a, b) => {
+      if (sortBy === 'theme') return deviceThemeOrder(a) - deviceThemeOrder(b);
+      if (sortBy === 'objet') return (a.parentObject ?? '').localeCompare(b.parentObject ?? '');
+      return (a.room ?? '').localeCompare(b.room ?? '');
+    });
+
   return (
     <AppShell header={{ height: 60 }} padding="md">
       <AppShell.Header>
@@ -858,6 +880,53 @@ export default function DevicesPage() {
         </Text>
       </div>
 
+      <Group gap="sm" wrap="wrap">
+        <Select
+          size="xs"
+          placeholder="Trier par"
+          label="Trier par"
+          data={[
+            { value: 'theme', label: 'Thème' },
+            { value: 'objet', label: 'Objet' },
+            { value: 'piece', label: 'Pièce' },
+          ]}
+          value={sortBy}
+          onChange={(value) => setSortBy((value as 'theme' | 'objet' | 'piece') ?? 'theme')}
+          allowDeselect={false}
+          w={160}
+        />
+        <Select
+          size="xs"
+          placeholder="Toutes"
+          label="Filtrer par objet"
+          data={(parentObjects ?? []).map((p) => ({ value: p.name, label: p.name }))}
+          value={parentObjectFilter}
+          onChange={setParentObjectFilter}
+          clearable
+          w={200}
+        />
+        <Select
+          size="xs"
+          placeholder="Toutes"
+          label="Filtrer par pièce"
+          data={(rooms ?? []).map((r) => ({ value: r.name, label: r.name }))}
+          value={roomFilter}
+          onChange={setRoomFilter}
+          clearable
+          w={200}
+        />
+        <Select
+          size="xs"
+          placeholder="Tous"
+          label="Filtrer par thème"
+          data={(themes ?? []).map((t) => ({ value: t.id, label: t.name }))}
+          value={themeFilter}
+          onChange={setThemeFilter}
+          clearable
+          w={200}
+        />
+      </Group>
+
       <Table striped highlightOnHover verticalSpacing="sm">
         <Table.Thead>
           <Table.Tr>
@@ -872,7 +941,7 @@ export default function DevicesPage() {
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
-          {(devices ?? []).map((device) => (
+          {filteredDevices.map((device) => (
             <DeviceRow
               key={device.id}
               device={device}
