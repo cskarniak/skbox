@@ -850,8 +850,8 @@ export default function DevicesPage() {
     .filter((d) => !themeFilter || (themes ?? []).some((t) => t.id === themeFilter && t.devices.some((dev) => dev.id === d.id)))
     .sort((a, b) => {
       if (sortBy === 'theme') return deviceThemeName(a).localeCompare(deviceThemeName(b));
-      if (sortBy === 'objet') return (a.parentObject ?? '').localeCompare(b.parentObject ?? '');
-      return (a.room ?? '').localeCompare(b.room ?? '');
+      if (sortBy === 'objet') return (a.parentObject ?? '￿').localeCompare(b.parentObject ?? '￿');
+      return (a.room ?? '￿').localeCompare(b.room ?? '￿');
     });
 
   return (
