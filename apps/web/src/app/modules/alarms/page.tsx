@@ -22,6 +22,7 @@ import {
   Popover,
   Card,
   Alert,
+  SegmentedControl,
 } from '@mantine/core';
 import {
   IconAlertTriangle,
@@ -49,6 +50,8 @@ const operatorOptions = [
   { value: 'lte', label: '≤' },
 ];
 
+const diffOperatorOptions = operatorOptions.filter((o) => o.value !== 'eq');
+
 function operatorSymbol(op?: string) {
   return operatorOptions.find((o) => o.value === op)?.label ?? '=';
 }
@@ -68,6 +71,21 @@ interface Trigger {
   value?: unknown;
 }
 
+interface Condition {
+  type: string;
+  from?: string;
+  to?: string;
+  deviceId?: string;
+  property?: string;
+  operator?: string;
+  value?: unknown;
+  deviceIdA?: string;
+  propertyA?: string;
+  deviceIdB?: string;
+  propertyB?: string;
+  threshold?: number;
+}
+
 type Action =
   | { type: 'device_command'; deviceId: string; command: Record<string, unknown> }
   | { type: 'notify_telegram'; message: string }
@@ -80,6 +98,8 @@ interface AlarmScenario {
   category: string;
   severity: 'critical' | 'warning' | null;
   trigger: Trigger;
+  conditions: Condition[];
+  conditionsOperator: 'AND' | 'OR';
   actions: Action[];
   createdAt: string;
 }
@@ -111,6 +131,10 @@ function deviceState(device?: Device): Record<string, unknown> {
 
 function deviceStateKeys(device?: Device): string[] {
   return Object.keys(deviceState(device));
+}
+
+function devicePropertyOptions(devices: Device[] | undefined, deviceId: string): string[] {
+  return deviceStateKeys(devices?.find((d) => d.id === deviceId));
 }
 
 function severityColor(severity?: string | null) {
@@ -238,6 +262,20 @@ function AlarmForm({
   const [actions, setActions] = useState<Action[]>(
     scenario?.actions ?? [{ type: 'notify_telegram', message: '' }],
   );
+  const [conditions, setConditions] = useState<Condition[]>(scenario?.conditions ?? []);
+  const [conditionsOperator, setConditionsOperator] = useState<'AND' | 'OR'>(
+    scenario?.conditionsOperator ?? 'AND',
+  );
+
+  const updateCondition = (index: number, patch: Partial<Condition>) => {
+    setConditions((prev) => prev.map((c, i) => (i === index ? { ...c, ...patch } : c)));
+  };
+  const removeCondition = (index: number) => {
+    setConditions((prev) => prev.filter((_, i) => i !== index));
+  };
+  const addCondition = () => {
+    setConditions((prev) => [...prev, { type: 'time_range' }]);
+  };
 
   const updateAction = (index: number, action: Action) => {
     setActions((prev) => prev.map((a, i) => (i === index ? action : a)));
@@ -260,6 +298,35 @@ function AlarmForm({
 
   const handleSubmit = () => {
     if (!actions.length) return;
+    const validConditions = conditions
+      .filter((c) => {
+        if (c.type === 'time_range') return !!c.from && !!c.to;
+        if (c.type === 'device_state') return !!c.deviceId && !!c.property;
+        if (c.type === 'device_diff')
+          return !!c.deviceIdA && !!c.propertyA && !!c.deviceIdB && !!c.propertyB;
+        return false;
+      })
+      .map((c) => {
+        if (c.type === 'time_range') return { type: 'time_range', from: c.from, to: c.to };
+        if (c.type === 'device_state')
+          return {
+            type: 'device_state',
+            deviceId: c.deviceId,
+            property: c.property,
+            operator: c.operator ?? 'eq',
+            value: typeof c.value === 'string' ? parseValue(c.value) : c.value,
+          };
+        return {
+          type: 'device_diff',
+          deviceIdA: c.deviceIdA,
+          propertyA: c.propertyA,
+          deviceIdB: c.deviceIdB,
+          propertyB: c.propertyB,
+          operator: c.operator ?? 'gte',
+          threshold: c.threshold ?? 0,
+        };
+      });
+
     save.mutate({
       name,
       enabled: scenario?.enabled ?? true,
@@ -272,7 +339,8 @@ function AlarmForm({
         operator,
         value: parseValue(value),
       },
-      conditions: [],
+      conditions: validConditions,
+      conditionsOperator,
       actions,
     });
   };
@@ -359,6 +427,163 @@ function AlarmForm({
           L&apos;alarme se déclenche quand cette condition devient vraie, et se résout
           automatiquement quand le capteur revient à la normale.
         </Text>
+
+        <Title order={5}>Conditions supplémentaires (optionnel)</Title>
+        <Text size="xs" c="dimmed">
+          Restreint le déclenchement du capteur surveillé ci-dessus à ces conditions
+          additionnelles (ex: seulement la nuit, ou seulement si un autre capteur est aussi
+          dans un certain état).
+        </Text>
+        {conditions.length > 1 && (
+          <SegmentedControl
+            size="xs"
+            data={[
+              { value: 'AND', label: 'Toutes les conditions (ET)' },
+              { value: 'OR', label: 'Au moins une condition (OU)' },
+            ]}
+            value={conditionsOperator}
+            onChange={(v) => setConditionsOperator(v as 'AND' | 'OR')}
+          />
+        )}
+        {conditions.map((c, i) => (
+          <Card key={i} withBorder padding="sm">
+            <Group justify="space-between" mb="xs">
+              <Select
+                label="Type"
+                data={[
+                  { value: 'time_range', label: 'Plage horaire' },
+                  { value: 'device_state', label: "État d'un appareil" },
+                  { value: 'device_diff', label: 'Comparaison entre 2 appareils' },
+                ]}
+                value={c.type}
+                onChange={(v) => updateCondition(i, { type: v ?? 'time_range' })}
+                style={{ flex: 1 }}
+              />
+              <ActionIcon
+                variant="subtle"
+                color="red"
+                mt={22}
+                onClick={() => removeCondition(i)}
+                title="Supprimer la condition"
+              >
+                <IconTrash size={16} />
+              </ActionIcon>
+            </Group>
+
+            {c.type === 'time_range' && (
+              <Group grow>
+                <TextInput
+                  label="De (HH:MM)"
+                  placeholder="18:00"
+                  value={c.from ?? ''}
+                  onChange={(e) => updateCondition(i, { from: e.currentTarget.value })}
+                />
+                <TextInput
+                  label="À (HH:MM)"
+                  placeholder="06:00"
+                  value={c.to ?? ''}
+                  onChange={(e) => updateCondition(i, { to: e.currentTarget.value })}
+                />
+              </Group>
+            )}
+
+            {c.type === 'device_state' && (
+              <Stack gap="xs">
+                <Select
+                  label="Appareil"
+                  placeholder="Sélectionner un appareil"
+                  data={deviceOptions}
+                  value={c.deviceId ?? ''}
+                  onChange={(v) => updateCondition(i, { deviceId: v ?? '' })}
+                  searchable
+                />
+                <Group grow>
+                  <Autocomplete
+                    label="Propriété"
+                    placeholder="Ex: occupancy, state, temperature"
+                    data={devicePropertyOptions(devices, c.deviceId ?? '')}
+                    value={c.property ?? ''}
+                    onChange={(v) => updateCondition(i, { property: v })}
+                  />
+                  <Select
+                    label="Opérateur"
+                    data={operatorOptions}
+                    value={c.operator ?? 'eq'}
+                    onChange={(v) => updateCondition(i, { operator: v ?? 'eq' })}
+                  />
+                  <TextInput
+                    label="Valeur"
+                    placeholder="Ex: true, ON, 24"
+                    value={c.value !== undefined ? String(c.value) : ''}
+                    onChange={(e) => updateCondition(i, { value: e.currentTarget.value })}
+                  />
+                </Group>
+              </Stack>
+            )}
+
+            {c.type === 'device_diff' && (
+              <Stack gap="xs">
+                <Group grow>
+                  <Select
+                    label="Appareil A"
+                    placeholder="Sélectionner un appareil"
+                    data={deviceOptions}
+                    value={c.deviceIdA ?? ''}
+                    onChange={(v) => updateCondition(i, { deviceIdA: v ?? '' })}
+                    searchable
+                  />
+                  <Autocomplete
+                    label="Propriété A"
+                    data={devicePropertyOptions(devices, c.deviceIdA ?? '')}
+                    value={c.propertyA ?? ''}
+                    onChange={(v) => updateCondition(i, { propertyA: v })}
+                  />
+                </Group>
+                <Group grow>
+                  <Select
+                    label="Appareil B"
+                    placeholder="Sélectionner un appareil"
+                    data={deviceOptions}
+                    value={c.deviceIdB ?? ''}
+                    onChange={(v) => updateCondition(i, { deviceIdB: v ?? '' })}
+                    searchable
+                  />
+                  <Autocomplete
+                    label="Propriété B"
+                    data={devicePropertyOptions(devices, c.deviceIdB ?? '')}
+                    value={c.propertyB ?? ''}
+                    onChange={(v) => updateCondition(i, { propertyB: v })}
+                  />
+                </Group>
+                <Group grow>
+                  <Select
+                    label="Opérateur"
+                    data={diffOperatorOptions}
+                    value={c.operator ?? 'gte'}
+                    onChange={(v) => updateCondition(i, { operator: v ?? 'gte' })}
+                  />
+                  <TextInput
+                    label="Seuil"
+                    type="number"
+                    value={String(c.threshold ?? 0)}
+                    onChange={(e) => updateCondition(i, { threshold: Number(e.currentTarget.value) || 0 })}
+                  />
+                </Group>
+                <Text size="xs" c="dimmed">
+                  Vraie si (A − B) {operatorSymbol(c.operator)} seuil
+                </Text>
+              </Stack>
+            )}
+          </Card>
+        ))}
+        <Button
+          variant="light"
+          size="xs"
+          leftSection={<IconPlus size={14} />}
+          onClick={addCondition}
+        >
+          Ajouter une condition
+        </Button>
 
         <Title order={5}>Actions au déclenchement</Title>
         {actions.map((a, i) => (
@@ -618,6 +843,13 @@ export default function AlarmsPage() {
                         {operatorSymbol(s.trigger.operator)} {String(s.trigger.value)}
                       </Text>
                     </Group>
+                    {!!s.conditions?.length && (
+                      <Badge size="xs" variant="dot" color="gray" mt={4}>
+                        {s.conditions.length === 1
+                          ? '+1 condition'
+                          : `+${s.conditions.length} conditions (${s.conditionsOperator === 'OR' ? 'OU' : 'ET'})`}
+                      </Badge>
+                    )}
                   </Table.Td>
                   <Table.Td>
                     <ActionsSummary actions={s.actions} />
