@@ -18,6 +18,7 @@ import {
   Popover,
   Slider,
   Divider,
+  Badge,
 } from '@mantine/core';
 import {
   IconSmartHome,
@@ -34,6 +35,8 @@ import {
   IconZoomOut,
   IconMapPin,
   IconRefresh,
+  IconPlayerPlay,
+  IconPlayerStop,
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useRouter } from 'next/navigation';
@@ -612,6 +615,78 @@ function CameraTile({ camera, host, onEdit, onRemove }: { camera: Camera; host: 
   );
 }
 
+function Go2rtcControl() {
+  const queryClient = useQueryClient();
+
+  const { data: health } = useQuery<{ services: { name: string; active: boolean }[] }>({
+    queryKey: ['system-health'],
+    queryFn: () => api.get('/system/health').then((r) => r.data),
+    refetchInterval: 15000,
+  });
+
+  const active = health?.services.find((s) => s.name === 'skbox-go2rtc')?.active ?? null;
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['system-health'] });
+
+  const onError = (error: any) =>
+    notifications.show({
+      color: 'red',
+      title: 'Échec de la commande',
+      message: error?.response?.data?.message ?? "La commande a échoué sur le serveur",
+    });
+
+  const stop = useMutation({
+    mutationFn: () => api.post('/system/go2rtc/stop'),
+    onSuccess: invalidate,
+    onError,
+  });
+
+  const start = useMutation({
+    mutationFn: () => api.post('/system/go2rtc/start'),
+    onSuccess: invalidate,
+    onError,
+  });
+
+  const handleStop = () => {
+    if (!window.confirm('Arrêter le service go2rtc ? Les flux vidéo des caméras seront indisponibles jusqu\'au redémarrage.')) {
+      return;
+    }
+    stop.mutate();
+  };
+
+  return (
+    <Group gap="xs">
+      <Badge color={active ? 'teal' : active === false ? 'red' : 'gray'} variant="light">
+        go2rtc {active === null ? '…' : active ? 'actif' : 'arrêté'}
+      </Badge>
+      {active ? (
+        <Button
+          size="xs"
+          variant="light"
+          color="red"
+          leftSection={<IconPlayerStop size={14} />}
+          loading={stop.isPending}
+          onClick={handleStop}
+        >
+          Arrêter
+        </Button>
+      ) : (
+        <Button
+          size="xs"
+          variant="light"
+          color="teal"
+          leftSection={<IconPlayerPlay size={14} />}
+          loading={start.isPending}
+          disabled={active === null}
+          onClick={() => start.mutate()}
+        >
+          Démarrer
+        </Button>
+      )}
+    </Group>
+  );
+}
+
 export default function CamerasModulePage() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -692,16 +767,19 @@ export default function CamerasModulePage() {
 
           <Group justify="space-between">
             <Title order={4}>Caméras</Title>
-            <Button
-              leftSection={<IconPlus size={16} />}
-              size="xs"
-              onClick={() => {
-                setEditingCamera(null);
-                openForm();
-              }}
-            >
-              Ajouter
-            </Button>
+            <Group gap="sm">
+              <Go2rtcControl />
+              <Button
+                leftSection={<IconPlus size={16} />}
+                size="xs"
+                onClick={() => {
+                  setEditingCamera(null);
+                  openForm();
+                }}
+              >
+                Ajouter
+              </Button>
+            </Group>
           </Group>
 
           {isLoading ? (

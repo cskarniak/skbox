@@ -62,6 +62,26 @@ export class SystemController {
     return this.system.getHealth();
   }
 
+  @Post('go2rtc/stop')
+  async stopGo2rtc() {
+    try {
+      await this.system.stopGo2rtcService();
+    } catch (err: any) {
+      throw new BadRequestException(err.message);
+    }
+    return this.system.getHealth();
+  }
+
+  @Post('go2rtc/start')
+  async startGo2rtc() {
+    try {
+      await this.system.startGo2rtcService();
+    } catch (err: any) {
+      throw new BadRequestException(err.message);
+    }
+    return this.system.getHealth();
+  }
+
   @Post('tailscale/stop')
   async stopTailscale() {
     try {

@@ -1,0 +1,14 @@
+[Unit]
+Description=Skbox go2rtc (caméras)
+After=network.target
+
+[Service]
+Type=simple
+User=christian
+WorkingDirectory=/home/christian/go2rtc
+ExecStart=/home/christian/go2rtc/go2rtc
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

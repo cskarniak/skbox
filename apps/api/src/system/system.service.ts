@@ -114,7 +114,7 @@ export class SystemService {
       this.readDisk(),
       this.readSmart(),
       this.readDocker(),
-      this.readServices(['mbpfan', 'thermald', 'docker', 'fstrim.timer', 'mosquitto', 'skbox-z2m', 'skbox-rfxcom']),
+      this.readServices(['mbpfan', 'thermald', 'docker', 'fstrim.timer', 'mosquitto', 'skbox-z2m', 'skbox-rfxcom', 'skbox-go2rtc']),
       this.readThermalShutdown(),
     ]);
 
@@ -237,6 +237,19 @@ export class SystemService {
     const service = bridge === 'zigbee' ? 'skbox-z2m' : 'skbox-rfxcom';
     await this.runOrThrow(`sudo systemctl restart ${service}`);
     await this.events.log(bridge, 'manual_restart', `${service} redémarré manuellement`);
+  }
+
+  // Arrêt volontaire de go2rtc (flux caméras) pour réduire la charge du serveur.
+  async stopGo2rtcService(): Promise<void> {
+    await this.runOrThrow('sudo systemctl stop skbox-go2rtc');
+    await this.events.log('go2rtc', 'manual_stop', 'skbox-go2rtc arrêté manuellement');
+  }
+
+  // `restart` plutôt que `start` : seule commande whitelistée sans mot de passe dans les
+  // sudoers, et `systemctl restart` démarre bien un service à l'arrêt.
+  async startGo2rtcService(): Promise<void> {
+    await this.runOrThrow('sudo systemctl restart skbox-go2rtc');
+    await this.events.log('go2rtc', 'manual_start', 'skbox-go2rtc démarré manuellement');
   }
 
   // Empêche deux start/stop tailscaled de s'exécuter en même temps (ex. double-clic, ou

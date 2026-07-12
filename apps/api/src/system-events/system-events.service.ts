@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaClient } from '@skbox/db';
 import * as os from 'os';
 
-export type SystemEventService = 'zigbee' | 'rfxcom' | 'tailscale' | 'system';
+export type SystemEventService = 'zigbee' | 'rfxcom' | 'tailscale' | 'go2rtc' | 'system';
 export type SystemEventType =
   | 'offline'
   | 'reconnected'
