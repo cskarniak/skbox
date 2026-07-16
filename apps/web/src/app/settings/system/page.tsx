@@ -273,18 +273,25 @@ export default function SettingsSystemPage() {
   };
 
   // Après un clic sur "Redémarrer le serveur" : startedAt sert de base à la jauge estimée,
-  // wentDown ne passe à true qu'une fois qu'un vrai échec de requête a été observé (pour ne
-  // pas considérer le redémarrage "terminé" par la simple réponse HTTP de la mutation, qui
-  // revient avant que la machine ne coupe réellement le réseau).
-  const [rebooting, setRebooting] = useState<{ startedAt: number; wentDown: boolean } | null>(null);
+  // baselineUptimeSeconds est l'uptime au moment du clic. wentDown (juste indicatif pour la
+  // couleur de la jauge) passe à true dès qu'un échec de requête est observé — mais on ne
+  // s'appuie PAS dessus pour détecter la fin : en accès distant (Tailscale), la coupure peut
+  // rester invisible côté navigateur (renégociation silencieuse) sans jamais faire échouer de
+  // requête, ce qui bloquait la jauge indéfiniment. Le signal fiable est la remise à zéro de
+  // l'uptime serveur (os.uptime() côté API) : tant que la valeur reçue n'est pas redescendue
+  // sous celle d'avant le clic, ce n'est pas la machine redémarrée qui répond (ex: réponse
+  // encore en vol depuis l'instance d'avant la coupure).
+  const [rebooting, setRebooting] = useState<{
+    startedAt: number;
+    baselineUptimeSeconds: number;
+    wentDown: boolean;
+  } | null>(null);
   const [, forceTick] = useState(0);
 
   const {
     data: health,
     isLoading,
     isError: healthIsError,
-    dataUpdatedAt: healthUpdatedAt,
-    errorUpdatedAt: healthErrorUpdatedAt,
   } = useQuery<SystemHealth>({
     queryKey: ['system-health'],
     queryFn: () => api.get('/system/health').then((r) => r.data),
@@ -294,15 +301,14 @@ export default function SettingsSystemPage() {
 
   useEffect(() => {
     if (!rebooting) return;
-    if (!rebooting.wentDown && healthIsError && healthErrorUpdatedAt > rebooting.startedAt) {
+    if (!rebooting.wentDown && healthIsError) {
       setRebooting((r) => (r ? { ...r, wentDown: true } : r));
-      return;
     }
-    if (
-      rebooting.wentDown &&
-      healthUpdatedAt > rebooting.startedAt &&
-      healthUpdatedAt > healthErrorUpdatedAt
-    ) {
+  }, [rebooting, healthIsError]);
+
+  useEffect(() => {
+    if (!rebooting || !health) return;
+    if (health.uptimeSeconds < rebooting.baselineUptimeSeconds) {
       setRebooting(null);
       notifications.show({
         color: 'teal',
@@ -310,7 +316,7 @@ export default function SettingsSystemPage() {
         message: 'Skbox a redémarré et est de nouveau accessible.',
       });
     }
-  }, [rebooting, healthIsError, healthUpdatedAt, healthErrorUpdatedAt]);
+  }, [rebooting, health]);
 
   // Force un re-rendu chaque seconde pour faire avancer la jauge (basée sur Date.now()),
   // même si aucune donnée du health check n'a changé entre-temps.
@@ -464,7 +470,11 @@ export default function SettingsSystemPage() {
   const rebootServer = useMutation({
     mutationFn: () => api.post('/system/reboot'),
     onSuccess: () => {
-      setRebooting({ startedAt: Date.now(), wentDown: false });
+      setRebooting({
+        startedAt: Date.now(),
+        baselineUptimeSeconds: health?.uptimeSeconds ?? 0,
+        wentDown: false,
+      });
       notifications.show({
         color: 'orange',
         title: 'Redémarrage lancé',
