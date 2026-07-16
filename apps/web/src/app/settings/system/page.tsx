@@ -16,6 +16,7 @@ import {
   Select,
   Modal,
   Progress,
+  PasswordInput,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import {
@@ -26,11 +27,19 @@ import {
   IconWorldWww,
   IconWind,
   IconShieldCheck,
+  IconTerminal2,
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { api } from '@/lib/api';
+import { errorMessage } from '@/lib/errors';
+
+const TerminalModal = dynamic(
+  () => import('@/components/TerminalModal').then((m) => m.TerminalModal),
+  { ssr: false },
+);
 
 interface ServiceStatus {
   name: string;
@@ -327,6 +336,35 @@ export default function SettingsSystemPage() {
   }, [rebooting]);
 
   const [journalOpened, { open: openJournal, close: closeJournal }] = useDisclosure(false);
+
+  const [terminalOpened, { open: openTerminal, close: closeTerminal }] = useDisclosure(false);
+  const [terminalSetupPassword, setTerminalSetupPassword] = useState('');
+  const [terminalSetupConfirm, setTerminalSetupConfirm] = useState('');
+
+  const { data: terminalStatus } = useQuery<{ configured: boolean }>({
+    queryKey: ['terminal-status'],
+    queryFn: () => api.get('/system/terminal/status').then((r) => r.data),
+  });
+
+  const setupTerminal = useMutation({
+    mutationFn: () => api.post('/system/terminal/setup', { password: terminalSetupPassword }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['terminal-status'] });
+      setTerminalSetupPassword('');
+      setTerminalSetupConfirm('');
+      notifications.show({ color: 'teal', message: 'Mot de passe du terminal configuré.' });
+    },
+    onError: (err) =>
+      notifications.show({ color: 'red', title: 'Échec', message: errorMessage(err, 'Impossible de configurer le mot de passe.') }),
+  });
+
+  const handleSetupTerminal = () => {
+    if (terminalSetupPassword !== terminalSetupConfirm) {
+      notifications.show({ color: 'red', title: 'Échec', message: 'Les mots de passe ne correspondent pas.' });
+      return;
+    }
+    setupTerminal.mutate();
+  };
 
   const { data: events, isLoading: eventsLoading } = useQuery<ServiceEvent[]>({
     queryKey: ['system-events'],
@@ -902,6 +940,57 @@ export default function SettingsSystemPage() {
           </Card>
 
           <Card shadow="sm" padding="lg" withBorder>
+            <Stack gap="sm">
+              <Group justify="space-between">
+                <div>
+                  <Text size="sm" c="dimmed">
+                    <IconTerminal2 size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                    Terminal
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    Accès shell complet au serveur, protégé par un mot de passe dédié.
+                  </Text>
+                </div>
+                {terminalStatus?.configured && (
+                  <Button size="xs" variant="light" onClick={openTerminal}>
+                    Ouvrir un terminal
+                  </Button>
+                )}
+              </Group>
+              {terminalStatus && !terminalStatus.configured && (
+                <Stack gap="xs">
+                  <Text size="xs" c="dimmed">
+                    Aucun mot de passe configuré — le terminal est désactivé tant qu&apos;il n&apos;est pas défini.
+                  </Text>
+                  <Group gap="xs" grow>
+                    <PasswordInput
+                      size="xs"
+                      placeholder="Nouveau mot de passe"
+                      value={terminalSetupPassword}
+                      onChange={(e) => setTerminalSetupPassword(e.currentTarget.value)}
+                    />
+                    <PasswordInput
+                      size="xs"
+                      placeholder="Confirmer"
+                      value={terminalSetupConfirm}
+                      onChange={(e) => setTerminalSetupConfirm(e.currentTarget.value)}
+                    />
+                  </Group>
+                  <Button
+                    size="xs"
+                    variant="light"
+                    loading={setupTerminal.isPending}
+                    disabled={!terminalSetupPassword || !terminalSetupConfirm}
+                    onClick={handleSetupTerminal}
+                  >
+                    Configurer
+                  </Button>
+                </Stack>
+              )}
+            </Stack>
+          </Card>
+
+          <Card shadow="sm" padding="lg" withBorder>
             <Group justify="space-between">
               <div>
                 <Text size="sm" c="dimmed">
@@ -981,6 +1070,8 @@ export default function SettingsSystemPage() {
           </Table>
         )}
       </Modal>
+
+      <TerminalModal opened={terminalOpened} onClose={closeTerminal} />
     </>
   );
 }

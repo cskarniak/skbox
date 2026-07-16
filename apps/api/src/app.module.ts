@@ -19,6 +19,7 @@ import { PrismaModule } from './prisma.module';
 import { TriggerContextModule } from './scenarios/trigger-context.module';
 import { WeatherModule } from './weather/weather.module';
 import { NetworkHealthModule } from './network-health/network-health.module';
+import { TerminalModule } from './terminal/terminal.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { NetworkHealthModule } from './network-health/network-health.module';
     CameraModule,
     WeatherModule,
     NetworkHealthModule,
+    TerminalModule,
   ],
 })
 export class AppModule {}

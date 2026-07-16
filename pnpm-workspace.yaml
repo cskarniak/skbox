@@ -7,5 +7,6 @@ allowBuilds:
   '@prisma/engines': true
   '@scarf/scarf': false
   '@swc/core': true
+  node-pty: true
   prisma: true
   sharp: true

@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { TerminalWsService } from './terminal/terminal-ws.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -19,6 +20,7 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3001;
   await app.listen(port);
+  app.get(TerminalWsService).attach(app.getHttpServer());
   console.log(`Skbox API running on http://localhost:${port}`);
   console.log(`Swagger docs on http://localhost:${port}/docs`);
 }
