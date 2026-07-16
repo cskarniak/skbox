@@ -15,6 +15,7 @@ import {
   Table,
   Select,
   Modal,
+  Progress,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import {
@@ -230,6 +231,14 @@ const REFRESH_OPTIONS = [
 
 const REFRESH_SETTING_KEY = 'system-refresh-interval';
 
+// Durée typique observée pour un redémarrage complet du Mac Mini (BIOS + boot Ubuntu +
+// démarrage des services skbox) — sert juste à faire progresser la jauge de façon lisible,
+// pas à détecter la fin réelle du redémarrage (ça, c'est fait via le retour du health check).
+const ESTIMATED_REBOOT_MS = 90_000;
+// Le pourcentage plafonne avant 100 tant que le serveur n'a pas confirmé être revenu, pour
+// ne pas donner l'impression que la jauge est bloquée si le redémarrage dépasse l'estimation.
+const REBOOT_PROGRESS_CAP = 96;
+
 export default function SettingsSystemPage() {
   const queryClient = useQueryClient();
   const [refreshInterval, setRefreshInterval] = useState(10000);
@@ -263,11 +272,53 @@ export default function SettingsSystemPage() {
     updateRefreshInterval.mutate(value);
   };
 
-  const { data: health, isLoading } = useQuery<SystemHealth>({
+  // Après un clic sur "Redémarrer le serveur" : startedAt sert de base à la jauge estimée,
+  // wentDown ne passe à true qu'une fois qu'un vrai échec de requête a été observé (pour ne
+  // pas considérer le redémarrage "terminé" par la simple réponse HTTP de la mutation, qui
+  // revient avant que la machine ne coupe réellement le réseau).
+  const [rebooting, setRebooting] = useState<{ startedAt: number; wentDown: boolean } | null>(null);
+  const [, forceTick] = useState(0);
+
+  const {
+    data: health,
+    isLoading,
+    isError: healthIsError,
+    dataUpdatedAt: healthUpdatedAt,
+    errorUpdatedAt: healthErrorUpdatedAt,
+  } = useQuery<SystemHealth>({
     queryKey: ['system-health'],
     queryFn: () => api.get('/system/health').then((r) => r.data),
-    refetchInterval: refreshInterval,
+    // Interroge plus fréquemment pendant un redémarrage pour détecter le retour au plus tôt.
+    refetchInterval: rebooting ? 3000 : refreshInterval,
   });
+
+  useEffect(() => {
+    if (!rebooting) return;
+    if (!rebooting.wentDown && healthIsError && healthErrorUpdatedAt > rebooting.startedAt) {
+      setRebooting((r) => (r ? { ...r, wentDown: true } : r));
+      return;
+    }
+    if (
+      rebooting.wentDown &&
+      healthUpdatedAt > rebooting.startedAt &&
+      healthUpdatedAt > healthErrorUpdatedAt
+    ) {
+      setRebooting(null);
+      notifications.show({
+        color: 'teal',
+        title: 'Serveur de retour',
+        message: 'Skbox a redémarré et est de nouveau accessible.',
+      });
+    }
+  }, [rebooting, healthIsError, healthUpdatedAt, healthErrorUpdatedAt]);
+
+  // Force un re-rendu chaque seconde pour faire avancer la jauge (basée sur Date.now()),
+  // même si aucune donnée du health check n'a changé entre-temps.
+  useEffect(() => {
+    if (!rebooting) return;
+    const timer = setInterval(() => forceTick((t) => t + 1), 1000);
+    return () => clearInterval(timer);
+  }, [rebooting]);
 
   const [journalOpened, { open: openJournal, close: closeJournal }] = useDisclosure(false);
 
@@ -413,6 +464,7 @@ export default function SettingsSystemPage() {
   const rebootServer = useMutation({
     mutationFn: () => api.post('/system/reboot'),
     onSuccess: () => {
+      setRebooting({ startedAt: Date.now(), wentDown: false });
       notifications.show({
         color: 'orange',
         title: 'Redémarrage lancé',
@@ -462,6 +514,34 @@ export default function SettingsSystemPage() {
           />
         </Group>
       </Group>
+
+      {rebooting && (
+        <Card shadow="sm" padding="lg" withBorder mb="md">
+          <Stack gap={6}>
+            <Group justify="space-between">
+              <Text size="sm" fw={500}>
+                Redémarrage du serveur en cours…
+              </Text>
+              <Text size="xs" c="dimmed">
+                {Math.round((Date.now() - rebooting.startedAt) / 1000)} s
+              </Text>
+            </Group>
+            <Progress
+              value={Math.min(
+                REBOOT_PROGRESS_CAP,
+                ((Date.now() - rebooting.startedAt) / ESTIMATED_REBOOT_MS) * 100,
+              )}
+              animated
+              color={rebooting.wentDown ? 'orange' : 'blue'}
+            />
+            <Text size="xs" c="dimmed">
+              {rebooting.wentDown
+                ? 'Machine hors-ligne, en attente de reconnexion…'
+                : 'Commande envoyée, la coupure va survenir dans quelques secondes…'}
+            </Text>
+          </Stack>
+        </Card>
+      )}
 
       {isLoading || !health ? (
         <Center h={200}>
@@ -826,6 +906,7 @@ export default function SettingsSystemPage() {
                 variant="light"
                 color="red"
                 loading={rebootServer.isPending}
+                disabled={!!rebooting}
                 onClick={handleRebootServer}
               >
                 Redémarrer le serveur
