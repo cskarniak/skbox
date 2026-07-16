@@ -10,6 +10,7 @@ export type SystemEventType =
   | 'manual_stop'
   | 'manual_start'
   | 'manual_restart'
+  | 'manual_reboot'
   | 'boot';
 
 // Tolérance utilisée pour distinguer un vrai redémarrage machine d'un simple redémarrage

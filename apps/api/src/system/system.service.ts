@@ -294,6 +294,15 @@ export class SystemService {
     }
   }
 
+  // Redémarrage complet de la machine (pas juste skbox-api/web), à utiliser si trop de
+  // services sont down en même temps pour être relancés un par un depuis le dashboard.
+  // L'événement est journalisé avant la commande : `systemctl reboot` coupe le process API
+  // avant que la réponse HTTP ne parte, donc logger après coup ne serait jamais exécuté.
+  async rebootServer(): Promise<void> {
+    await this.events.log('system', 'manual_reboot', 'Redémarrage du serveur déclenché manuellement');
+    await this.runOrThrow('sudo systemctl reboot');
+  }
+
   private async runOrThrow(cmd: string): Promise<string> {
     try {
       const { stdout } = await execAsync(cmd, { timeout: 5000 });

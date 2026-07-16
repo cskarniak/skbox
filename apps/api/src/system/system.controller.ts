@@ -106,4 +106,14 @@ export class SystemController {
   runTests() {
     return this.system.runTests();
   }
+
+  @Post('reboot')
+  async reboot() {
+    try {
+      await this.system.rebootServer();
+    } catch (err: any) {
+      throw new BadRequestException(err.message);
+    }
+    return { ok: true };
+  }
 }

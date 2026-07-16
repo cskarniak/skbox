@@ -113,6 +113,7 @@ const EVENT_LABELS: Record<string, string> = {
   manual_stop: 'Arrêt manuel (test)',
   manual_start: 'Démarrage manuel',
   manual_restart: 'Redémarrage manuel',
+  manual_reboot: 'Redémarrage machine (manuel)',
   boot: 'Démarrage machine',
 };
 
@@ -123,6 +124,7 @@ const EVENT_COLOR: Record<string, string> = {
   manual_stop: 'orange',
   manual_start: 'teal',
   manual_restart: 'blue',
+  manual_reboot: 'red',
   boot: 'grape',
 };
 
@@ -358,6 +360,24 @@ export default function SettingsSystemPage() {
     restartBridge.mutate(bridge);
   };
 
+  const startTailscale = useMutation({
+    mutationFn: () => api.post('/system/tailscale/start'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['system-health'] });
+      queryClient.invalidateQueries({ queryKey: ['system-events'] });
+      notifications.show({ color: 'teal', message: 'tailscaled démarré.' });
+    },
+    onError: (error: any) => {
+      notifications.show({
+        color: 'red',
+        title: 'Échec de la commande',
+        message:
+          error?.response?.data?.message ??
+          "La commande sudo a échoué sur le serveur (règle sudoers manquante ?)",
+      });
+    },
+  });
+
   const stopTailscale = useMutation({
     mutationFn: () => api.post('/system/tailscale/stop'),
     onSuccess: () => {
@@ -388,6 +408,37 @@ export default function SettingsSystemPage() {
       return;
     }
     stopTailscale.mutate();
+  };
+
+  const rebootServer = useMutation({
+    mutationFn: () => api.post('/system/reboot'),
+    onSuccess: () => {
+      notifications.show({
+        color: 'orange',
+        title: 'Redémarrage lancé',
+        message: 'La machine redémarre — tous les services (API, Web, bridges) seront brièvement indisponibles.',
+      });
+    },
+    onError: (error: any) => {
+      notifications.show({
+        color: 'red',
+        title: 'Échec de la commande',
+        message:
+          error?.response?.data?.message ??
+          "La commande sudo a échoué sur le serveur (règle sudoers manquante ?)",
+      });
+    },
+  });
+
+  const handleRebootServer = () => {
+    if (
+      !window.confirm(
+        'Redémarrer complètement le serveur Skbox ?\n\nTous les services (API, Web, Zigbee, RFXcom, caméras, Tailscale...) seront coupés le temps du redémarrage de la machine (généralement 1 à 2 minutes). À utiliser uniquement si trop de services sont down pour être relancés individuellement.',
+      )
+    ) {
+      return;
+    }
+    rebootServer.mutate();
   };
 
   return (
@@ -667,8 +718,18 @@ export default function SettingsSystemPage() {
                   <Button
                     size="xs"
                     variant="light"
+                    color="teal"
+                    disabled={health.tailscale.connected || startTailscale.isPending || stopTailscale.isPending}
+                    loading={startTailscale.isPending}
+                    onClick={() => startTailscale.mutate()}
+                  >
+                    Démarrer
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="light"
                     color="orange"
-                    disabled={!health.tailscale.connected}
+                    disabled={!health.tailscale.connected || startTailscale.isPending || stopTailscale.isPending}
                     loading={stopTailscale.isPending}
                     onClick={handleStopTailscale}
                   >
@@ -748,6 +809,28 @@ export default function SettingsSystemPage() {
                 </Table.Tbody>
               </Table>
             )}
+          </Card>
+
+          <Card shadow="sm" padding="lg" withBorder>
+            <Group justify="space-between">
+              <div>
+                <Text size="sm" c="dimmed">
+                  Machine ({health.hostname})
+                </Text>
+                <Text size="xs" c="dimmed">
+                  Redémarre le serveur entier — à utiliser si trop de services sont down.
+                </Text>
+              </div>
+              <Button
+                size="xs"
+                variant="light"
+                color="red"
+                loading={rebootServer.isPending}
+                onClick={handleRebootServer}
+              >
+                Redémarrer le serveur
+              </Button>
+            </Group>
           </Card>
 
           <Card shadow="sm" padding="lg" withBorder>
