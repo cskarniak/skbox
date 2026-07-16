@@ -398,11 +398,11 @@ export default function SettingsSystemPage() {
   const handleStopTailscale = () => {
     const isRemote = typeof window !== 'undefined' && /\.ts\.net$|^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(window.location.hostname);
     const warning = isRemote
-      ? "\n\n⚠️ Vous semblez accéder à Skbox via Tailscale : ce test va couper votre propre accès jusqu'à la relance automatique (ou une relance manuelle depuis le réseau local)."
+      ? "\n\n⚠️ Vous semblez accéder à Skbox via Tailscale : cela va couper votre propre accès jusqu'à une relance manuelle depuis le réseau local."
       : '';
     if (
       !window.confirm(
-        `Arrêter le service tailscaled pour tester la relance automatique ?${warning}`,
+        `Arrêter le service tailscaled ? Il ne redémarrera pas tout seul, il faudra le relancer manuellement.${warning}`,
       )
     ) {
       return;
@@ -733,7 +733,7 @@ export default function SettingsSystemPage() {
                     loading={stopTailscale.isPending}
                     onClick={handleStopTailscale}
                   >
-                    Tester l'arrêt
+                    Arrêter
                   </Button>
                 </Group>
               </Group>
