@@ -20,6 +20,7 @@ import { TriggerContextModule } from './scenarios/trigger-context.module';
 import { WeatherModule } from './weather/weather.module';
 import { NetworkHealthModule } from './network-health/network-health.module';
 import { TerminalModule } from './terminal/terminal.module';
+import { PresenceSimulationModule } from './presence-simulation/presence-simulation.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { TerminalModule } from './terminal/terminal.module';
     WeatherModule,
     NetworkHealthModule,
     TerminalModule,
+    PresenceSimulationModule,
   ],
 })
 export class AppModule {}

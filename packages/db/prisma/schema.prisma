@@ -112,6 +112,71 @@ model AlarmEvent {
   @@index([scenarioId, resolvedAt])
 }
 
+// Un profil de simulation de présence : une liste de lampes qui s'allument/s'éteignent
+// selon un horaire (fixe ou solaire) avec des bascules aléatoires entre les deux, pour
+// simuler une présence à domicile. Le plan du jour est calculé une fois par jour et
+// journalisé dans PresenceSimulationRun/Event pour permettre de vérifier son exécution.
+model PresenceSimulation {
+  id                 String   @id @default(cuid())
+  name               String
+  enabled            Boolean  @default(true)
+  lightDeviceIds     String   @default("[]") // JSON string[] de Device.id
+  onTime             String // JSON TimeOrSolar (fixe HH:MM ou lever/coucher ± décalage)
+  offTime            String // JSON TimeOrSolar
+  onRandomOffsetMin  Int      @default(0) // minutes
+  onRandomOffsetMax  Int      @default(0)
+  offRandomOffsetMin Int      @default(0)
+  offRandomOffsetMax Int      @default(0)
+  toggleCountMin     Int      @default(0)
+  toggleCountMax     Int      @default(0)
+  toggleDurationMin  Int      @default(1) // minutes
+  toggleDurationMax  Int      @default(30)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  runs PresenceSimulationRun[]
+
+  @@index([enabled])
+}
+
+// Le plan résolu (horaires + événements) d'un profil pour une date donnée, et le
+// résultat de la vérification quotidienne de ce plan.
+model PresenceSimulationRun {
+  id           String    @id @default(cuid())
+  profileId    String
+  date         String // "YYYY-MM-DD"
+  plannedOnAt  DateTime
+  plannedOffAt DateTime
+  verifiedAt   DateTime?
+  verifiedOk   Boolean?
+  createdAt    DateTime  @default(now())
+
+  profile PresenceSimulation        @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  events  PresenceSimulationEvent[]
+
+  @@unique([profileId, date])
+  @@index([profileId, date])
+}
+
+// Un événement planifié (allumage initial, extinction finale, ou bascule intermédiaire)
+// avec le résultat de son exécution (publication MQTT).
+model PresenceSimulationEvent {
+  id          String    @id @default(cuid())
+  runId       String
+  kind        String // "on" | "off" | "toggle_on" | "toggle_off"
+  action      String // "ON" | "OFF"
+  scheduledAt DateTime
+  executedAt  DateTime?
+  success     Boolean? // null = pas encore dû
+  error       String?
+  createdAt   DateTime  @default(now())
+
+  run PresenceSimulationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, scheduledAt])
+  @@index([scheduledAt])
+}
+
 model Room {
   id        String   @id @default(cuid())
   name      String   @unique

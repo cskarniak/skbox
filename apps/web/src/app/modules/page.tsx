@@ -11,7 +11,7 @@ import {
   ThemeIcon,
   UnstyledButton,
 } from '@mantine/core';
-import { IconSmartHome, IconFlame, IconChevronRight, IconChartLine, IconVideo, IconAlertTriangle, IconCloudRain, IconAntenna } from '@tabler/icons-react';
+import { IconSmartHome, IconFlame, IconChevronRight, IconChartLine, IconVideo, IconAlertTriangle, IconCloudRain, IconAntenna, IconBulb } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import { AppNav } from '@/components/AppNav';
 
@@ -58,6 +58,13 @@ const MODULES: ModuleEntry[] = [
     description: 'Prévisions à 7 jours, tendance des températures et de la pression, pour préparer vos sorties à vélo.',
     icon: <IconCloudRain size={24} />,
     href: '/modules/weather',
+  },
+  {
+    key: 'presence',
+    label: 'Simulation de présence',
+    description: "Allumage/extinction de lampes à horaires semi-aléatoires (fixes ou solaires) pour simuler une présence, avec journal et vérification quotidienne.",
+    icon: <IconBulb size={24} />,
+    href: '/modules/presence',
   },
   {
     key: 'network-health',

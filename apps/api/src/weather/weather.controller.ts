@@ -17,6 +17,11 @@ export class WeatherController {
     return this.weather.getHomeLocation();
   }
 
+  @Get('home/sun')
+  getHomeSunTimes() {
+    return this.weather.getSunTimes(0);
+  }
+
   @Put('home/location')
   setHomeLocation(@Body() location: WeatherLocation) {
     return this.weather.setHomeLocation(location);

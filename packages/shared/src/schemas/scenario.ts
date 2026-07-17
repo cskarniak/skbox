@@ -22,10 +22,19 @@ const deviceUpdateTriggerSchema = z.object({
   deviceId: z.string().min(1),
 });
 
+const solarTriggerSchema = z.object({
+  type: z.literal('solar'),
+  reference: z.enum(['sunrise', 'sunset']),
+  offsetMinutes: z.number().int().min(-180).max(180).default(0),
+  randomDelayMin: z.number().min(0).max(120).default(0),
+  randomDelayMax: z.number().min(0).max(120).default(0),
+});
+
 const triggerSchema = z.discriminatedUnion('type', [
   deviceStateTriggerSchema,
   cronTriggerSchema,
   deviceUpdateTriggerSchema,
+  solarTriggerSchema,
 ]);
 
 const timeRangeConditionSchema = z.object({

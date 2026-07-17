@@ -10,6 +10,7 @@ import {
 import { CronExpressionParser } from 'cron-parser';
 import { MqttService } from '../mqtt/mqtt.service';
 import { NotificationService } from '../notifications/notification.service';
+import { WeatherService } from '../weather/weather.service';
 import { TriggerContextService, TriggerContextValue } from './trigger-context.service';
 
 interface TriggerCapture {
@@ -30,6 +31,7 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
     private readonly mqtt: MqttService,
     private readonly triggerContext: TriggerContextService,
     private readonly notifications: NotificationService,
+    private readonly weather: WeatherService,
   ) {}
 
   async onModuleInit() {
@@ -181,6 +183,8 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
         watchedDeviceIds.add(trigger.deviceId);
       } else if (trigger.type === 'cron') {
         this.scheduleCron(scenario, trigger);
+      } else if (trigger.type === 'solar') {
+        void this.scheduleSolar(scenario, trigger);
       }
 
       for (const condition of conditions) {
@@ -220,35 +224,92 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
 
       const timer = setTimeout(async () => {
         this.cronTimers.delete(scenario.id);
-        const fresh = await this.prisma.scenario.findUnique({ where: { id: scenario.id } });
-        if (!fresh?.enabled) return;
-
-        this.logger.log(`Cron scenario "${fresh.name}" triggered`);
-        const actions: Action[] = JSON.parse(fresh.actions);
-        const conditions: Condition[] = JSON.parse(fresh.conditions);
-
-        const conditionsMet = await this.evaluateConditions(conditions, fresh.conditionsOperator);
-        if (!conditionsMet) {
-          this.logger.log(`Cron scenario "${fresh.name}" skipped (conditions not met)`);
-          this.scheduleCron(fresh, trigger);
-          return;
-        }
-
-        const capture = await this.captureTriggerValues({ type: 'cron' } as Trigger, conditions);
-        await this.recordTriggerContextForActions(fresh.name, capture, actions);
-        await this.executeActions(actions, capture);
-        await this.prisma.scenario.update({
-          where: { id: fresh.id },
-          data: { lastRun: new Date(), runCount: { increment: 1 } },
-        });
-
-        this.scheduleCron(fresh, trigger);
+        await this.fireScheduledScenario(scenario.id, { type: 'cron' } as Trigger, (fresh) =>
+          this.scheduleCron(fresh, trigger),
+        );
       }, delayMs);
 
       this.cronTimers.set(scenario.id, timer);
     } catch (err) {
       this.logger.error(`Invalid cron for scenario "${scenario.name}": ${err}`);
     }
+  }
+
+  // Une heure solaire (lever/coucher) se décale chaque jour, contrairement à une expression
+  // cron : on résout donc la valeur du jour à chaque (re)planification plutôt que de calculer
+  // une seule fois une récurrence stable.
+  private async scheduleSolar(
+    scenario: Scenario,
+    trigger: { reference: 'sunrise' | 'sunset'; offsetMinutes?: number; randomDelayMin?: number; randomDelayMax?: number },
+  ) {
+    const sun = await this.weather.getSunTimes(0);
+    if (!sun) {
+      this.logger.warn(`Scenario "${scenario.name}": heures solaires indisponibles, nouvelle tentative dans 15 min`);
+      const timer = setTimeout(() => void this.scheduleSolar(scenario, trigger), 15 * 60_000);
+      this.cronTimers.set(scenario.id, timer);
+      return;
+    }
+
+    const offsetMs = (trigger.offsetMinutes ?? 0) * 60_000;
+    let base = trigger.reference === 'sunrise' ? sun.sunrise : sun.sunset;
+    let fireAt = new Date(base.getTime() + offsetMs);
+
+    if (fireAt.getTime() <= Date.now()) {
+      const sunTomorrow = await this.weather.getSunTimes(1);
+      if (sunTomorrow) {
+        base = trigger.reference === 'sunrise' ? sunTomorrow.sunrise : sunTomorrow.sunset;
+        fireAt = new Date(base.getTime() + offsetMs);
+      }
+    }
+
+    const minDelay = trigger.randomDelayMin ?? 0;
+    const maxDelay = trigger.randomDelayMax ?? 0;
+    if (maxDelay > 0) {
+      const randomMs = (minDelay + Math.random() * (maxDelay - minDelay)) * 60_000;
+      fireAt = new Date(fireAt.getTime() + Math.floor(randomMs));
+    }
+
+    const delayMs = Math.max(0, fireAt.getTime() - Date.now());
+    this.nextRunDates.set(scenario.id, fireAt);
+    this.logger.log(`Scenario "${scenario.name}" (solar) scheduled at ${fireAt.toLocaleString('fr-FR')}`);
+
+    const timer = setTimeout(async () => {
+      this.cronTimers.delete(scenario.id);
+      await this.fireScheduledScenario(scenario.id, { type: 'solar' } as Trigger, (fresh) =>
+        this.scheduleSolar(fresh, trigger),
+      );
+    }, delayMs);
+
+    this.cronTimers.set(scenario.id, timer);
+  }
+
+  // Corps commun d'exécution partagé par les déclencheurs planifiés (cron, solar) :
+  // vérifie que le scénario est toujours actif, évalue les conditions, exécute les
+  // actions et met à jour lastRun/runCount, puis délègue la replanification à l'appelant.
+  private async fireScheduledScenario(scenarioId: string, triggerForCapture: Trigger, reschedule: (fresh: Scenario) => void) {
+    const fresh = await this.prisma.scenario.findUnique({ where: { id: scenarioId } });
+    if (!fresh?.enabled) return;
+
+    this.logger.log(`Scheduled scenario "${fresh.name}" triggered`);
+    const actions: Action[] = JSON.parse(fresh.actions);
+    const conditions: Condition[] = JSON.parse(fresh.conditions);
+
+    const conditionsMet = await this.evaluateConditions(conditions, fresh.conditionsOperator);
+    if (!conditionsMet) {
+      this.logger.log(`Scheduled scenario "${fresh.name}" skipped (conditions not met)`);
+      reschedule(fresh);
+      return;
+    }
+
+    const capture = await this.captureTriggerValues(triggerForCapture, conditions);
+    await this.recordTriggerContextForActions(fresh.name, capture, actions);
+    await this.executeActions(actions, capture);
+    await this.prisma.scenario.update({
+      where: { id: fresh.id },
+      data: { lastRun: new Date(), runCount: { increment: 1 } },
+    });
+
+    reschedule(fresh);
   }
 
   private async evaluateScenariosFor(updatedDeviceId: string) {

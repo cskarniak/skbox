@@ -28,6 +28,14 @@ export interface DailyForecast {
   uvIndexMax: number;
   sunshineHours: number;
   pressureMean: number | null;
+  sunrise: string; // ISO local, ex: 2026-07-17T06:12
+  sunset: string;
+}
+
+export interface SunTimes {
+  sunrise: Date;
+  sunset: Date;
+  date: string; // YYYY-MM-DD
 }
 
 export interface HourlyForecast {
@@ -51,6 +59,11 @@ const HOURLY_HOURS = 48;
 
 @Injectable()
 export class WeatherService {
+  // Mémoïse la prévision journalière (qui contient le lever/coucher) par date d'appel,
+  // pour éviter de re-solliciter Open-Meteo à chaque évaluation d'un déclencheur solaire
+  // ou d'un profil de simulation de présence le même jour.
+  private sunCache: { fetchedDate: string; daily: DailyForecast[] } | null = null;
+
   constructor(private readonly settings: SettingsService) {}
 
   async getHomeLocation(): Promise<WeatherLocation | null> {
@@ -77,6 +90,26 @@ export class WeatherService {
       throw new BadRequestException("Aucun lieu par défaut n'est configuré");
     }
     return this.getForecast(location.lat, location.lon, location.label);
+  }
+
+  // Lever/coucher du soleil pour le lieu par défaut, `dayOffset` jours à partir
+  // d'aujourd'hui (0 = aujourd'hui, 1 = demain). Retourne `null` (jamais de throw)
+  // si aucun lieu n'est configuré ou si Open-Meteo est injoignable — les appelants
+  // (déclencheurs solaires des scénarios, simulation de présence) doivent traiter ce
+  // cas en réessayant plus tard plutôt qu'en plantant.
+  async getSunTimes(dayOffset: 0 | 1 = 0): Promise<SunTimes | null> {
+    const today = new Date().toISOString().slice(0, 10);
+    if (!this.sunCache || this.sunCache.fetchedDate !== today) {
+      try {
+        const forecast = await this.getHomeForecast();
+        this.sunCache = { fetchedDate: today, daily: forecast.daily };
+      } catch {
+        return null;
+      }
+    }
+    const entry = this.sunCache.daily[dayOffset];
+    if (!entry) return null;
+    return { sunrise: new Date(entry.sunrise), sunset: new Date(entry.sunset), date: entry.date };
   }
 
   // Le géocodage Open-Meteo (GeoNames) fait une correspondance quasi exacte sur le nom en
@@ -145,6 +178,8 @@ export class WeatherService {
         'windgusts_10m_max',
         'uv_index_max',
         'sunshine_duration',
+        'sunrise',
+        'sunset',
       ].join(','),
     );
     dailyUrl.searchParams.set('hourly', 'pressure_msl');
@@ -183,6 +218,8 @@ export class WeatherService {
       uvIndexMax: res.daily.uv_index_max[i],
       sunshineHours: res.daily.sunshine_duration[i] / 3600,
       pressureMean: pressureByDate.get(date) ?? null,
+      sunrise: res.daily.sunrise[i],
+      sunset: res.daily.sunset[i],
     }));
   }
 

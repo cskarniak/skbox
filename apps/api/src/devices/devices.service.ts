@@ -297,6 +297,22 @@ export class DevicesService {
       }
     }
 
+    const presenceProfiles = await this.prisma.presenceSimulation.findMany({
+      select: { name: true, lightDeviceIds: true },
+    });
+    const usedByPresence = presenceProfiles.find((p) => {
+      try {
+        return (JSON.parse(p.lightDeviceIds) as string[]).includes(id);
+      } catch {
+        return false;
+      }
+    });
+    if (usedByPresence) {
+      throw new ConflictException(
+        `Impossible de supprimer : utilisé par la simulation de présence « ${usedByPresence.name} ».`,
+      );
+    }
+
     return this.prisma.device.delete({ where: { id } });
   }
 }

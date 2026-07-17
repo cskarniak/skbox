@@ -47,6 +47,8 @@ interface Trigger {
   cron?: string;
   randomDelayMin?: number;
   randomDelayMax?: number;
+  reference?: 'sunrise' | 'sunset';
+  offsetMinutes?: number;
 }
 
 interface Condition {
@@ -170,6 +172,12 @@ function ScenarioForm({
   const [randomDelayMax, setRandomDelayMax] = useState(
     scenario?.trigger?.randomDelayMax ?? 0,
   );
+  const [solarReference, setSolarReference] = useState<'sunrise' | 'sunset'>(
+    scenario?.trigger?.reference ?? 'sunset',
+  );
+  const [solarOffsetMinutes, setSolarOffsetMinutes] = useState(
+    scenario?.trigger?.offsetMinutes ?? 0,
+  );
   const [conditions, setConditions] = useState<Condition[]>(
     scenario?.conditions ?? [],
   );
@@ -259,6 +267,14 @@ function ScenarioForm({
         type: 'device_update',
         deviceId: triggerDeviceId,
       };
+    } else if (triggerType === 'solar') {
+      trigger = {
+        type: 'solar',
+        reference: solarReference,
+        offsetMinutes: solarOffsetMinutes,
+        randomDelayMin,
+        randomDelayMax,
+      };
     } else {
       trigger = {
         type: 'device_state',
@@ -324,6 +340,7 @@ function ScenarioForm({
             { value: 'device_state', label: 'État d\'un appareil' },
             { value: 'device_update', label: 'Mise à jour d\'un appareil' },
             { value: 'cron', label: 'Planification horaire' },
+            { value: 'solar', label: 'Lever / coucher du soleil' },
           ]}
           value={triggerType}
           onChange={(v) => setTriggerType(v ?? 'device_state')}
@@ -414,6 +431,49 @@ function ScenarioForm({
                 Exécution entre {randomDelayMin} et {randomDelayMax} min après l&apos;heure programmée
               </Text>
             )}
+          </>
+        )}
+
+        {triggerType === 'solar' && (
+          <>
+            <Group grow>
+              <Select
+                label="Référence"
+                data={[
+                  { value: 'sunrise', label: 'Lever du soleil' },
+                  { value: 'sunset', label: 'Coucher du soleil' },
+                ]}
+                value={solarReference}
+                onChange={(v) => setSolarReference((v as 'sunrise' | 'sunset') ?? 'sunset')}
+              />
+              <NumberInput
+                label="Décalage (minutes)"
+                description="Négatif = avant, positif = après"
+                value={solarOffsetMinutes}
+                onChange={(v) => setSolarOffsetMinutes(Number(v) || 0)}
+                min={-180}
+                max={180}
+              />
+            </Group>
+            <Group grow>
+              <NumberInput
+                label="Délai aléatoire min (minutes)"
+                value={randomDelayMin}
+                onChange={(v) => setRandomDelayMin(Number(v) || 0)}
+                min={0}
+                max={120}
+              />
+              <NumberInput
+                label="Délai aléatoire max (minutes)"
+                value={randomDelayMax}
+                onChange={(v) => setRandomDelayMax(Number(v) || 0)}
+                min={0}
+                max={120}
+              />
+            </Group>
+            <Text size="sm" c="dimmed">
+              Recalculé chaque jour à partir du lever/coucher réel du lieu configuré dans Météo.
+            </Text>
           </>
         )}
 
@@ -612,6 +672,13 @@ function ScenarioTypeBadge({ trigger }: { trigger: Trigger }) {
       </Badge>
     );
   }
+  if (trigger.type === 'solar') {
+    return (
+      <Badge size="sm" variant="light" color="orange" leftSection={<IconClock size={12} />}>
+        Lever / coucher du soleil
+      </Badge>
+    );
+  }
   return (
     <Badge size="sm" variant="light" color="teal" leftSection={<IconDeviceDesktop size={12} />}>
       État d&apos;un appareil
@@ -636,6 +703,25 @@ function TriggerSummary({
         <IconClock size={14} />
         <Text size="sm">
           {trigger.cron}{delay}
+        </Text>
+      </Group>
+    );
+  }
+
+  if (trigger.type === 'solar') {
+    const label = trigger.reference === 'sunrise' ? 'Lever du soleil' : 'Coucher du soleil';
+    const offset = trigger.offsetMinutes
+      ? ` ${trigger.offsetMinutes > 0 ? '+' : ''}${trigger.offsetMinutes}min`
+      : '';
+    const delay =
+      trigger.randomDelayMax && trigger.randomDelayMax > 0
+        ? ` (+${trigger.randomDelayMin ?? 0}–${trigger.randomDelayMax}min aléatoire)`
+        : '';
+    return (
+      <Group gap={6}>
+        <IconClock size={14} />
+        <Text size="sm">
+          {label}{offset}{delay}
         </Text>
       </Group>
     );

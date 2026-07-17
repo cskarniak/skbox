@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ScenariosService } from './scenarios.service';
 import { MqttService } from '../mqtt/mqtt.service';
 import { NotificationService } from '../notifications/notification.service';
 import { TriggerContextService } from './trigger-context.service';
+import { WeatherService } from '../weather/weather.service';
 
 type FakeDevice = { id: string; name: string; mqttTopic: string | null; state: string };
 type FakeScenario = {
@@ -121,6 +122,9 @@ function makeFakeNotifications() {
 function makeFakeTriggerContext() {
   return { record: vi.fn() } as unknown as TriggerContextService;
 }
+function makeFakeWeather() {
+  return { getSunTimes: vi.fn(async () => null) } as unknown as WeatherService;
+}
 
 const MOTION_ID = 'motion-1';
 const LAMP_ID = 'lamp-1';
@@ -133,6 +137,7 @@ describe('ScenariosService — moteur d\'évaluation', () => {
   let mqtt: MqttService;
   let notifications: NotificationService;
   let triggerContext: TriggerContextService;
+  let weather: WeatherService;
   let service: ScenariosService;
 
   function setup(scenarios: FakeScenario[]) {
@@ -146,7 +151,8 @@ describe('ScenariosService — moteur d\'évaluation', () => {
     mqtt = makeFakeMqtt();
     notifications = makeFakeNotifications();
     triggerContext = makeFakeTriggerContext();
-    service = new ScenariosService(prisma, mqtt, triggerContext, notifications);
+    weather = makeFakeWeather();
+    service = new ScenariosService(prisma, mqtt, triggerContext, notifications, weather);
     return service.reloadScenarios();
   }
 
@@ -365,6 +371,65 @@ describe('ScenariosService — moteur d\'évaluation', () => {
 
       expect(mqtt.publish).not.toHaveBeenCalled();
       expect(scenario.runCount).toBe(0);
+    });
+  });
+
+  describe('déclencheur solaire (scheduleSolar)', () => {
+    afterEach(() => {
+      // Évite les fuites de timers réels entre tests (scheduleSolar arme un vrai setTimeout).
+      for (const timer of (service as any).cronTimers.values()) clearTimeout(timer);
+    });
+
+    it("calcule l'heure de déclenchement à partir du coucher du soleil + décalage (sans aléa)", async () => {
+      const scenario = makeScenario({
+        trigger: JSON.stringify({ type: 'solar', reference: 'sunset', offsetMinutes: -15, randomDelayMin: 0, randomDelayMax: 0 }),
+        conditions: '[]',
+        actions: '[]',
+      });
+      await setup([scenario]);
+      const sunset = new Date(Date.now() + 3 * 60 * 60_000); // dans 3h, donc pas "déjà passé"
+      (weather.getSunTimes as any) = vi.fn(async () => ({ sunrise: new Date(), sunset, date: 'today' }));
+
+      await (service as any).scheduleSolar(scenario, { reference: 'sunset', offsetMinutes: -15, randomDelayMin: 0, randomDelayMax: 0 });
+
+      const fireAt = (service as any).nextRunDates.get(scenario.id);
+      expect(fireAt.getTime()).toBe(sunset.getTime() - 15 * 60_000);
+    });
+
+    it("bascule sur le coucher de soleil de demain si celui d'aujourd'hui est déjà passé", async () => {
+      const scenario = makeScenario({
+        trigger: JSON.stringify({ type: 'solar', reference: 'sunset', offsetMinutes: 0, randomDelayMin: 0, randomDelayMax: 0 }),
+        conditions: '[]',
+        actions: '[]',
+      });
+      await setup([scenario]);
+      const sunsetToday = new Date(Date.now() - 60_000); // déjà passé
+      const sunsetTomorrow = new Date(Date.now() + 20 * 60 * 60_000);
+      (weather.getSunTimes as any) = vi.fn(async (dayOffset: 0 | 1) =>
+        dayOffset === 0
+          ? { sunrise: new Date(), sunset: sunsetToday, date: 'today' }
+          : { sunrise: new Date(), sunset: sunsetTomorrow, date: 'tomorrow' },
+      );
+
+      await (service as any).scheduleSolar(scenario, { reference: 'sunset', offsetMinutes: 0, randomDelayMin: 0, randomDelayMax: 0 });
+
+      const fireAt = (service as any).nextRunDates.get(scenario.id);
+      expect(fireAt.getTime()).toBe(sunsetTomorrow.getTime());
+    });
+
+    it('réessaie plus tard sans planifier de nextRun si les heures solaires sont indisponibles', async () => {
+      const scenario = makeScenario({
+        trigger: JSON.stringify({ type: 'solar', reference: 'sunrise', offsetMinutes: 0, randomDelayMin: 0, randomDelayMax: 0 }),
+        conditions: '[]',
+        actions: '[]',
+      });
+      await setup([scenario]);
+      (weather.getSunTimes as any) = vi.fn(async () => null);
+
+      await (service as any).scheduleSolar(scenario, { reference: 'sunrise', offsetMinutes: 0, randomDelayMin: 0, randomDelayMax: 0 });
+
+      expect((service as any).nextRunDates.has(scenario.id)).toBe(false);
+      expect((service as any).cronTimers.has(scenario.id)).toBe(true); // timer de nouvelle tentative armé
     });
   });
 });
