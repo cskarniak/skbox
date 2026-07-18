@@ -249,6 +249,22 @@ export class NetatmoService implements OnModuleInit, OnModuleDestroy {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.warn(`Sondage Netatmo en échec: ${message}`);
       await this.saveConfig({ ...config, lastError: message });
+      // Un sondage en échec (relais injoignable, home absente de homestatus, etc.) ne doit
+      // jamais laisser l'appareil bloqué sur son dernier statut "online" connu — on n'a plus
+      // de donnée fraîche confirmant qu'il l'est encore.
+      await this.markDeviceOffline(config);
+    }
+  }
+
+  private async markDeviceOffline(config: NetatmoConfig): Promise<void> {
+    if (!config.deviceId) return;
+    try {
+      await this.prisma.device.updateMany({
+        where: { id: config.deviceId, status: { not: 'offline' } },
+        data: { status: 'offline' },
+      });
+    } catch (err) {
+      this.logger.warn(`Impossible de marquer l'appareil Netatmo hors-ligne: ${err}`);
     }
   }
 

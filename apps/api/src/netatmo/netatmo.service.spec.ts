@@ -55,12 +55,22 @@ function makeFakePrisma() {
         devicesById.set(device.id, device);
         return device;
       }),
-      updateMany: vi.fn(async ({ where, data }: { where: { id: string; state: string }; data: Partial<FakeDevice> }) => {
-        const device = devicesById.get(where.id);
-        if (!device || device.state !== where.state) return { count: 0 };
-        Object.assign(device, data);
-        return { count: 1 };
-      }),
+      updateMany: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: { id: string; state?: string; status?: { not: string } };
+          data: Partial<FakeDevice>;
+        }) => {
+          const device = devicesById.get(where.id);
+          if (!device) return { count: 0 };
+          if (where.state !== undefined && device.state !== where.state) return { count: 0 };
+          if (where.status !== undefined && device.status === where.status.not) return { count: 0 };
+          Object.assign(device, data);
+          return { count: 1 };
+        },
+      ),
     },
     deviceEvent: {
       create: vi.fn(async ({ data }: { data: { deviceId: string; event: string; data: string } }) => {
@@ -214,5 +224,23 @@ describe('NetatmoService', () => {
     await expect(service.syncNow()).resolves.toBeDefined();
     const status = await service.getStatus();
     expect(status.lastError).toBeTruthy();
+  });
+
+  it("marque l'appareil hors-ligne quand le relais devient injoignable (pièce absente de homestatus)", async () => {
+    await connectOnce(20);
+    const deviceId = (await service.getStatus()).deviceId!;
+    expect(prisma.__devicesById.get(deviceId).status).toBe('online');
+
+    // Relais coupé : Netatmo ne peut plus renvoyer l'état de la pièce dans homestatus.
+    fetchMock.mockImplementation(async (url: string) => {
+      const href = String(url);
+      if (href.includes('/homestatus')) return jsonResponse({ body: { home: { id: 'home-1', rooms: [] } } });
+      throw new Error(`unexpected fetch: ${href}`);
+    });
+    await service.syncNow();
+
+    expect(prisma.__devicesById.get(deviceId).status).toBe('offline');
+    const status = await service.getStatus();
+    expect(status.lastError).toContain('introuvable');
   });
 });
