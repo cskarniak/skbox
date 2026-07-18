@@ -305,7 +305,7 @@ export class NetatmoService implements OnModuleInit, OnModuleDestroy {
       data: {
         name: config.roomName ? `Thermostat ${config.roomName}` : 'Thermostat Netatmo',
         protocol: 'netatmo',
-        type: 'sensor',
+        type: 'sensor_temperature',
         state: '{}',
         mqttTopic: null,
         trackHistory: true,
