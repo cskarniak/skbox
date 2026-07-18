@@ -313,6 +313,20 @@ export class DevicesService {
       );
     }
 
+    const netatmoSetting = await this.prisma.setting.findUnique({ where: { key: 'netatmo.config' } });
+    if (netatmoSetting) {
+      try {
+        const netatmoConfig = JSON.parse(netatmoSetting.value);
+        if (netatmoConfig.deviceId === id) {
+          throw new ConflictException(
+            "Impossible de supprimer : utilisé par l'intégration Netatmo — déconnectez Netatmo d'abord.",
+          );
+        }
+      } catch (err) {
+        if (err instanceof ConflictException) throw err;
+      }
+    }
+
     return this.prisma.device.delete({ where: { id } });
   }
 }

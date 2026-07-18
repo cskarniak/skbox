@@ -11,7 +11,7 @@ import {
   ThemeIcon,
   UnstyledButton,
 } from '@mantine/core';
-import { IconSmartHome, IconFlame, IconChevronRight, IconChartLine, IconVideo, IconAlertTriangle, IconCloudRain, IconAntenna, IconBulb } from '@tabler/icons-react';
+import { IconSmartHome, IconFlame, IconChevronRight, IconChartLine, IconVideo, IconAlertTriangle, IconCloudRain, IconAntenna, IconBulb, IconTemperature } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import { AppNav } from '@/components/AppNav';
 
@@ -65,6 +65,13 @@ const MODULES: ModuleEntry[] = [
     description: "Allumage/extinction de lampes à horaires semi-aléatoires (fixes ou solaires) pour simuler une présence, avec journal et vérification quotidienne.",
     icon: <IconBulb size={24} />,
     href: '/modules/presence',
+  },
+  {
+    key: 'netatmo',
+    label: 'Netatmo',
+    description: 'Lecture de la température du thermostat Netatmo (NATherm1 + relais), exposée comme un appareil Skbox.',
+    icon: <IconTemperature size={24} />,
+    href: '/modules/netatmo',
   },
   {
     key: 'network-health',
