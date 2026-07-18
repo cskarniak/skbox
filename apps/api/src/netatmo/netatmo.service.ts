@@ -278,7 +278,7 @@ export class NetatmoService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async discoverThermostatRoom(accessToken: string): Promise<{ homeId: string; roomId: string; roomName: string }> {
+  private async discoverThermostatRoom(accessToken: string): Promise<{ homeId: string; roomId: string; roomName: string | null }> {
     const res = await this.fetchJson('https://api.netatmo.com/api/homesdata', {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
@@ -290,7 +290,7 @@ export class NetatmoService implements OnModuleInit, OnModuleDestroy {
       return {
         homeId: home.id,
         roomId: thermostatModule.room_id,
-        roomName: room?.name ?? 'Thermostat Netatmo',
+        roomName: room?.name ?? null, // ensureDevice() retombe sur un nom générique si absent
       };
     }
     throw new BadRequestException('Aucun thermostat Netatmo (NATherm1) trouvé sur ce compte');
