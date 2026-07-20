@@ -218,7 +218,16 @@ function PresenceSimulationForm({
   };
 
   const deviceOptions = (devices ?? []).map((d) => ({ value: d.id, label: d.name }));
-  const valid = name.trim().length > 0 && lightDeviceIds.length > 0 && toggleCountMin <= toggleCountMax && toggleDurationMin <= toggleDurationMax;
+  const hhmmPattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+  const toggleWindowStartValid = hhmmPattern.test(toggleWindowStart);
+  const toggleWindowEndValid = hhmmPattern.test(toggleWindowEnd);
+  const valid =
+    name.trim().length > 0 &&
+    lightDeviceIds.length > 0 &&
+    toggleCountMin <= toggleCountMax &&
+    toggleDurationMin <= toggleDurationMax &&
+    toggleWindowStartValid &&
+    toggleWindowEndValid;
 
   return (
     <Modal opened={opened} onClose={onClose} title={profile ? 'Modifier la simulation' : 'Nouvelle simulation de présence'} size="lg">
@@ -287,12 +296,14 @@ function PresenceSimulationForm({
             placeholder="22:00"
             value={toggleWindowStart}
             onChange={(e) => setToggleWindowStart(e.currentTarget.value)}
+            error={!toggleWindowStartValid ? 'Format HH:MM attendu' : undefined}
           />
           <TextInput
             label="Fin de la fenêtre de bascules"
             placeholder="23:00"
             value={toggleWindowEnd}
             onChange={(e) => setToggleWindowEnd(e.currentTarget.value)}
+            error={!toggleWindowEndValid ? 'Format HH:MM attendu' : undefined}
           />
         </Group>
         <Group grow>
