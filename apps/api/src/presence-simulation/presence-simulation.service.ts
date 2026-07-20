@@ -84,6 +84,7 @@ export class PresenceSimulationService implements OnModuleInit, OnModuleDestroy 
         toggleCountMax: dto.toggleCountMax,
         toggleDurationMin: dto.toggleDurationMin,
         toggleDurationMax: dto.toggleDurationMax,
+        toggleWindowMinutes: dto.toggleWindowMinutes,
       },
     });
     void this.tick();
@@ -135,6 +136,7 @@ export class PresenceSimulationService implements OnModuleInit, OnModuleDestroy 
     if (dto.toggleCountMax !== undefined) data.toggleCountMax = dto.toggleCountMax;
     if (dto.toggleDurationMin !== undefined) data.toggleDurationMin = dto.toggleDurationMin;
     if (dto.toggleDurationMax !== undefined) data.toggleDurationMax = dto.toggleDurationMax;
+    if (dto.toggleWindowMinutes !== undefined) data.toggleWindowMinutes = dto.toggleWindowMinutes;
     return data;
   }
 
@@ -197,6 +199,7 @@ export class PresenceSimulationService implements OnModuleInit, OnModuleDestroy 
     const events = generateDailyPlan({
       onAt,
       offAt,
+      toggleWindowMinutes: profile.toggleWindowMinutes,
       toggleCountMin: profile.toggleCountMin,
       toggleCountMax: profile.toggleCountMax,
       toggleDurationMin: profile.toggleDurationMin,

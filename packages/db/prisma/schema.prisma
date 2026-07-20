@@ -131,6 +131,7 @@ model PresenceSimulation {
   toggleCountMax     Int      @default(0)
   toggleDurationMin  Int      @default(1) // minutes
   toggleDurationMax  Int      @default(30)
+  toggleWindowMinutes Int     @default(60) // minutes avant l'extinction où les bascules peuvent survenir (le reste de la soirée reste stable)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 

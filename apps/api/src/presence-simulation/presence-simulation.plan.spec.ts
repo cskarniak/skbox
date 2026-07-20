@@ -14,6 +14,7 @@ describe('generateDailyPlan', () => {
     const events = generateDailyPlan({
       onAt,
       offAt,
+      toggleWindowMinutes: 240,
       toggleCountMin: 0,
       toggleCountMax: 0,
       toggleDurationMin: 5,
@@ -29,6 +30,7 @@ describe('generateDailyPlan', () => {
     const events = generateDailyPlan({
       onAt,
       offAt,
+      toggleWindowMinutes: 240,
       toggleCountMin: 5,
       toggleCountMax: 5,
       toggleDurationMin: 2,
@@ -51,6 +53,7 @@ describe('generateDailyPlan', () => {
     const events = generateDailyPlan({
       onAt,
       offAt,
+      toggleWindowMinutes: 240,
       toggleCountMin: 2,
       toggleCountMax: 4,
       toggleDurationMin: 5,
@@ -70,6 +73,7 @@ describe('generateDailyPlan', () => {
     const events = generateDailyPlan({
       onAt,
       offAt,
+      toggleWindowMinutes: 240,
       toggleCountMin: 1,
       toggleCountMax: 1,
       toggleDurationMin: 60,
@@ -96,6 +100,7 @@ describe('generateDailyPlan', () => {
     const events = generateDailyPlan({
       onAt,
       offAt,
+      toggleWindowMinutes: 240,
       toggleCountMin: 2,
       toggleCountMax: 2,
       toggleDurationMin: 20,
@@ -112,11 +117,50 @@ describe('generateDailyPlan', () => {
       generateDailyPlan({
         onAt: offAt,
         offAt: onAt,
+        toggleWindowMinutes: 240,
         toggleCountMin: 0,
         toggleCountMax: 0,
         toggleDurationMin: 1,
         toggleDurationMax: 1,
       }),
     ).toThrow();
+  });
+
+  it('concentre les bascules dans la fenêtre avant offAt quand toggleWindowMinutes < durée totale', () => {
+    // fenêtre totale 4h (240 min), toggleWindowMinutes=60 -> bascules seulement dans les 60
+    // dernières minutes avant offAt, soit à partir de 22:00.
+    const toggleStart = new Date(offAt.getTime() - 60 * 60_000);
+    const events = generateDailyPlan({
+      onAt,
+      offAt,
+      toggleWindowMinutes: 60,
+      toggleCountMin: 5,
+      toggleCountMax: 5,
+      toggleDurationMin: 2,
+      toggleDurationMax: 5,
+      rng: Math.random,
+    });
+    const toggleEvents = events.filter((e) => e.kind === 'toggle_on' || e.kind === 'toggle_off');
+    expect(toggleEvents.length).toBeGreaterThan(0);
+    for (const e of toggleEvents) {
+      expect(e.at.getTime()).toBeGreaterThanOrEqual(toggleStart.getTime());
+    }
+  });
+
+  it("n'ajoute aucune bascule quand toggleWindowMinutes vaut 0 (soirée stable jusqu'à l'extinction)", () => {
+    const events = generateDailyPlan({
+      onAt,
+      offAt,
+      toggleWindowMinutes: 0,
+      toggleCountMin: 5,
+      toggleCountMax: 5,
+      toggleDurationMin: 2,
+      toggleDurationMax: 5,
+      rng: Math.random,
+    });
+    expect(events).toEqual([
+      { kind: 'on', action: 'ON', at: onAt },
+      { kind: 'off', action: 'OFF', at: offAt },
+    ]);
   });
 });

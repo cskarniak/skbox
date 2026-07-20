@@ -9,6 +9,7 @@ export interface PlannedEvent {
 export interface PlanInput {
   onAt: Date;
   offAt: Date;
+  toggleWindowMinutes: number; // fenêtre avant offAt où les bascules peuvent survenir ; le reste de la soirée reste stable
   toggleCountMin: number;
   toggleCountMax: number;
   toggleDurationMin: number; // minutes
@@ -28,18 +29,24 @@ function randomInt(min: number, max: number, rng: () => number): number {
  * facilement testable.
  */
 export function generateDailyPlan(input: PlanInput): PlannedEvent[] {
-  const { onAt, offAt, toggleCountMin, toggleCountMax, toggleDurationMin, toggleDurationMax } = input;
+  const { onAt, offAt, toggleWindowMinutes, toggleCountMin, toggleCountMax, toggleDurationMin, toggleDurationMax } = input;
   const rng = input.rng ?? Math.random;
   if (!(onAt.getTime() < offAt.getTime())) {
     throw new Error('onAt doit être strictement antérieur à offAt');
   }
 
   const count = randomInt(toggleCountMin, toggleCountMax, rng);
-  const windowMs = offAt.getTime() - onAt.getTime();
+  // Les bascules ne sont tirées que dans la fenêtre juste avant l'extinction (par ex. les
+  // dernières heures avant le coucher), pas sur toute la soirée : le début de soirée reste
+  // stable une fois la lumière allumée. Une fenêtre trop grande est simplement plafonnée à
+  // toute la durée onAt→offAt.
+  const toggleWindowMs = Math.max(0, toggleWindowMinutes) * 60_000;
+  const toggleStart = new Date(Math.max(onAt.getTime(), offAt.getTime() - toggleWindowMs));
+  const windowMs = offAt.getTime() - toggleStart.getTime();
 
   const toggles: PlannedEvent[] = [];
   for (let i = 0; i < count; i++) {
-    const startAt = new Date(onAt.getTime() + rng() * windowMs);
+    const startAt = new Date(toggleStart.getTime() + rng() * windowMs);
     const durationMs = randomInt(toggleDurationMin, toggleDurationMax, rng) * 60_000;
     const endAt = new Date(startAt.getTime() + durationMs);
     // Une bascule dont le rallumage tomberait après (ou pile sur) l'extinction finale n'a

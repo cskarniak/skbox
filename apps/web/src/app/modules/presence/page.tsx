@@ -49,6 +49,7 @@ interface PresenceSimulation {
   toggleCountMax: number;
   toggleDurationMin: number;
   toggleDurationMax: number;
+  toggleWindowMinutes: number;
 }
 
 interface PresenceEvent {
@@ -175,6 +176,7 @@ function PresenceSimulationForm({
   const [toggleCountMax, setToggleCountMax] = useState(profile?.toggleCountMax ?? 5);
   const [toggleDurationMin, setToggleDurationMin] = useState(profile?.toggleDurationMin ?? 5);
   const [toggleDurationMax, setToggleDurationMax] = useState(profile?.toggleDurationMax ?? 30);
+  const [toggleWindowMinutes, setToggleWindowMinutes] = useState(profile?.toggleWindowMinutes ?? 60);
 
   const save = useMutation({
     mutationFn: (data: Record<string, unknown>) =>
@@ -200,6 +202,7 @@ function PresenceSimulationForm({
       toggleCountMax,
       toggleDurationMin,
       toggleDurationMax,
+      toggleWindowMinutes,
     });
   };
 
@@ -262,7 +265,15 @@ function PresenceSimulationForm({
           />
         </Group>
 
-        <Title order={5}>Bascules aléatoires entre l&apos;allumage et l&apos;extinction</Title>
+        <Title order={5}>Bascules aléatoires avant l&apos;extinction</Title>
+        <NumberInput
+          label="Fenêtre de bascules avant l'extinction (min)"
+          description="Le début de soirée reste stable (allumé) ; les bascules aléatoires ne se produisent que dans ces X dernières minutes avant l'extinction, comme lors du coucher."
+          value={toggleWindowMinutes}
+          onChange={(v) => setToggleWindowMinutes(Number(v) || 0)}
+          min={0}
+          max={600}
+        />
         <Group grow>
           <NumberInput
             label="Nombre de bascules min"
@@ -441,7 +452,8 @@ function ProfileCard({
         <Text size="sm">Allumage : {timeOrSolarLabel(profile.onTime)}</Text>
         <Text size="sm">Extinction : {timeOrSolarLabel(profile.offTime)}</Text>
         <Text size="xs" c="dimmed">
-          {profile.toggleCountMin}–{profile.toggleCountMax} bascule(s) aléatoire(s), {profile.toggleDurationMin}–{profile.toggleDurationMax} min chacune
+          {profile.toggleCountMin}–{profile.toggleCountMax} bascule(s) aléatoire(s), {profile.toggleDurationMin}–{profile.toggleDurationMax} min chacune,
+          dans les {profile.toggleWindowMinutes} min avant l&apos;extinction
         </Text>
       </Stack>
       <Button size="xs" variant="light" onClick={() => setShowLog((v) => !v)}>
