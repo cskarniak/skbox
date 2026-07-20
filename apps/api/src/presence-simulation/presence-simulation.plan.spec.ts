@@ -14,7 +14,8 @@ describe('generateDailyPlan', () => {
     const events = generateDailyPlan({
       onAt,
       offAt,
-      toggleWindowMinutes: 240,
+      toggleWindowStart: onAt,
+      toggleWindowEnd: offAt,
       toggleCountMin: 0,
       toggleCountMax: 0,
       toggleDurationMin: 5,
@@ -30,7 +31,8 @@ describe('generateDailyPlan', () => {
     const events = generateDailyPlan({
       onAt,
       offAt,
-      toggleWindowMinutes: 240,
+      toggleWindowStart: onAt,
+      toggleWindowEnd: offAt,
       toggleCountMin: 5,
       toggleCountMax: 5,
       toggleDurationMin: 2,
@@ -53,7 +55,8 @@ describe('generateDailyPlan', () => {
     const events = generateDailyPlan({
       onAt,
       offAt,
-      toggleWindowMinutes: 240,
+      toggleWindowStart: onAt,
+      toggleWindowEnd: offAt,
       toggleCountMin: 2,
       toggleCountMax: 4,
       toggleDurationMin: 5,
@@ -73,7 +76,8 @@ describe('generateDailyPlan', () => {
     const events = generateDailyPlan({
       onAt,
       offAt,
-      toggleWindowMinutes: 240,
+      toggleWindowStart: onAt,
+      toggleWindowEnd: offAt,
       toggleCountMin: 1,
       toggleCountMax: 1,
       toggleDurationMin: 60,
@@ -100,7 +104,8 @@ describe('generateDailyPlan', () => {
     const events = generateDailyPlan({
       onAt,
       offAt,
-      toggleWindowMinutes: 240,
+      toggleWindowStart: onAt,
+      toggleWindowEnd: offAt,
       toggleCountMin: 2,
       toggleCountMax: 2,
       toggleDurationMin: 20,
@@ -117,7 +122,8 @@ describe('generateDailyPlan', () => {
       generateDailyPlan({
         onAt: offAt,
         offAt: onAt,
-        toggleWindowMinutes: 240,
+        toggleWindowStart: offAt,
+        toggleWindowEnd: onAt,
         toggleCountMin: 0,
         toggleCountMax: 0,
         toggleDurationMin: 1,
@@ -126,14 +132,15 @@ describe('generateDailyPlan', () => {
     ).toThrow();
   });
 
-  it('concentre les bascules dans la fenêtre avant offAt quand toggleWindowMinutes < durée totale', () => {
-    // fenêtre totale 4h (240 min), toggleWindowMinutes=60 -> bascules seulement dans les 60
-    // dernières minutes avant offAt, soit à partir de 22:00.
-    const toggleStart = new Date(offAt.getTime() - 60 * 60_000);
+  it('concentre les bascules dans la fenêtre [toggleWindowStart, toggleWindowEnd] quand elle est plus petite que [onAt, offAt]', () => {
+    // fenêtre totale 4h (19:00-23:00), toggleWindow 22:00-23:00 -> bascules seulement dans
+    // la dernière heure avant offAt.
+    const toggleWindowStart = new Date(offAt.getTime() - 60 * 60_000); // 22:00
     const events = generateDailyPlan({
       onAt,
       offAt,
-      toggleWindowMinutes: 60,
+      toggleWindowStart,
+      toggleWindowEnd: offAt,
       toggleCountMin: 5,
       toggleCountMax: 5,
       toggleDurationMin: 2,
@@ -143,15 +150,16 @@ describe('generateDailyPlan', () => {
     const toggleEvents = events.filter((e) => e.kind === 'toggle_on' || e.kind === 'toggle_off');
     expect(toggleEvents.length).toBeGreaterThan(0);
     for (const e of toggleEvents) {
-      expect(e.at.getTime()).toBeGreaterThanOrEqual(toggleStart.getTime());
+      expect(e.at.getTime()).toBeGreaterThanOrEqual(toggleWindowStart.getTime());
     }
   });
 
-  it("n'ajoute aucune bascule quand toggleWindowMinutes vaut 0 (soirée stable jusqu'à l'extinction)", () => {
+  it("n'ajoute aucune bascule quand toggleWindowStart == toggleWindowEnd (soirée stable jusqu'à l'extinction)", () => {
     const events = generateDailyPlan({
       onAt,
       offAt,
-      toggleWindowMinutes: 0,
+      toggleWindowStart: offAt,
+      toggleWindowEnd: offAt,
       toggleCountMin: 5,
       toggleCountMax: 5,
       toggleDurationMin: 2,

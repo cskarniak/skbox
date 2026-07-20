@@ -131,7 +131,8 @@ model PresenceSimulation {
   toggleCountMax     Int      @default(0)
   toggleDurationMin  Int      @default(1) // minutes
   toggleDurationMax  Int      @default(30)
-  toggleWindowMinutes Int     @default(60) // minutes avant l'extinction où les bascules peuvent survenir (le reste de la soirée reste stable)
+  toggleWindowStart  String   @default("22:00") // HH:MM, début de la fenêtre où les bascules peuvent survenir (le reste de la soirée reste stable)
+  toggleWindowEnd    String   @default("23:00") // HH:MM, fin de la fenêtre de bascules
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 

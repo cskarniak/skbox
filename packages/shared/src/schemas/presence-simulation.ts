@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { timeOrSolarSchema } from './solar-time';
 
+const hhmmSchema = z.string().regex(/^\d{2}:\d{2}$/, 'Format HH:MM attendu');
+
 function checkRanges(dto: {
   onRandomOffsetMin?: number;
   onRandomOffsetMax?: number;
@@ -35,7 +37,8 @@ export const createPresenceSimulationSchema = z
     toggleCountMax: z.number().int().min(0).max(50).default(0),
     toggleDurationMin: z.number().int().min(1).max(600).default(1),
     toggleDurationMax: z.number().int().min(1).max(600).default(30),
-    toggleWindowMinutes: z.number().int().min(0).max(600).default(60),
+    toggleWindowStart: hhmmSchema.default('22:00'),
+    toggleWindowEnd: hhmmSchema.default('23:00'),
   })
   .refine(checkRanges, RANGE_ERROR);
 
@@ -54,7 +57,8 @@ export const updatePresenceSimulationSchema = z
     toggleCountMax: z.number().int().min(0).max(50).optional(),
     toggleDurationMin: z.number().int().min(1).max(600).optional(),
     toggleDurationMax: z.number().int().min(1).max(600).optional(),
-    toggleWindowMinutes: z.number().int().min(0).max(600).optional(),
+    toggleWindowStart: hhmmSchema.optional(),
+    toggleWindowEnd: hhmmSchema.optional(),
   })
   .refine(checkRanges, RANGE_ERROR);
 

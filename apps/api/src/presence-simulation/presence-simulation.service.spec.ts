@@ -19,7 +19,8 @@ type FakeProfile = {
   toggleCountMax: number;
   toggleDurationMin: number;
   toggleDurationMax: number;
-  toggleWindowMinutes: number;
+  toggleWindowStart: string;
+  toggleWindowEnd: string;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -62,7 +63,8 @@ function makeProfile(overrides: Partial<FakeProfile> = {}): FakeProfile {
     toggleCountMax: 0,
     toggleDurationMin: 1,
     toggleDurationMax: 5,
-    toggleWindowMinutes: 60,
+    toggleWindowStart: '22:00',
+    toggleWindowEnd: '23:00',
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,

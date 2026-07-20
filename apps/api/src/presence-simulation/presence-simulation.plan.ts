@@ -9,7 +9,8 @@ export interface PlannedEvent {
 export interface PlanInput {
   onAt: Date;
   offAt: Date;
-  toggleWindowMinutes: number; // fenêtre avant offAt où les bascules peuvent survenir ; le reste de la soirée reste stable
+  toggleWindowStart: Date; // début de la fenêtre où les bascules peuvent survenir ; le reste de la soirée reste stable
+  toggleWindowEnd: Date; // fin de cette fenêtre
   toggleCountMin: number;
   toggleCountMax: number;
   toggleDurationMin: number; // minutes
@@ -29,20 +30,21 @@ function randomInt(min: number, max: number, rng: () => number): number {
  * facilement testable.
  */
 export function generateDailyPlan(input: PlanInput): PlannedEvent[] {
-  const { onAt, offAt, toggleWindowMinutes, toggleCountMin, toggleCountMax, toggleDurationMin, toggleDurationMax } = input;
+  const { onAt, offAt, toggleWindowStart, toggleWindowEnd, toggleCountMin, toggleCountMax, toggleDurationMin, toggleDurationMax } = input;
   const rng = input.rng ?? Math.random;
   if (!(onAt.getTime() < offAt.getTime())) {
     throw new Error('onAt doit être strictement antérieur à offAt');
   }
 
   const count = randomInt(toggleCountMin, toggleCountMax, rng);
-  // Les bascules ne sont tirées que dans la fenêtre juste avant l'extinction (par ex. les
-  // dernières heures avant le coucher), pas sur toute la soirée : le début de soirée reste
-  // stable une fois la lumière allumée. Une fenêtre trop grande est simplement plafonnée à
-  // toute la durée onAt→offAt.
-  const toggleWindowMs = Math.max(0, toggleWindowMinutes) * 60_000;
-  const toggleStart = new Date(Math.max(onAt.getTime(), offAt.getTime() - toggleWindowMs));
-  const windowMs = offAt.getTime() - toggleStart.getTime();
+  // Les bascules ne sont tirées que dans la fenêtre configurée (par ex. les dernières heures
+  // avant le coucher), pas sur toute la soirée : le début de soirée reste stable une fois la
+  // lumière allumée. La fenêtre configurée est plafonnée à [onAt, offAt] au cas où elle
+  // déborderait de la fenêtre réelle (décalages aléatoires, etc.).
+  const toggleStartMs = Math.max(onAt.getTime(), toggleWindowStart.getTime());
+  const toggleEndMs = Math.min(offAt.getTime(), toggleWindowEnd.getTime());
+  const toggleStart = new Date(toggleStartMs);
+  const windowMs = Math.max(0, toggleEndMs - toggleStartMs);
 
   const toggles: PlannedEvent[] = [];
   for (let i = 0; i < count; i++) {

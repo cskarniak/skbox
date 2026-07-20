@@ -84,7 +84,8 @@ export class PresenceSimulationService implements OnModuleInit, OnModuleDestroy 
         toggleCountMax: dto.toggleCountMax,
         toggleDurationMin: dto.toggleDurationMin,
         toggleDurationMax: dto.toggleDurationMax,
-        toggleWindowMinutes: dto.toggleWindowMinutes,
+        toggleWindowStart: dto.toggleWindowStart,
+        toggleWindowEnd: dto.toggleWindowEnd,
       },
     });
     void this.tick();
@@ -136,7 +137,8 @@ export class PresenceSimulationService implements OnModuleInit, OnModuleDestroy 
     if (dto.toggleCountMax !== undefined) data.toggleCountMax = dto.toggleCountMax;
     if (dto.toggleDurationMin !== undefined) data.toggleDurationMin = dto.toggleDurationMin;
     if (dto.toggleDurationMax !== undefined) data.toggleDurationMax = dto.toggleDurationMax;
-    if (dto.toggleWindowMinutes !== undefined) data.toggleWindowMinutes = dto.toggleWindowMinutes;
+    if (dto.toggleWindowStart !== undefined) data.toggleWindowStart = dto.toggleWindowStart;
+    if (dto.toggleWindowEnd !== undefined) data.toggleWindowEnd = dto.toggleWindowEnd;
     return data;
   }
 
@@ -196,10 +198,22 @@ export class PresenceSimulationService implements OnModuleInit, OnModuleDestroy 
       return;
     }
 
+    // Fenêtre de bascules : heures fixes HH:MM, résolues sur la même nuit que onAt/offAt
+    // (avec le même traitement de passage minuit que l'allumage/extinction).
+    let toggleWindowStart = (await this.resolveTime({ mode: 'fixed', time: profile.toggleWindowStart }, date))!;
+    let toggleWindowEnd = (await this.resolveTime({ mode: 'fixed', time: profile.toggleWindowEnd }, date))!;
+    if (toggleWindowStart.getTime() < onBase.getTime()) {
+      toggleWindowStart = new Date(toggleWindowStart.getTime() + 24 * 60 * 60_000);
+    }
+    if (toggleWindowEnd.getTime() <= toggleWindowStart.getTime()) {
+      toggleWindowEnd = new Date(toggleWindowEnd.getTime() + 24 * 60 * 60_000);
+    }
+
     const events = generateDailyPlan({
       onAt,
       offAt,
-      toggleWindowMinutes: profile.toggleWindowMinutes,
+      toggleWindowStart,
+      toggleWindowEnd,
       toggleCountMin: profile.toggleCountMin,
       toggleCountMax: profile.toggleCountMax,
       toggleDurationMin: profile.toggleDurationMin,
