@@ -111,6 +111,15 @@ export class PresenceSimulationService implements OnModuleInit, OnModuleDestroy 
     await this.prisma.presenceSimulation.delete({ where: { id } });
   }
 
+  // Supprime le plan déjà posé pour une date donnée afin qu'il soit régénéré (avec les
+  // réglages actuels du profil) au prochain cycle : la génération est idempotente par jour,
+  // donc modifier un profil ne change jamais un plan déjà créé pour aujourd'hui/demain sans
+  // passer par cette suppression explicite.
+  async regenerateRun(profileId: string, date: string) {
+    await this.prisma.presenceSimulationRun.deleteMany({ where: { profileId, date } });
+    await this.tick();
+  }
+
   async listEvents(profileId: string, from?: string, to?: string) {
     const fromDate = from ?? dateString(addDays(new Date(), -14));
     const toDate = to ?? dateString(new Date());

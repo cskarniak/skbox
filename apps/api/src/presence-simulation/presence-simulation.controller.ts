@@ -45,6 +45,11 @@ export class PresenceSimulationController {
     return this.presenceSimulation.listEvents(id, from, to);
   }
 
+  @Delete(':id/runs/:date')
+  regenerateRun(@Param('id') id: string, @Param('date') date: string) {
+    return this.presenceSimulation.regenerateRun(id, date);
+  }
+
   @Post('verify-now')
   verifyNow() {
     return this.presenceSimulation.verifyCompletedRuns();
