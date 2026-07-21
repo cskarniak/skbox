@@ -136,7 +136,7 @@ export class DevicesController {
       const z2mPayload = this.toZ2MPayload(command, payload);
       this.mqtt.publish(`${device.mqttTopic}/set`, JSON.stringify(z2mPayload));
     } else if (device.protocol === 'rf433' && device.rfxcomId) {
-      const rfxPayload = this.toRfxcomPayload(command, payload);
+      const rfxPayload = this.toRfxcomPayload(command, payload, device.state);
       // rfxcomId = "type/id" ou "type/id/unitCode" (boutons de télécommande) ; le bridge
       // rfxcom2mqtt n'écoute que rfxcom2mqtt/command/#, pas .../send/... (topic legacy inutilisé).
       const [type, ...idParts] = device.rfxcomId.split('/');
@@ -171,15 +171,27 @@ export class DevicesController {
 
   private toRfxcomPayload(
     command: string,
-    payload?: Record<string, unknown>,
+    payload: Record<string, unknown> | undefined,
+    deviceState: string,
   ): Record<string, unknown> {
+    // Le bridge rfxcom2mqtt attend { deviceFunction, subtype, ... }, pas { command } : ce
+    // dernier n'a jamais été un format reconnu, la commande était donc silencieusement ignorée
+    // (deviceFunction manquant côté onCommandDefault). Le subtype numérique (ex. 0 = AC pour
+    // Chacon/DIO) est capturé sur le dernier état reçu du device (cf. rfxcom.service.ts).
+    let subtype: number | undefined;
+    try {
+      subtype = JSON.parse(deviceState || '{}').subtype;
+    } catch {
+      subtype = undefined;
+    }
+
     switch (command) {
       case 'on':
-        return { command: 'On', ...payload };
+        return { deviceFunction: 'switchOn', subtype, ...payload };
       case 'off':
-        return { command: 'Off', ...payload };
+        return { deviceFunction: 'switchOff', subtype, ...payload };
       default:
-        return { command, ...payload };
+        return { deviceFunction: command, subtype, ...payload };
     }
   }
 

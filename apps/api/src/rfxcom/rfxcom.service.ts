@@ -184,6 +184,9 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
     if (data.command !== undefined) stateData.command = data.command;
     if (data.power !== undefined) stateData.power = data.power;
     if (data.energy !== undefined) stateData.energy = data.energy;
+    // Nécessaire pour reconstruire une commande rfxcom2mqtt valide plus tard (le bridge exige
+    // un subtype numérique, ex. 0 = AC pour Chacon/DIO, absent du payload de commande sortant).
+    if (data.subtype !== undefined) stateData.subtype = data.subtype;
 
     // Certains capteurs (Oregon Scientific temp/humidité...) régénèrent un rolling code
     // aléatoire à chaque insertion de pile : le rfxcomId change et un nouveau device
