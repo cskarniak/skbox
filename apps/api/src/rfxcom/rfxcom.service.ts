@@ -69,7 +69,7 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
       this.handleBridgeStatus(payload);
     });
 
-    this.mqtt.subscribe('rfxcom2mqtt/devices/+', (topic, payload) => {
+    this.mqtt.subscribe('rfxcom2mqtt/devices/#', (topic, payload) => {
       this.lastMessageAt = Date.now();
       const deviceId = topic.split('/')[2];
       this.enqueue(deviceId, payload);

@@ -46,7 +46,7 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
       if (device) await this.evaluateScenariosFor(device.id);
     });
 
-    this.mqtt.subscribe('rfxcom2mqtt/devices/+', async (topic, _payload) => {
+    this.mqtt.subscribe('rfxcom2mqtt/devices/#', async (topic, _payload) => {
       const rfId = topic.split('/')[2];
       const device = await this.prisma.device.findFirst({
         where: { mqttTopic: `rfxcom2mqtt/devices/${rfId}` },
