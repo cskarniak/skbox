@@ -23,11 +23,13 @@ import {
   Accordion,
   SegmentedControl,
   SimpleGrid,
+  Alert,
 } from '@mantine/core';
-import { IconSmartHome, IconBulb, IconPlus, IconTrash, IconSun, IconSunset, IconRefresh } from '@tabler/icons-react';
+import { IconSmartHome, IconBulb, IconPlus, IconTrash, IconSun, IconSunset, IconRefresh, IconAlertTriangle, IconAlertCircle } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { validatePresenceSimulationParams } from '@skbox/shared';
 import { api } from '@/lib/api';
 import { AppNav } from '@/components/AppNav';
 
@@ -225,13 +227,31 @@ function PresenceSimulationForm({
   const hhmmPattern = /^([01]\d|2[0-3]):[0-5]\d$/;
   const toggleWindowStartValid = hhmmPattern.test(toggleWindowStart);
   const toggleWindowEndValid = hhmmPattern.test(toggleWindowEnd);
+
+  const validationIssues = useMemo(() => {
+    if (!toggleWindowStartValid || !toggleWindowEndValid) return [];
+    return validatePresenceSimulationParams({
+      onTime,
+      offTime,
+      toggleWindowStart,
+      toggleWindowEnd,
+      toggleCountMin,
+      toggleCountMax,
+      toggleDurationMin,
+      toggleDurationMax,
+    });
+  }, [onTime, offTime, toggleWindowStart, toggleWindowEnd, toggleCountMin, toggleCountMax, toggleDurationMin, toggleDurationMax, toggleWindowStartValid, toggleWindowEndValid]);
+  const blockingIssues = validationIssues.filter((i) => i.severity === 'error');
+  const warningIssues = validationIssues.filter((i) => i.severity === 'warning');
+
   const valid =
     name.trim().length > 0 &&
     lightDeviceIds.length > 0 &&
     toggleCountMin <= toggleCountMax &&
     toggleDurationMin <= toggleDurationMax &&
     toggleWindowStartValid &&
-    toggleWindowEndValid;
+    toggleWindowEndValid &&
+    blockingIssues.length === 0;
 
   return (
     <Modal opened={opened} onClose={onClose} title={profile ? 'Modifier la simulation' : 'Nouvelle simulation de présence'} size="lg">
@@ -345,6 +365,17 @@ function PresenceSimulationForm({
         <Text size="xs" c="dimmed">
           À chaque bascule, une durée est tirée au hasard dans cette fourchette pour l&apos;état temporaire (extinction puis rallumage).
         </Text>
+
+        {blockingIssues.map((issue, i) => (
+          <Alert key={`error-${i}`} color="red" icon={<IconAlertCircle size={16} />} variant="light">
+            {issue.message}
+          </Alert>
+        ))}
+        {warningIssues.map((issue, i) => (
+          <Alert key={`warning-${i}`} color="orange" icon={<IconAlertTriangle size={16} />} variant="light">
+            {issue.message}
+          </Alert>
+        ))}
 
         <Button onClick={handleSubmit} loading={save.isPending} disabled={!valid}>
           {profile ? 'Enregistrer' : 'Créer'}

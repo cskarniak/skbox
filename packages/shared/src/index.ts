@@ -4,6 +4,7 @@ export * from './schemas/theme';
 export * from './schemas/history-template';
 export * from './schemas/solar-time';
 export * from './schemas/presence-simulation';
+export * from './schemas/presence-simulation-validation';
 export * from './schemas/netatmo';
 export * from './types/device';
 export * from './types/protocol';

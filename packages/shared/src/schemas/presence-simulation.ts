@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { timeOrSolarSchema } from './solar-time';
+import { validatePresenceSimulationParams } from './presence-simulation-validation';
 
 const hhmmSchema = z.string().regex(/^\d{2}:\d{2}$/, 'Format HH:MM attendu');
 
@@ -22,6 +23,41 @@ function checkRanges(dto: {
 
 const RANGE_ERROR = { message: 'Les valeurs "min" doivent être inférieures ou égales aux valeurs "max"' };
 
+// N'ajoute que les erreurs bloquantes (pas les avertissements, purement informatifs côté UI) :
+// l'allumage et l'extinction restent toujours prioritaires, cette vérification sert seulement
+// à rejeter les configurations où une bascule ne pourrait jamais s'exécuter avant l'extinction.
+function checkToggleWindowFeasibility(
+  dto: {
+    onTime?: unknown;
+    offTime?: unknown;
+    toggleWindowStart?: string;
+    toggleWindowEnd?: string;
+    toggleCountMin?: number;
+    toggleCountMax?: number;
+    toggleDurationMin?: number;
+    toggleDurationMax?: number;
+  },
+  ctx: z.RefinementCtx,
+) {
+  if (
+    dto.onTime === undefined ||
+    dto.offTime === undefined ||
+    dto.toggleWindowStart === undefined ||
+    dto.toggleWindowEnd === undefined ||
+    dto.toggleCountMin === undefined ||
+    dto.toggleCountMax === undefined ||
+    dto.toggleDurationMin === undefined ||
+    dto.toggleDurationMax === undefined
+  ) {
+    return;
+  }
+  const issues = validatePresenceSimulationParams(dto as Parameters<typeof validatePresenceSimulationParams>[0]);
+  for (const issue of issues) {
+    if (issue.severity !== 'error') continue;
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: issue.message, path: [issue.field] });
+  }
+}
+
 export const createPresenceSimulationSchema = z
   .object({
     name: z.string().min(1).max(200),
@@ -40,7 +76,8 @@ export const createPresenceSimulationSchema = z
     toggleWindowStart: hhmmSchema.default('22:00'),
     toggleWindowEnd: hhmmSchema.default('23:00'),
   })
-  .refine(checkRanges, RANGE_ERROR);
+  .refine(checkRanges, RANGE_ERROR)
+  .superRefine(checkToggleWindowFeasibility);
 
 export const updatePresenceSimulationSchema = z
   .object({
@@ -60,7 +97,8 @@ export const updatePresenceSimulationSchema = z
     toggleWindowStart: hhmmSchema.optional(),
     toggleWindowEnd: hhmmSchema.optional(),
   })
-  .refine(checkRanges, RANGE_ERROR);
+  .refine(checkRanges, RANGE_ERROR)
+  .superRefine(checkToggleWindowFeasibility);
 
 export type CreatePresenceSimulationDto = z.infer<typeof createPresenceSimulationSchema>;
 export type UpdatePresenceSimulationDto = z.infer<typeof updatePresenceSimulationSchema>;
