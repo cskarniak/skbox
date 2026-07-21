@@ -25,7 +25,7 @@ import {
   SimpleGrid,
   Alert,
 } from '@mantine/core';
-import { IconSmartHome, IconBulb, IconPlus, IconTrash, IconSun, IconSunset, IconRefresh, IconAlertTriangle, IconAlertCircle } from '@tabler/icons-react';
+import { IconSmartHome, IconBulb, IconPlus, IconTrash, IconSun, IconSunset, IconRefresh, IconAlertTriangle, IconAlertCircle, IconChecklist, IconCircleCheck } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
@@ -496,10 +496,28 @@ function ProfileCard({
   onDelete: () => void;
 }) {
   const [showLog, setShowLog] = useState(false);
+  const [showCheck, setShowCheck] = useState(false);
   const queryClient = useQueryClient();
   const lightNames = profile.lightDeviceIds
     .map((id) => devices.find((d) => d.id === id)?.name ?? id)
     .join(', ');
+
+  const checkIssues = useMemo(
+    () =>
+      validatePresenceSimulationParams({
+        onTime: profile.onTime,
+        offTime: profile.offTime,
+        toggleWindowStart: profile.toggleWindowStart,
+        toggleWindowEnd: profile.toggleWindowEnd,
+        toggleCountMin: profile.toggleCountMin,
+        toggleCountMax: profile.toggleCountMax,
+        toggleDurationMin: profile.toggleDurationMin,
+        toggleDurationMax: profile.toggleDurationMax,
+      }),
+    [profile],
+  );
+  const checkErrors = checkIssues.filter((i) => i.severity === 'error');
+  const checkWarnings = checkIssues.filter((i) => i.severity === 'warning');
 
   const regeneratePlan = useMutation({
     mutationFn: async () => {
@@ -531,7 +549,15 @@ function ProfileCard({
         <Group gap="sm" wrap="nowrap" style={{ cursor: 'pointer', flex: 1 }} onClick={onEdit}>
           <IconBulb size={22} />
           <div>
-            <Text fw={500}>{profile.name}</Text>
+            <Group gap={6}>
+              <Text fw={500}>{profile.name}</Text>
+              {checkErrors.length > 0 && (
+                <Badge size="xs" color="red" variant="light">{checkErrors.length} erreur(s)</Badge>
+              )}
+              {checkErrors.length === 0 && checkWarnings.length > 0 && (
+                <Badge size="xs" color="orange" variant="light">{checkWarnings.length} avertissement(s)</Badge>
+              )}
+            </Group>
             <Text size="xs" c="dimmed">{lightNames || 'Aucune lampe'}</Text>
           </div>
         </Group>
@@ -563,7 +589,36 @@ function ProfileCard({
         >
           Régénérer le plan
         </Button>
+        <Button
+          size="xs"
+          variant="light"
+          color={checkErrors.length > 0 ? 'red' : checkWarnings.length > 0 ? 'orange' : 'green'}
+          leftSection={<IconChecklist size={14} />}
+          onClick={() => setShowCheck((v) => !v)}
+        >
+          {showCheck ? 'Masquer la vérification' : 'Vérifier'}
+        </Button>
       </Group>
+      {showCheck && (
+        <Stack gap="xs" mt="sm">
+          {checkIssues.length === 0 ? (
+            <Alert color="green" icon={<IconCircleCheck size={16} />} variant="light">
+              Aucun problème détecté sur cette simulation.
+            </Alert>
+          ) : (
+            checkIssues.map((issue, i) => (
+              <Alert
+                key={i}
+                color={issue.severity === 'error' ? 'red' : 'orange'}
+                icon={issue.severity === 'error' ? <IconAlertCircle size={16} /> : <IconAlertTriangle size={16} />}
+                variant="light"
+              >
+                {issue.message}
+              </Alert>
+            ))
+          )}
+        </Stack>
+      )}
       {showLog && (
         <Stack mt="sm">
           <EventLog profileId={profile.id} />
