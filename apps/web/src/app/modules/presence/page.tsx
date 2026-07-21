@@ -24,7 +24,7 @@ import {
   SegmentedControl,
   SimpleGrid,
 } from '@mantine/core';
-import { IconSmartHome, IconBulb, IconPlus, IconTrash, IconSun, IconSunset } from '@tabler/icons-react';
+import { IconSmartHome, IconBulb, IconPlus, IconTrash, IconSun, IconSunset, IconRefresh } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -84,6 +84,10 @@ interface SunTimes {
   sunrise: string;
   sunset: string;
   date: string;
+}
+
+function dateString(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function timeOrSolarLabel(t: TimeOrSolar): string {
@@ -461,9 +465,34 @@ function ProfileCard({
   onDelete: () => void;
 }) {
   const [showLog, setShowLog] = useState(false);
+  const queryClient = useQueryClient();
   const lightNames = profile.lightDeviceIds
     .map((id) => devices.find((d) => d.id === id)?.name ?? id)
     .join(', ');
+
+  const regeneratePlan = useMutation({
+    mutationFn: async () => {
+      const today = dateString(new Date());
+      const tomorrow = dateString(new Date(Date.now() + 24 * 60 * 60 * 1000));
+      await api.delete(`/presence-simulation/${profile.id}/runs/${today}`);
+      await api.delete(`/presence-simulation/${profile.id}/runs/${tomorrow}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['presence-simulation', profile.id, 'events'] });
+      notifications.show({
+        color: 'green',
+        title: 'Plan régénéré',
+        message: "Le plan d'aujourd'hui et de demain a été recalculé avec les réglages actuels.",
+      });
+    },
+    onError: (error: any) => {
+      notifications.show({
+        color: 'red',
+        title: 'Échec de la régénération',
+        message: error?.response?.data?.message ?? 'Impossible de régénérer le plan',
+      });
+    },
+  });
 
   return (
     <Card shadow="sm" padding="lg" withBorder>
@@ -488,9 +517,22 @@ function ProfileCard({
           entre {profile.toggleWindowStart} et {profile.toggleWindowEnd}
         </Text>
       </Stack>
-      <Button size="xs" variant="light" onClick={() => setShowLog((v) => !v)}>
-        {showLog ? 'Masquer le journal' : 'Voir le journal des événements'}
-      </Button>
+      <Group gap="xs">
+        <Button size="xs" variant="light" onClick={() => setShowLog((v) => !v)}>
+          {showLog ? 'Masquer le journal' : 'Voir le journal des événements'}
+        </Button>
+        <Button
+          size="xs"
+          variant="light"
+          color="orange"
+          leftSection={<IconRefresh size={14} />}
+          loading={regeneratePlan.isPending}
+          onClick={() => regeneratePlan.mutate()}
+          title="Recalcule le plan d'aujourd'hui et de demain avec les réglages actuels"
+        >
+          Régénérer le plan
+        </Button>
+      </Group>
       {showLog && (
         <Stack mt="sm">
           <EventLog profileId={profile.id} />
