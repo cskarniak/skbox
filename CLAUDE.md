@@ -27,19 +27,24 @@
 - Runs natively (not Docker) because macOS doesn't support USB passthrough in Docker
 
 ## rfxcom2mqtt (native)
-- Install: `npm i -g rfxcom2mqtt`
-- Config: `rfxcom2mqtt/config.yml` (in project root)
-- Dongle: RFXtrx433E on `/dev/cu.usbserial-*`
-- Capteurs: Oregon Scientific (température/humidité), Chacon/DIO (interrupteurs/prises)
+- Install: git clone of https://github.com/rfxcom2mqtt/backend (`~/rfxcom2mqtt` on skbox-mini), run via `ts-node src/index.ts` under systemd (`skbox-rfxcom.service`) — not the npm package.
+- Config: `~/rfxcom2mqtt/config/config.yml` on each host (also a `rfxcom2mqtt/config.yml` at the Skbox project root for local dev)
+- Dongle: RFXtrx433E on `/dev/cu.usbserial-*` (macOS) / `/dev/serial/by-id/usb-RFXCOM_RFXtrx433_*` (Linux/skbox-mini)
+- Capteurs: Oregon Scientific (température/humidité), Chacon/DIO (interrupteurs/prises, protocole `lighting2`/subtype `AC`)
 - Runs natively (same USB passthrough reason as Z2M)
+- **Bugs upstream patchés manuellement sur skbox-mini** (pas trackés dans un commit Skbox, donc perdus si le dépôt `~/rfxcom2mqtt` est réinstallé/mis à jour — à réappliquer si besoin) dans `~/rfxcom2mqtt/src/rfxcom/index.ts`, fonction `onCommandDefault` :
+  - Le payload MQTT de commande n'était jamais `JSON.parse()`é (contrairement à `onCommandRfy` juste à côté), donc `payload.deviceFunction`/`payload.subtype` étaient toujours `undefined` — commande silencieusement ignorée.
+  - `this.rfxtrx.get()` (une méthode qui n'existe que sur le wrapper `Rfxcom`, pas sur l'objet RFXCOM sous-jacent) était appelé au lieu de `this.rfxtrx` directement — plantait le service à l'instanciation de la classe (`Lighting1/2/5/6`, etc.).
+  - Ces deux bugs faisaient planter *tout le bridge* (`skbox-rfxcom.service` en boucle de crash) dès qu'une commande RF433 de type lighting (switch) était envoyée.
 
 ## Architecture
 - Protocols: Zigbee (via Zigbee2MQTT), RF433 (via rfxcom2mqtt + RFXtrx433E), Matter, MQTT
 - API routes prefixed with `/api`
 - MQTT topics: `skbox/{protocol}/{deviceId}/{command|state}`
 - Zigbee2MQTT topics: `zigbee2mqtt/{friendlyName}` (state), `zigbee2mqtt/{friendlyName}/set` (command), `zigbee2mqtt/{friendlyName}/availability` (online/offline)
-- rfxcom2mqtt topics: `rfxcom2mqtt/receive/{type}` (state), `rfxcom2mqtt/send/{type}` (command)
-- Auto-discovery: ZigbeeService listens to `zigbee2mqtt/bridge/devices`, RfxcomService listens to `rfxcom2mqtt/receive/+`
+- rfxcom2mqtt topics: `rfxcom2mqtt/devices/{id}` or `rfxcom2mqtt/devices/{id}/{unitCode}` (state — the bridge appends `/{unitCode}` for protocols like Chacon/DIO `lighting2` where a single physical remote/id has multiple buttons, e.g. 1-4), `rfxcom2mqtt/command/{PascalCaseType}/{id}[/unitCode]` (command — note the type segment must be the exact PascalCase rfxcom class name, e.g. `Lighting2`, not `lighting2`; the lowercase form is only the subtype-name enum and has no constructor). Command payload must be JSON `{ deviceFunction: 'switchOn'|'switchOff'|..., subtype: <numeric code>, ... }` — `subtype` (e.g. `0` = AC for Chacon/DIO) comes from the device's last received state and is persisted in `Device.state` for this purpose. `rfxcom2mqtt/send/...` is **not** a real topic (the bridge only subscribes to `rfxcom2mqtt/command/#`) despite older docs/code suggesting otherwise.
+- Auto-discovery: ZigbeeService listens to `zigbee2mqtt/bridge/devices`, RfxcomService listens to `rfxcom2mqtt/devices/#` (must be `#`, not `+` — a single-level wildcard misses the `/{unitCode}` suffix present on multi-button RF433 remotes)
+- RF433 device identity (`Device.rfxcomId`) is `{type}/{id}` or `{type}/{id}/{unitCode}` — the unitCode is part of the identity so that each button of a multi-button Chacon/DIO remote becomes its own `Device` row instead of overwriting a shared one.
 - Device online/offline status for Zigbee devices comes from Z2M's per-device availability ping, not just from the last state message — a device that stops responding gets marked offline even if the Z2M bridge itself stays connected. Required in `configuration.yaml` on every Z2M install/server:
   ```yaml
   availability:
