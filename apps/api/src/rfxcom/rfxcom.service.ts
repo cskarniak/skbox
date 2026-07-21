@@ -71,8 +71,12 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
 
     this.mqtt.subscribe('rfxcom2mqtt/devices/#', (topic, payload) => {
       this.lastMessageAt = Date.now();
-      const deviceId = topic.split('/')[2];
-      this.enqueue(deviceId, payload);
+      // Segments après "devices/" : id, et un éventuel unitCode (ex. bouton 1-4 d'une
+      // télécommande Chacon/DIO). Les deux font partie de l'identité de l'appareil : sans
+      // le unitCode, les différents boutons d'une même télécommande s'écraseraient les uns
+      // les autres en base.
+      const deviceKey = topic.split('/').slice(2).join('/');
+      this.enqueue(deviceKey, payload);
     });
 
     this.mqtt.onDisconnect(() => {
@@ -145,17 +149,17 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private enqueue(deviceId: string, payload: string) {
-    const prev = this.queues.get(deviceId) ?? Promise.resolve();
+  private enqueue(deviceKey: string, payload: string) {
+    const prev = this.queues.get(deviceKey) ?? Promise.resolve();
     const next = prev.then(() =>
-      this.handleDeviceState(deviceId, payload).catch((err) =>
-        this.logger.error(`Error processing RF device ${deviceId}: ${err}`),
+      this.handleDeviceState(deviceKey, payload).catch((err) =>
+        this.logger.error(`Error processing RF device ${deviceKey}: ${err}`),
       ),
     );
-    this.queues.set(deviceId, next);
+    this.queues.set(deviceKey, next);
   }
 
-  private async handleDeviceState(deviceId: string, payload: string) {
+  private async handleDeviceState(deviceKey: string, payload: string) {
     let data: RfxcomPayload;
     try {
       data = JSON.parse(payload);
@@ -163,7 +167,7 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    const rfxcomId = `${data.type}/${data.id}`;
+    const rfxcomId = `${data.type}/${deviceKey}`;
     const deviceType = this.inferDeviceType(data);
     const vendor = this.inferVendor(data);
     const modelName = this.formatDeviceName(data.deviceName);
@@ -207,7 +211,7 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
       where: existing ? { id: existing.id } : { rfxcomId },
       update: {
         rfxcomId,
-        mqttTopic: `rfxcom2mqtt/devices/${data.id}`,
+        mqttTopic: `rfxcom2mqtt/devices/${deviceKey}`,
         state: JSON.stringify(calibratedState),
         status: 'online',
         lastSeen: new Date(),
@@ -220,7 +224,7 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
         rfxcomId,
         vendor,
         model: modelName,
-        mqttTopic: `rfxcom2mqtt/devices/${data.id}`,
+        mqttTopic: `rfxcom2mqtt/devices/${deviceKey}`,
         status: 'online',
         state: JSON.stringify(calibratedState),
       },
@@ -270,11 +274,10 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
       throw new Error(`RF device ${rfxcomId} is inactive`);
     }
 
-    const [type] = rfxcomId.split('/');
-    this.mqtt.publish(
-      `rfxcom2mqtt/command/${type}/${device.rfxcomId?.split('/')[1]}`,
-      JSON.stringify(command),
-    );
+    // rfxcomId = "type/id" ou "type/id/unitCode" (ex. bouton d'une télécommande) : le
+    // unitCode doit être conservé tel quel dans le topic pour cibler le bon bouton.
+    const [type, ...idParts] = rfxcomId.split('/');
+    this.mqtt.publish(`rfxcom2mqtt/command/${type}/${idParts.join('/')}`, JSON.stringify(command));
   }
 
   private formatDeviceName(deviceName: string | string[]): string {

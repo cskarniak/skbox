@@ -137,8 +137,10 @@ export class DevicesController {
       this.mqtt.publish(`${device.mqttTopic}/set`, JSON.stringify(z2mPayload));
     } else if (device.protocol === 'rf433' && device.rfxcomId) {
       const rfxPayload = this.toRfxcomPayload(command, payload);
-      const [type] = device.rfxcomId.split('/');
-      this.mqtt.publish(`rfxcom2mqtt/send/${type}`, JSON.stringify({ id: device.rfxcomId, ...rfxPayload }));
+      // rfxcomId = "type/id" ou "type/id/unitCode" (boutons de télécommande) ; le bridge
+      // rfxcom2mqtt n'écoute que rfxcom2mqtt/command/#, pas .../send/... (topic legacy inutilisé).
+      const [type, ...idParts] = device.rfxcomId.split('/');
+      this.mqtt.publish(`rfxcom2mqtt/command/${type}/${idParts.join('/')}`, JSON.stringify(rfxPayload));
     } else {
       this.mqtt.publish(
         `skbox/${device.protocol}/${device.id}/command`,
