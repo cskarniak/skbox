@@ -139,8 +139,16 @@ export class DevicesController {
       const rfxPayload = this.toRfxcomPayload(command, payload, device.state);
       // rfxcomId = "type/id" ou "type/id/unitCode" (boutons de télécommande) ; le bridge
       // rfxcom2mqtt n'écoute que rfxcom2mqtt/command/#, pas .../send/... (topic legacy inutilisé).
+      // Le type doit être au format PascalCase ("Lighting2") : c'est le nom de la classe JS
+      // instanciée par rfxcom2mqtt (onCommandDefault fait rfxcom[deviceType] sans capitaliser),
+      // alors que "lighting2" en minuscule n'est que l'énumération des sous-types et n'a pas de
+      // prototype — l'envoyer tel quel fait planter le bridge (TypeError, service en boucle de crash).
       const [type, ...idParts] = device.rfxcomId.split('/');
-      this.mqtt.publish(`rfxcom2mqtt/command/${type}/${idParts.join('/')}`, JSON.stringify(rfxPayload));
+      const rfxcomDeviceType = type.charAt(0).toUpperCase() + type.slice(1);
+      this.mqtt.publish(
+        `rfxcom2mqtt/command/${rfxcomDeviceType}/${idParts.join('/')}`,
+        JSON.stringify(rfxPayload),
+      );
     } else {
       this.mqtt.publish(
         `skbox/${device.protocol}/${device.id}/command`,

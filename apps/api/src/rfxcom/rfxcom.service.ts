@@ -279,8 +279,12 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
 
     // rfxcomId = "type/id" ou "type/id/unitCode" (ex. bouton d'une télécommande) : le
     // unitCode doit être conservé tel quel dans le topic pour cibler le bon bouton.
+    // Le type doit être en PascalCase ("Lighting2") : rfxcom2mqtt instancie rfxcom[deviceType]
+    // sans capitaliser, et la variante minuscule ("lighting2") n'est qu'une énumération de
+    // sous-types sans prototype — l'envoyer tel quel fait planter le bridge.
     const [type, ...idParts] = rfxcomId.split('/');
-    this.mqtt.publish(`rfxcom2mqtt/command/${type}/${idParts.join('/')}`, JSON.stringify(command));
+    const rfxcomDeviceType = type.charAt(0).toUpperCase() + type.slice(1);
+    this.mqtt.publish(`rfxcom2mqtt/command/${rfxcomDeviceType}/${idParts.join('/')}`, JSON.stringify(command));
   }
 
   private formatDeviceName(deviceName: string | string[]): string {
