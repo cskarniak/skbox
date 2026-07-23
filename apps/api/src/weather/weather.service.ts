@@ -98,7 +98,13 @@ export class WeatherService {
   // (déclencheurs solaires des scénarios, simulation de présence) doivent traiter ce
   // cas en réessayant plus tard plutôt qu'en plantant.
   async getSunTimes(dayOffset: 0 | 1 = 0): Promise<SunTimes | null> {
-    const today = new Date().toISOString().slice(0, 10);
+    // Date locale (pas toISOString, qui est en UTC) : entre 00h00 et 02h00 heure de Paris
+    // l'été (UTC+2), la date UTC est encore celle de la veille, ce qui ferait considérer
+    // le cache comme frais alors qu'il contient les horaires solaires du jour précédent —
+    // décalant d'un jour tout calcul basé sur dayOffset (déclencheurs solaires, simulation
+    // de présence) juste après minuit local.
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     if (!this.sunCache || this.sunCache.fetchedDate !== today) {
       try {
         const forecast = await this.getHomeForecast();
