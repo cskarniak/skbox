@@ -416,6 +416,63 @@ function DeleteConfirm({ onConfirm }: { onConfirm: () => void }) {
   );
 }
 
+function RegenerateConfirm({
+  isPlanRunning,
+  loading,
+  onConfirm,
+}: {
+  isPlanRunning: boolean;
+  loading: boolean;
+  onConfirm: () => void;
+}) {
+  const [opened, setOpened] = useState(false);
+
+  const button = (
+    <Button
+      size="xs"
+      variant="light"
+      color="orange"
+      leftSection={<IconRefresh size={14} />}
+      loading={loading}
+      onClick={() => (isPlanRunning ? setOpened(true) : onConfirm())}
+      title="Recalcule le plan d'aujourd'hui et de demain avec les réglages actuels"
+    >
+      Régénérer le plan
+    </Button>
+  );
+
+  if (!isPlanRunning) return button;
+
+  return (
+    <Popover opened={opened} onChange={setOpened} withArrow shadow="md" width={280}>
+      <Popover.Target>{button}</Popover.Target>
+      <Popover.Dropdown>
+        <Stack gap="xs">
+          <Alert color="orange" icon={<IconAlertTriangle size={16} />} variant="light" p="xs">
+            Le plan d&apos;aujourd&apos;hui est en cours d&apos;exécution (entre l&apos;allumage et l&apos;extinction).
+            Le régénérer maintenant recalcule un nouveau plan sans tenir compte de ce qui a déjà été
+            joué, et peut désynchroniser l&apos;état réel des lampes (nouvel allumage déjà dans le
+            passé, bascules recalculées, etc.).
+          </Alert>
+          <Group gap="xs" justify="flex-end">
+            <Button size="xs" variant="default" onClick={() => setOpened(false)}>Annuler</Button>
+            <Button
+              size="xs"
+              color="orange"
+              onClick={() => {
+                onConfirm();
+                setOpened(false);
+              }}
+            >
+              Régénérer quand même
+            </Button>
+          </Group>
+        </Stack>
+      </Popover.Dropdown>
+    </Popover>
+  );
+}
+
 function EventStatusBadge({ event }: { event: PresenceEvent }) {
   if (event.success === null) return <Badge size="xs" variant="outline" color="gray">En attente</Badge>;
   if (event.success) return <Badge size="xs" variant="light" color="green">OK</Badge>;
@@ -519,9 +576,20 @@ function ProfileCard({
   const checkErrors = checkIssues.filter((i) => i.severity === 'error');
   const checkWarnings = checkIssues.filter((i) => i.severity === 'warning');
 
+  // Rafraîchi à la même cadence que le moteur backend (TICK_MS) pour détecter dans la minute
+  // qu'on est entré dans, ou sorti de, la fenêtre allumage→extinction du plan du jour.
+  const today = dateString(new Date());
+  const { data: todayRuns } = useQuery<PresenceRun[]>({
+    queryKey: ['presence-simulation', profile.id, 'today-run'],
+    queryFn: () => api.get(`/presence-simulation/${profile.id}/events`, { params: { from: today, to: today } }).then((r) => r.data),
+    refetchInterval: 60_000,
+  });
+  const todayRun = todayRuns?.find((r) => r.date === today);
+  const isPlanRunning =
+    !!todayRun && Date.now() >= new Date(todayRun.plannedOnAt).getTime() && Date.now() < new Date(todayRun.plannedOffAt).getTime();
+
   const regeneratePlan = useMutation({
     mutationFn: async () => {
-      const today = dateString(new Date());
       const tomorrow = dateString(new Date(Date.now() + 24 * 60 * 60 * 1000));
       await api.delete(`/presence-simulation/${profile.id}/runs/${today}`);
       await api.delete(`/presence-simulation/${profile.id}/runs/${tomorrow}`);
@@ -578,17 +646,11 @@ function ProfileCard({
         <Button size="xs" variant="light" onClick={() => setShowLog((v) => !v)}>
           {showLog ? 'Masquer le journal' : 'Voir le journal des événements'}
         </Button>
-        <Button
-          size="xs"
-          variant="light"
-          color="orange"
-          leftSection={<IconRefresh size={14} />}
+        <RegenerateConfirm
+          isPlanRunning={isPlanRunning}
           loading={regeneratePlan.isPending}
-          onClick={() => regeneratePlan.mutate()}
-          title="Recalcule le plan d'aujourd'hui et de demain avec les réglages actuels"
-        >
-          Régénérer le plan
-        </Button>
+          onConfirm={() => regeneratePlan.mutate()}
+        />
         <Button
           size="xs"
           variant="light"
