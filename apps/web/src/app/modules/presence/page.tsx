@@ -52,6 +52,8 @@ interface PresenceSimulation {
   toggleCountMax: number;
   toggleDurationMin: number;
   toggleDurationMax: number;
+  toggleGapMin: number;
+  toggleGapMax: number;
   toggleWindowStart: string;
   toggleWindowEnd: string;
 }
@@ -184,6 +186,8 @@ function PresenceSimulationForm({
   const [toggleCountMax, setToggleCountMax] = useState(profile?.toggleCountMax ?? 5);
   const [toggleDurationMin, setToggleDurationMin] = useState(profile?.toggleDurationMin ?? 5);
   const [toggleDurationMax, setToggleDurationMax] = useState(profile?.toggleDurationMax ?? 30);
+  const [toggleGapMin, setToggleGapMin] = useState(profile?.toggleGapMin ?? 15);
+  const [toggleGapMax, setToggleGapMax] = useState(profile?.toggleGapMax ?? 15);
   const [toggleWindowStart, setToggleWindowStart] = useState(profile?.toggleWindowStart ?? '22:00');
   const [toggleWindowEnd, setToggleWindowEnd] = useState(profile?.toggleWindowEnd ?? '23:00');
 
@@ -218,6 +222,8 @@ function PresenceSimulationForm({
       toggleCountMax,
       toggleDurationMin,
       toggleDurationMax,
+      toggleGapMin,
+      toggleGapMax,
       toggleWindowStart,
       toggleWindowEnd,
     });
@@ -239,8 +245,10 @@ function PresenceSimulationForm({
       toggleCountMax,
       toggleDurationMin,
       toggleDurationMax,
+      toggleGapMin,
+      toggleGapMax,
     });
-  }, [onTime, offTime, toggleWindowStart, toggleWindowEnd, toggleCountMin, toggleCountMax, toggleDurationMin, toggleDurationMax, toggleWindowStartValid, toggleWindowEndValid]);
+  }, [onTime, offTime, toggleWindowStart, toggleWindowEnd, toggleCountMin, toggleCountMax, toggleDurationMin, toggleDurationMax, toggleGapMin, toggleGapMax, toggleWindowStartValid, toggleWindowEndValid]);
   const blockingIssues = validationIssues.filter((i) => i.severity === 'error');
   const warningIssues = validationIssues.filter((i) => i.severity === 'warning');
 
@@ -249,6 +257,7 @@ function PresenceSimulationForm({
     lightDeviceIds.length > 0 &&
     toggleCountMin <= toggleCountMax &&
     toggleDurationMin <= toggleDurationMax &&
+    toggleGapMin <= toggleGapMax &&
     toggleWindowStartValid &&
     toggleWindowEndValid &&
     blockingIssues.length === 0;
@@ -364,6 +373,25 @@ function PresenceSimulationForm({
         </Group>
         <Text size="xs" c="dimmed">
           À chaque bascule, une durée est tirée au hasard dans cette fourchette pour l&apos;état temporaire (extinction puis rallumage).
+        </Text>
+        <Group grow>
+          <NumberInput
+            label="Écart min entre bascules (min)"
+            value={toggleGapMin}
+            onChange={(v) => setToggleGapMin(Number(v) || 0)}
+            min={0}
+            max={600}
+          />
+          <NumberInput
+            label="Écart max entre bascules (min)"
+            value={toggleGapMax}
+            onChange={(v) => setToggleGapMax(Number(v) || 0)}
+            min={0}
+            max={600}
+          />
+        </Group>
+        <Text size="xs" c="dimmed">
+          Écart minimal (dans cette fourchette) entre la fin d&apos;une bascule et le début de la suivante, pour éviter des rallumages trop rapprochés.
         </Text>
 
         {blockingIssues.map((issue, i) => (
@@ -570,6 +598,8 @@ function ProfileCard({
         toggleCountMax: profile.toggleCountMax,
         toggleDurationMin: profile.toggleDurationMin,
         toggleDurationMax: profile.toggleDurationMax,
+        toggleGapMin: profile.toggleGapMin,
+        toggleGapMax: profile.toggleGapMax,
       }),
     [profile],
   );
@@ -639,7 +669,7 @@ function ProfileCard({
         <Text size="sm">Extinction : {timeOrSolarLabel(profile.offTime)}</Text>
         <Text size="xs" c="dimmed">
           {profile.toggleCountMin}–{profile.toggleCountMax} bascule(s) aléatoire(s), {profile.toggleDurationMin}–{profile.toggleDurationMax} min chacune,
-          entre {profile.toggleWindowStart} et {profile.toggleWindowEnd}
+          espacées de {profile.toggleGapMin}–{profile.toggleGapMax} min, entre {profile.toggleWindowStart} et {profile.toggleWindowEnd}
         </Text>
       </Stack>
       <Group gap="xs">

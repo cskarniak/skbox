@@ -84,6 +84,8 @@ export class PresenceSimulationService implements OnModuleInit, OnModuleDestroy 
         toggleCountMax: dto.toggleCountMax,
         toggleDurationMin: dto.toggleDurationMin,
         toggleDurationMax: dto.toggleDurationMax,
+        toggleGapMin: dto.toggleGapMin,
+        toggleGapMax: dto.toggleGapMax,
         toggleWindowStart: dto.toggleWindowStart,
         toggleWindowEnd: dto.toggleWindowEnd,
       },
@@ -146,6 +148,8 @@ export class PresenceSimulationService implements OnModuleInit, OnModuleDestroy 
     if (dto.toggleCountMax !== undefined) data.toggleCountMax = dto.toggleCountMax;
     if (dto.toggleDurationMin !== undefined) data.toggleDurationMin = dto.toggleDurationMin;
     if (dto.toggleDurationMax !== undefined) data.toggleDurationMax = dto.toggleDurationMax;
+    if (dto.toggleGapMin !== undefined) data.toggleGapMin = dto.toggleGapMin;
+    if (dto.toggleGapMax !== undefined) data.toggleGapMax = dto.toggleGapMax;
     if (dto.toggleWindowStart !== undefined) data.toggleWindowStart = dto.toggleWindowStart;
     if (dto.toggleWindowEnd !== undefined) data.toggleWindowEnd = dto.toggleWindowEnd;
     return data;
@@ -227,6 +231,8 @@ export class PresenceSimulationService implements OnModuleInit, OnModuleDestroy 
       toggleCountMax: profile.toggleCountMax,
       toggleDurationMin: profile.toggleDurationMin,
       toggleDurationMax: profile.toggleDurationMax,
+      toggleGapMin: profile.toggleGapMin,
+      toggleGapMax: profile.toggleGapMax,
       rng,
     });
 

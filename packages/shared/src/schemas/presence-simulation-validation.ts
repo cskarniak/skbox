@@ -17,6 +17,8 @@ export interface PresenceSimulationValidationInput {
   toggleCountMax: number;
   toggleDurationMin: number;
   toggleDurationMax: number;
+  toggleGapMin: number;
+  toggleGapMax: number;
 }
 
 function hhmmToMinutes(hhmm: string): number {
@@ -52,7 +54,7 @@ export function validatePresenceSimulationParams(input: PresenceSimulationValida
   const issues: ValidationIssue[] = [];
   const {
     onTime, offTime, toggleWindowStart, toggleWindowEnd,
-    toggleCountMax, toggleDurationMin, toggleDurationMax,
+    toggleCountMax, toggleDurationMin, toggleDurationMax, toggleGapMin,
   } = input;
 
   const windowStartMin = hhmmToMinutes(toggleWindowStart);
@@ -119,15 +121,16 @@ export function validatePresenceSimulationParams(input: PresenceSimulationValida
   }
 
   if (toggleCountMax > 0 && effectiveDurationMin > 0) {
-    // Estimation grossière (pas un calcul de faisabilité exact : les bascules sont tirées
-    // indépendamment et peuvent se chevaucher, auquel cas elles sont fusionnées) pour repérer
-    // les configurations où beaucoup de chevauchement est probable.
-    const roughNeededMin = toggleCountMax * toggleDurationMin;
-    if (roughNeededMin > effectiveDurationMin * 2) {
+    // Estimation grossière (pas un calcul de faisabilité exact : les bascules sont placées
+    // séquentiellement, chacune espacée de la précédente d'au moins toggleGapMin) pour repérer
+    // les configurations où la fenêtre ne laisse la place qu'à moins de bascules que le maximum
+    // configuré (le générateur s'arrête alors plus tôt plutôt que de chevaucher).
+    const roughNeededMin = toggleCountMax * (toggleDurationMin + toggleGapMin);
+    if (roughNeededMin > effectiveDurationMin) {
       issues.push({
         severity: 'warning',
         field: 'toggleCountMax',
-        message: `Le nombre max de bascules (${toggleCountMax}) est élevé par rapport à la fenêtre disponible (${effectiveDurationMin} min) : des bascules risquent de se chevaucher (elles seront alors fusionnées), réduisant le nombre de bascules réellement visibles en dessous du maximum configuré.`,
+        message: `Le nombre max de bascules (${toggleCountMax}) est élevé par rapport à la fenêtre disponible (${effectiveDurationMin} min) compte tenu de l'écart minimal entre bascules (${toggleGapMin} min) : le générateur produira probablement moins de bascules que ce maximum plutôt que de les rapprocher.`,
       });
     }
   }

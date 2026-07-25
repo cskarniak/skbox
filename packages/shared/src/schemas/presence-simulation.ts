@@ -13,11 +13,14 @@ function checkRanges(dto: {
   toggleCountMax?: number;
   toggleDurationMin?: number;
   toggleDurationMax?: number;
+  toggleGapMin?: number;
+  toggleGapMax?: number;
 }) {
   if (dto.onRandomOffsetMin !== undefined && dto.onRandomOffsetMax !== undefined && dto.onRandomOffsetMin > dto.onRandomOffsetMax) return false;
   if (dto.offRandomOffsetMin !== undefined && dto.offRandomOffsetMax !== undefined && dto.offRandomOffsetMin > dto.offRandomOffsetMax) return false;
   if (dto.toggleCountMin !== undefined && dto.toggleCountMax !== undefined && dto.toggleCountMin > dto.toggleCountMax) return false;
   if (dto.toggleDurationMin !== undefined && dto.toggleDurationMax !== undefined && dto.toggleDurationMin > dto.toggleDurationMax) return false;
+  if (dto.toggleGapMin !== undefined && dto.toggleGapMax !== undefined && dto.toggleGapMin > dto.toggleGapMax) return false;
   return true;
 }
 
@@ -36,6 +39,8 @@ function checkToggleWindowFeasibility(
     toggleCountMax?: number;
     toggleDurationMin?: number;
     toggleDurationMax?: number;
+    toggleGapMin?: number;
+    toggleGapMax?: number;
   },
   ctx: z.RefinementCtx,
 ) {
@@ -47,7 +52,9 @@ function checkToggleWindowFeasibility(
     dto.toggleCountMin === undefined ||
     dto.toggleCountMax === undefined ||
     dto.toggleDurationMin === undefined ||
-    dto.toggleDurationMax === undefined
+    dto.toggleDurationMax === undefined ||
+    dto.toggleGapMin === undefined ||
+    dto.toggleGapMax === undefined
   ) {
     return;
   }
@@ -73,6 +80,8 @@ export const createPresenceSimulationSchema = z
     toggleCountMax: z.number().int().min(0).max(50).default(0),
     toggleDurationMin: z.number().int().min(1).max(600).default(1),
     toggleDurationMax: z.number().int().min(1).max(600).default(30),
+    toggleGapMin: z.number().int().min(0).max(600).default(15),
+    toggleGapMax: z.number().int().min(0).max(600).default(15),
     toggleWindowStart: hhmmSchema.default('22:00'),
     toggleWindowEnd: hhmmSchema.default('23:00'),
   })
@@ -94,6 +103,8 @@ export const updatePresenceSimulationSchema = z
     toggleCountMax: z.number().int().min(0).max(50).optional(),
     toggleDurationMin: z.number().int().min(1).max(600).optional(),
     toggleDurationMax: z.number().int().min(1).max(600).optional(),
+    toggleGapMin: z.number().int().min(0).max(600).optional(),
+    toggleGapMax: z.number().int().min(0).max(600).optional(),
     toggleWindowStart: hhmmSchema.optional(),
     toggleWindowEnd: hhmmSchema.optional(),
   })
