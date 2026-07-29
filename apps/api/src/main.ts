@@ -21,7 +21,12 @@ async function bootstrap() {
   SwaggerModule.setup('docs', app, document);
 
   const port = process.env.PORT || 3001;
-  await app.listen(port);
+  const host = process.env.API_HOST;
+  if (host) {
+    await app.listen(port, host);
+  } else {
+    await app.listen(port);
+  }
   app.get(TerminalWsService).attach(app.getHttpServer());
   console.log(`Skbox API running on http://localhost:${port}`);
   console.log(`Swagger docs on http://localhost:${port}/docs`);

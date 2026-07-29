@@ -6,7 +6,7 @@ After=network.target skbox-api.service
 Type=simple
 User=christian
 WorkingDirectory=/home/christian/skbox/apps/web
-ExecStart=/home/christian/skbox/apps/web/node_modules/.bin/next start -p 3002
+ExecStart=/home/christian/skbox/apps/web/node_modules/.bin/next start -H 127.0.0.1 -p 3002
 Restart=on-failure
 RestartSec=3
 
