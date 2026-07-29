@@ -100,14 +100,6 @@ interface RoomItem {
   name: string;
 }
 
-function useGo2rtcHost() {
-  const [host, setHost] = useState('localhost');
-  useEffect(() => {
-    setHost(window.location.hostname);
-  }, []);
-  return host;
-}
-
 function ConfirmDeleteButton({ message, onConfirm }: { message: string; onConfirm: () => void }) {
   const [opened, setOpened] = useState(false);
   return (
@@ -553,9 +545,11 @@ function CameraControls({ camera }: { camera: Camera }) {
   );
 }
 
-function CameraTile({ camera, host, onEdit, onRemove }: { camera: Camera; host: string; onEdit: () => void; onRemove: () => void }) {
+function CameraTile({ camera, onEdit, onRemove }: { camera: Camera; onEdit: () => void; onRemove: () => void }) {
   const [expanded, { open: expand, close: collapse }] = useDisclosure(false);
-  const streamSrc = `http://${host}:1984/stream.html?src=${encodeURIComponent(camera.id)}`;
+  // Chemin relatif (même origine que la page) : go2rtc est proxifié par nginx sous /go2rtc/,
+  // ce qui évite un iframe http:// sur une page servie en https (bloqué en mixed content).
+  const streamSrc = `/go2rtc/stream.html?src=${encodeURIComponent(camera.id)}`;
 
   return (
     <>
@@ -690,7 +684,6 @@ function Go2rtcControl() {
 export default function CamerasModulePage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const host = useGo2rtcHost();
   const [formOpened, { open: openForm, close: closeForm }] = useDisclosure(false);
   const [editingCamera, setEditingCamera] = useState<Camera | null>(null);
 
@@ -798,7 +791,6 @@ export default function CamerasModulePage() {
                 <CameraTile
                   key={camera.id}
                   camera={camera}
-                  host={host}
                   onEdit={() => {
                     setEditingCamera(camera);
                     openForm();
