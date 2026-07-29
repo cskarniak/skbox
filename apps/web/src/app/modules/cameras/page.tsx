@@ -53,6 +53,7 @@ interface Camera {
   host: string;
   port: number;
   path: string;
+  previewPath: string | null;
   username: string | null;
   password: string | null;
   onvifPort: number | null;
@@ -65,6 +66,7 @@ interface CameraConnection {
   host: string;
   port: number;
   path: string;
+  previewPath: string | null;
   username: string | null;
   password: string | null;
   onvifPort: number | null;
@@ -153,6 +155,7 @@ function CameraFormModal({
   const [host, setHost] = useState(initial?.host ?? '');
   const [port, setPort] = useState(String(initial?.port ?? 554));
   const [path, setPath] = useState(initial?.path ?? '');
+  const [previewPath, setPreviewPath] = useState(initial?.previewPath ?? '');
   const [username, setUsername] = useState(initial?.username ?? '');
   const [password, setPassword] = useState(initial?.password ?? '');
   const [onvifPort, setOnvifPort] = useState<string>(
@@ -188,10 +191,17 @@ function CameraFormModal({
         </Group>
         <TextInput
           label="Chemin du flux"
-          description="ex. /h264Preview_01_main"
+          description="Flux principal, utilisé dans la vue agrandie (ex. /h264Preview_01_main)"
           placeholder="/..."
           value={path}
           onChange={(e) => setPath(e.currentTarget.value)}
+        />
+        <TextInput
+          label="Chemin du sous-flux"
+          description="Optionnel — utilisé pour les vignettes. Choisir un flux H.264 léger, avec une image clé chaque seconde."
+          placeholder="ex. /h264Preview_01_sub"
+          value={previewPath}
+          onChange={(e) => setPreviewPath(e.currentTarget.value)}
         />
         <Group grow>
           <TextInput label="Identifiant" value={username} onChange={(e) => setUsername(e.currentTarget.value)} />
@@ -229,6 +239,7 @@ function CameraFormModal({
                 host: host.trim(),
                 port: Number(port) || 554,
                 path: path.trim(),
+                previewPath: previewPath.trim() || null,
                 username: username.trim() || null,
                 password: password || null,
                 onvifPort: onvifPort ? Number(onvifPort) : null,
@@ -549,7 +560,8 @@ function CameraTile({ camera, onEdit, onRemove }: { camera: Camera; onEdit: () =
   const [expanded, { open: expand, close: collapse }] = useDisclosure(false);
   // Chemin relatif (même origine que la page) : go2rtc est proxifié par nginx sous /go2rtc/,
   // ce qui évite un iframe http:// sur une page servie en https (bloqué en mixed content).
-  const streamSrc = `/go2rtc/stream.html?src=${encodeURIComponent(camera.id)}`;
+  const mainStreamSrc = `/go2rtc/stream.html?src=${encodeURIComponent(camera.id)}`;
+  const previewStreamSrc = `/go2rtc/stream.html?src=${encodeURIComponent(camera.previewPath ? `${camera.id}-preview` : camera.id)}`;
 
   return (
     <>
@@ -584,7 +596,7 @@ function CameraTile({ camera, onEdit, onRemove }: { camera: Camera; onEdit: () =
                 dégrade la vue agrandie (l'image devient quasi figée). */}
             {!expanded && (
               <iframe
-                src={streamSrc}
+                src={previewStreamSrc}
                 style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
               />
             )}
@@ -601,7 +613,7 @@ function CameraTile({ camera, onEdit, onRemove }: { camera: Camera; onEdit: () =
 
       <Modal opened={expanded} onClose={collapse} title={camera.name} size="xl">
         <div style={{ aspectRatio: '16/9' }}>
-          <iframe src={streamSrc} style={{ width: '100%', height: '100%', border: 'none' }} allow="autoplay" />
+          <iframe src={mainStreamSrc} style={{ width: '100%', height: '100%', border: 'none' }} allow="autoplay" />
         </div>
         {expanded && <CameraControls camera={camera} />}
       </Modal>
@@ -819,6 +831,7 @@ export default function CamerasModulePage() {
                 host: editingCamera.host,
                 port: editingCamera.port,
                 path: editingCamera.path,
+                previewPath: editingCamera.previewPath,
                 username: editingCamera.username,
                 password: editingCamera.password,
                 onvifPort: editingCamera.onvifPort,

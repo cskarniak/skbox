@@ -8,6 +8,7 @@ interface CameraConnectionDto {
   host: string;
   port?: number;
   path?: string;
+  previewPath?: string | null;
   username?: string | null;
   password?: string | null;
   onvifPort?: number | null;
@@ -49,7 +50,7 @@ export class CameraService implements OnModuleInit {
   async onModuleInit() {
     const cameras = await this.prisma.camera.findMany({ where: { active: true } });
     for (const camera of cameras) {
-      await this.syncStream(camera.id, this.buildRtspUrl(camera));
+      await this.syncCameraStreams(camera);
     }
   }
 
@@ -59,7 +60,7 @@ export class CameraService implements OnModuleInit {
 
   async create(data: CreateCameraDto) {
     const camera = await this.prisma.camera.create({ data });
-    await this.syncStream(camera.id, this.buildRtspUrl(camera));
+    await this.syncCameraStreams(camera);
     return camera;
   }
 
@@ -67,15 +68,15 @@ export class CameraService implements OnModuleInit {
     const camera = await this.prisma.camera.update({ where: { id }, data });
     this.reolinkClients.delete(id);
     if (camera.active) {
-      await this.syncStream(camera.id, this.buildRtspUrl(camera));
+      await this.syncCameraStreams(camera);
     } else {
-      await this.removeStream(camera.id);
+      await this.removeCameraStreams(camera.id);
     }
     return camera;
   }
 
   async remove(id: string) {
-    await this.removeStream(id);
+    await this.removeCameraStreams(id);
     await this.prisma.camera.delete({ where: { id } });
   }
 
@@ -193,6 +194,29 @@ export class CameraService implements OnModuleInit {
       : '';
     const path = camera.path && !camera.path.startsWith('/') ? `/${camera.path}` : camera.path;
     return `rtsp://${auth}${camera.host}:${camera.port}${path}`;
+  }
+
+  private async syncCameraStreams(camera: {
+    id: string;
+    host: string;
+    port: number;
+    path: string;
+    previewPath: string | null;
+    username: string | null;
+    password: string | null;
+  }) {
+    await this.syncStream(camera.id, this.buildRtspUrl(camera));
+    const previewStreamId = `${camera.id}-preview`;
+    if (camera.previewPath?.trim()) {
+      await this.syncStream(previewStreamId, this.buildRtspUrl({ ...camera, path: camera.previewPath }));
+    } else {
+      await this.removeStream(previewStreamId);
+    }
+  }
+
+  private async removeCameraStreams(id: string) {
+    await this.removeStream(id);
+    await this.removeStream(`${id}-preview`);
   }
 
   private async syncStream(id: string, rtspUrl: string) {

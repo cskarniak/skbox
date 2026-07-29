@@ -22,6 +22,7 @@ export class CameraController {
       host: string;
       port?: number;
       path?: string;
+      previewPath?: string | null;
       username?: string | null;
       password?: string | null;
       onvifPort?: number | null;
@@ -44,6 +45,7 @@ export class CameraController {
       host?: string;
       port?: number;
       path?: string;
+      previewPath?: string | null;
       username?: string | null;
       password?: string | null;
       onvifPort?: number | null;

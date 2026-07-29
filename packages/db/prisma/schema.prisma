@@ -216,6 +216,9 @@ model Camera {
   host      String
   port      Int      @default(554)
   path      String   @default("")
+  // Sous-flux RTSP optionnel, utilisé pour les vignettes afin d'éviter de charger
+  // le flux principal haute définition dans toute la grille.
+  previewPath String?
   username  String?
   password  String?
   // Port ONVIF (PTZ + réglages image), null si la caméra n'expose pas ONVIF.
