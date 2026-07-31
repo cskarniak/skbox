@@ -1,9 +1,11 @@
 'use client';
 
-import { Box, Group, Tabs } from '@mantine/core';
-import { IconSmartHome, IconScript, IconApps, IconSettings, IconDevicesPc } from '@tabler/icons-react';
+import { Box, Button, Group, Tabs } from '@mantine/core';
+import { IconSmartHome, IconScript, IconApps, IconSettings, IconDevicesPc, IconLogout } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import { AlarmBell } from './AlarmBell';
+
+const LAUNCHER_URL = process.env.NEXT_PUBLIC_LAUNCHER_URL ?? 'https://apps.home';
 
 export type AppNavTab = 'devices' | 'appareils' | 'scenarios' | 'modules' | 'settings';
 
@@ -41,6 +43,15 @@ export function AppNav({ active }: { active: AppNavTab }) {
         </Tabs.List>
       </Tabs>
       <AlarmBell />
+      <Button
+        size="xs"
+        variant="default"
+        leftSection={<IconLogout size={13} />}
+        title="Retourner au lanceur d'applications"
+        onClick={() => { window.location.href = LAUNCHER_URL; }}
+      >
+        <Box visibleFrom="sm">Sortie</Box>
+      </Button>
     </Group>
   );
 }
