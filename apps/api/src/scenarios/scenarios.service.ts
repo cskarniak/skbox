@@ -116,6 +116,27 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
     return this.parseScenario(scenario);
   }
 
+  async duplicate(id: string) {
+    const source = await this.prisma.scenario.findUniqueOrThrow({
+      where: { id },
+    });
+    const scenario = await this.prisma.scenario.create({
+      data: {
+        name: `${source.name} (copie)`,
+        enabled: false,
+        group: source.group,
+        category: source.category,
+        severity: source.severity,
+        trigger: source.trigger,
+        conditions: source.conditions,
+        conditionsOperator: source.conditionsOperator,
+        actions: source.actions,
+      },
+    });
+    await this.reloadScenarios();
+    return this.parseScenario(scenario);
+  }
+
   async delete(id: string) {
     await this.prisma.scenario.delete({ where: { id } });
     this.nextRunDates.delete(id);

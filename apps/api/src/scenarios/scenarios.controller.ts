@@ -60,6 +60,11 @@ export class ScenariosController {
     return this.scenarios.testScenario(id);
   }
 
+  @Post(':id/duplicate')
+  duplicate(@Param('id') id: string) {
+    return this.scenarios.duplicate(id);
+  }
+
   @Delete(':id')
   delete(@Param('id') id: string) {
     return this.scenarios.delete(id);

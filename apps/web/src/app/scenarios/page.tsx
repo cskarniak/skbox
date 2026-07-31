@@ -32,6 +32,7 @@ import {
   IconPlayerPlay,
   IconClock,
   IconDeviceDesktop,
+  IconCopy,
 } from '@tabler/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
@@ -833,6 +834,7 @@ function ScenarioTable({
   onDelete,
   onTest,
   testPending,
+  onDuplicate,
 }: {
   scenarios: Scenario[];
   devices: Device[];
@@ -841,6 +843,7 @@ function ScenarioTable({
   onDelete: (id: string) => void;
   onTest: (id: string) => void;
   testPending: boolean;
+  onDuplicate: (id: string) => void;
 }) {
   return (
     <Table striped highlightOnHover>
@@ -905,6 +908,13 @@ function ScenarioTable({
             <Table.Td onClick={(e) => e.stopPropagation()}>
               <Group gap="xs">
                 <TestButton scenarioId={s.id} onTest={onTest} loading={testPending} />
+                <ActionIcon
+                  variant="subtle"
+                  onClick={() => onDuplicate(s.id)}
+                  title="Dupliquer"
+                >
+                  <IconCopy size={16} />
+                </ActionIcon>
                 <ActionIcon
                   variant="subtle"
                   color="red"
@@ -1005,6 +1015,11 @@ export default function ScenariosPage() {
     mutationFn: (id: string) => api.post(`/scenarios/${id}/test`),
   });
 
+  const duplicateScenario = useMutation({
+    mutationFn: (id: string) => api.post(`/scenarios/${id}/duplicate`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scenarios'] }),
+  });
+
   const groupNames = [
     ...new Set((scenarios ?? []).map((s) => s.group).filter((g): g is string => !!g)),
   ].sort((a, b) => a.localeCompare(b));
@@ -1086,6 +1101,7 @@ export default function ScenariosPage() {
                           onDelete={(id) => deleteScenario.mutate(id)}
                           onTest={(id) => testScenario.mutate(id)}
                           testPending={testScenario.isPending}
+                          onDuplicate={(id) => duplicateScenario.mutate(id)}
                         />
                       </Accordion.Panel>
                     </Accordion.Item>
@@ -1106,6 +1122,7 @@ export default function ScenariosPage() {
                 onDelete={(id) => deleteScenario.mutate(id)}
                 onTest={(id) => testScenario.mutate(id)}
                 testPending={testScenario.isPending}
+                onDuplicate={(id) => duplicateScenario.mutate(id)}
               />
             )}
           </Stack>
