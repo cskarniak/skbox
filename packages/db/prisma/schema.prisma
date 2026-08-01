@@ -90,6 +90,26 @@ model Scenario {
   updatedAt  DateTime  @updatedAt
 
   alarmEvents AlarmEvent[]
+  runs        ScenarioRun[]
+}
+
+// Historique d'exécution d'un scénario : une ligne par déclenchement (test manuel,
+// cron/solar planifié, ou changement d'état d'appareil), y compris quand les conditions
+// n'étaient pas remplies (skipped) — pour pouvoir vérifier après coup pourquoi un scénario
+// planifié ne s'est pas exécuté. `actionResults` détaille chaque action individuellement
+// (succès/échec) sur le modèle de PresenceSimulationEvent.
+model ScenarioRun {
+  id            String   @id @default(cuid())
+  scenarioId    String
+  triggeredAt   DateTime @default(now())
+  skipped       Boolean  @default(false)
+  success       Boolean  @default(true)
+  triggerInfo   String   @default("[]") // JSON string[] (mêmes descriptions que TriggerContextValue)
+  actionResults String   @default("[]") // JSON { type, description, success, error? }[]
+
+  scenario Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  @@index([scenarioId, triggeredAt])
 }
 
 model ScenarioGroup {

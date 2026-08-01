@@ -33,6 +33,7 @@ import {
   IconClock,
   IconDeviceDesktop,
   IconCopy,
+  IconHistory,
 } from '@tabler/icons-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
@@ -826,6 +827,123 @@ function ActionSummary({
   );
 }
 
+interface ScenarioActionResult {
+  type: string;
+  description: string;
+  success: boolean;
+  error?: string;
+}
+
+interface ScenarioRun {
+  id: string;
+  triggeredAt: string;
+  skipped: boolean;
+  success: boolean;
+  triggerInfo: string[];
+  actionResults: ScenarioActionResult[];
+}
+
+function RunStatusBadge({ run }: { run: ScenarioRun }) {
+  if (run.skipped) return <Badge size="xs" variant="outline" color="gray">Ignoré (conditions)</Badge>;
+  if (run.success) return <Badge size="xs" variant="light" color="green">OK</Badge>;
+  return <Badge size="xs" variant="light" color="red">Échec</Badge>;
+}
+
+function HistoryModal({
+  scenarioId,
+  scenarioName,
+  opened,
+  onClose,
+}: {
+  scenarioId: string;
+  scenarioName: string;
+  opened: boolean;
+  onClose: () => void;
+}) {
+  const { data: runs, isLoading } = useQuery<ScenarioRun[]>({
+    queryKey: ['scenarios', scenarioId, 'runs'],
+    queryFn: () => api.get(`/scenarios/${scenarioId}/runs`).then((r) => r.data),
+    enabled: opened,
+  });
+
+  return (
+    <Modal opened={opened} onClose={onClose} title={`Historique — ${scenarioName}`} size="lg">
+      {isLoading && (
+        <Center h={100}>
+          <Loader size="sm" />
+        </Center>
+      )}
+      {!isLoading && !runs?.length && (
+        <Text size="sm" c="dimmed">Aucune exécution pour l&apos;instant.</Text>
+      )}
+      {!isLoading && !!runs?.length && (
+        <Accordion>
+          {runs.map((run) => (
+            <Accordion.Item key={run.id} value={run.id}>
+              <Accordion.Control>
+                <Group gap="xs">
+                  <Text size="sm">{new Date(run.triggeredAt).toLocaleString('fr-FR')}</Text>
+                  <RunStatusBadge run={run} />
+                </Group>
+              </Accordion.Control>
+              <Accordion.Panel>
+                <Stack gap="sm">
+                  {run.triggerInfo.length > 0 && (
+                    <Stack gap={2}>
+                      {run.triggerInfo.map((line, i) => (
+                        <Text key={i} size="xs" c="dimmed">{line}</Text>
+                      ))}
+                    </Stack>
+                  )}
+                  {run.actionResults.length > 0 && (
+                    <Table striped>
+                      <Table.Thead>
+                        <Table.Tr>
+                          <Table.Th>Action</Table.Th>
+                          <Table.Th>Statut</Table.Th>
+                        </Table.Tr>
+                      </Table.Thead>
+                      <Table.Tbody>
+                        {run.actionResults.map((a, i) => (
+                          <Table.Tr key={i}>
+                            <Table.Td>{a.description}</Table.Td>
+                            <Table.Td>
+                              {a.success ? (
+                                <Badge size="xs" variant="light" color="green">OK</Badge>
+                              ) : (
+                                <Badge size="xs" variant="light" color="red" title={a.error}>Échec</Badge>
+                              )}
+                            </Table.Td>
+                          </Table.Tr>
+                        ))}
+                      </Table.Tbody>
+                    </Table>
+                  )}
+                  {run.skipped && run.triggerInfo.length === 0 && (
+                    <Text size="xs" c="dimmed">Conditions non remplies, actions non exécutées.</Text>
+                  )}
+                </Stack>
+              </Accordion.Panel>
+            </Accordion.Item>
+          ))}
+        </Accordion>
+      )}
+    </Modal>
+  );
+}
+
+function HistoryButton({ scenarioId, scenarioName }: { scenarioId: string; scenarioName: string }) {
+  const [opened, setOpened] = useState(false);
+  return (
+    <>
+      <ActionIcon variant="subtle" onClick={() => setOpened(true)} title="Historique d'exécution">
+        <IconHistory size={16} />
+      </ActionIcon>
+      <HistoryModal scenarioId={scenarioId} scenarioName={scenarioName} opened={opened} onClose={() => setOpened(false)} />
+    </>
+  );
+}
+
 function ScenarioTable({
   scenarios,
   devices,
@@ -908,6 +1026,7 @@ function ScenarioTable({
             <Table.Td onClick={(e) => e.stopPropagation()}>
               <Group gap="xs">
                 <TestButton scenarioId={s.id} onTest={onTest} loading={testPending} />
+                <HistoryButton scenarioId={s.id} scenarioName={s.name} />
                 <ActionIcon
                   variant="subtle"
                   onClick={() => onDuplicate(s.id)}

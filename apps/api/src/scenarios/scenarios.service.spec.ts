@@ -93,6 +93,9 @@ function makeFakePrisma(devices: FakeDevice[], scenarios: FakeScenario[]) {
         return { count };
       }),
     },
+    scenarioRun: {
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: `run-${++seq}`, triggeredAt: new Date(), ...data })),
+    },
   } as any;
 }
 

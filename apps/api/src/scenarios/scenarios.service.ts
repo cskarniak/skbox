@@ -18,6 +18,13 @@ interface TriggerCapture {
   conditions: string[];
 }
 
+export interface ActionResult {
+  type: string;
+  description: string;
+  success: boolean;
+  error?: string;
+}
+
 @Injectable()
 export class ScenariosService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ScenariosService.name);
@@ -162,6 +169,19 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
     }));
   }
 
+  async listRuns(scenarioId: string, limit = 50) {
+    const runs = await this.prisma.scenarioRun.findMany({
+      where: { scenarioId },
+      orderBy: { triggeredAt: 'desc' },
+      take: limit,
+    });
+    return runs.map((run) => ({
+      ...run,
+      triggerInfo: JSON.parse(run.triggerInfo) as string[],
+      actionResults: JSON.parse(run.actionResults) as ActionResult[],
+    }));
+  }
+
   async acknowledgeAlarmEvent(id: string) {
     return this.prisma.alarmEvent.update({
       where: { id },
@@ -178,8 +198,28 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
     const actions: Action[] = JSON.parse(scenario.actions);
     const capture = await this.captureTriggerValues(trigger, conditions);
     await this.recordTriggerContextForActions(scenario.name, capture, actions);
-    await this.executeActions(actions, capture);
+    const results = await this.executeActions(actions, capture);
+    await this.recordRun(scenario.id, capture, results);
     this.logger.log(`Test executed for scenario "${scenario.name}"`);
+  }
+
+  // Enregistre le résultat d'une exécution (ou d'un déclenchement ignoré faute de
+  // conditions remplies) dans l'historique consultable depuis l'UI — voir
+  // scenarios.controller.ts `GET /:id/runs`.
+  private async recordRun(
+    scenarioId: string,
+    capture: TriggerCapture,
+    results: ActionResult[] | null,
+  ) {
+    await this.prisma.scenarioRun.create({
+      data: {
+        scenarioId,
+        skipped: results === null,
+        success: results === null || results.every((r) => r.success),
+        triggerInfo: JSON.stringify(capture.conditions),
+        actionResults: JSON.stringify(results ?? []),
+      },
+    });
   }
 
   // --- Engine ---
@@ -317,13 +357,16 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
     const conditionsMet = await this.evaluateConditions(conditions, fresh.conditionsOperator);
     if (!conditionsMet) {
       this.logger.log(`Scheduled scenario "${fresh.name}" skipped (conditions not met)`);
+      const capture = await this.captureTriggerValues(triggerForCapture, conditions);
+      await this.recordRun(fresh.id, capture, null);
       reschedule(fresh);
       return;
     }
 
     const capture = await this.captureTriggerValues(triggerForCapture, conditions);
     await this.recordTriggerContextForActions(fresh.name, capture, actions);
-    await this.executeActions(actions, capture);
+    const results = await this.executeActions(actions, capture);
+    await this.recordRun(fresh.id, capture, results);
     await this.prisma.scenario.update({
       where: { id: fresh.id },
       data: { lastRun: new Date(), runCount: { increment: 1 } },
@@ -387,7 +430,8 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
           });
         }
         await this.recordTriggerContextForActions(scenario.name, capture, actions);
-        await this.executeActions(actions, capture);
+        const results = await this.executeActions(actions, capture);
+        await this.recordRun(scenario.id, capture, results);
         await this.prisma.scenario.update({
           where: { id: scenario.id },
           data: {
@@ -575,7 +619,8 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async executeActions(actions: Action[], capture?: TriggerCapture) {
+  private async executeActions(actions: Action[], capture?: TriggerCapture): Promise<ActionResult[]> {
+    const results: ActionResult[] = [];
     for (const action of actions) {
       switch (action.type) {
         case 'device_command': {
@@ -583,30 +628,55 @@ export class ScenariosService implements OnModuleInit, OnModuleDestroy {
             where: { id: action.deviceId },
           });
           if (!device?.mqttTopic) {
-            this.logger.warn(
-              `Action skipped: device ${action.deviceId} not found`,
-            );
+            const error = `Appareil ${action.deviceId} introuvable`;
+            this.logger.warn(`Action skipped: ${error}`);
+            results.push({ type: action.type, description: `Commande ${JSON.stringify(action.command)}`, success: false, error });
             continue;
           }
-          this.mqtt.publish(
-            `${device.mqttTopic}/set`,
-            JSON.stringify(action.command),
-          );
-          this.logger.log(
-            `Action: ${device.name} → ${JSON.stringify(action.command)}`,
-          );
+          try {
+            this.mqtt.publish(
+              `${device.mqttTopic}/set`,
+              JSON.stringify(action.command),
+            );
+            this.logger.log(
+              `Action: ${device.name} → ${JSON.stringify(action.command)}`,
+            );
+            results.push({
+              type: action.type,
+              description: `${device.name} → ${JSON.stringify(action.command)}`,
+              success: true,
+            });
+          } catch (err) {
+            results.push({
+              type: action.type,
+              description: `${device.name} → ${JSON.stringify(action.command)}`,
+              success: false,
+              error: String(err),
+            });
+          }
           break;
         }
         case 'notify_telegram': {
-          await this.notifications.sendTelegram(this.withTriggerDetails(action.message, capture));
+          try {
+            await this.notifications.sendTelegram(this.withTriggerDetails(action.message, capture));
+            results.push({ type: action.type, description: `Telegram : ${action.message}`, success: true });
+          } catch (err) {
+            results.push({ type: action.type, description: `Telegram : ${action.message}`, success: false, error: String(err) });
+          }
           break;
         }
         case 'notify_email': {
-          await this.notifications.sendEmail(action.subject, this.withTriggerDetails(action.message, capture));
+          try {
+            await this.notifications.sendEmail(action.subject, this.withTriggerDetails(action.message, capture));
+            results.push({ type: action.type, description: `Email : ${action.subject}`, success: true });
+          } catch (err) {
+            results.push({ type: action.type, description: `Email : ${action.subject}`, success: false, error: String(err) });
+          }
           break;
         }
       }
     }
+    return results;
   }
 
   private withTriggerDetails(message: string, capture?: TriggerCapture): string {

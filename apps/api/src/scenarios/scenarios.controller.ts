@@ -43,6 +43,11 @@ export class ScenariosController {
     return this.scenarios.findById(id);
   }
 
+  @Get(':id/runs')
+  listRuns(@Param('id') id: string, @Query('limit') limit?: string) {
+    return this.scenarios.listRuns(id, limit ? Number(limit) : undefined);
+  }
+
   @Post()
   create(@Body() body: unknown) {
     const dto = createScenarioSchema.parse(body);
