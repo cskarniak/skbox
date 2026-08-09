@@ -561,12 +561,14 @@ function CameraTile({ camera, onEdit, onRemove }: { camera: Camera; onEdit: () =
   // Chemin relatif (même origine que la page) : go2rtc est proxifié par un rewrite Next.js
   // (/go2rtc/* -> localhost:1984, voir next.config.js), ce qui évite un iframe http:// sur une
   // page servie en https (bloqué en mixed content).
-  // mode=webrtc forcé sur la vue agrandie : sans ça, le lecteur go2rtc par défaut ouvre en
-  // parallèle une session MSE/WebSocket ET une session WebRTC pour la même caméra (observé sur
-  // Safari, les deux restant actives simultanément) — double décodage vidéo côté client, d'où
-  // un rendu saccadé même quand le WebRTC fonctionne. Le port 8555 (TCP+UDP) doit être ouvert
-  // pour les clients distants (voir deploy/allow-tailscale-camera-webrtc.sh côté MacMiniApps).
-  const mainStreamSrc = `/go2rtc/stream.html?src=${encodeURIComponent(camera.id)}&mode=webrtc`;
+  // Le lecteur go2rtc par défaut (mode non forcé) peut ouvrir en parallèle une session
+  // MSE/WebSocket ET une session WebRTC pour la même caméra (observé sur Safari, les deux
+  // restant actives simultanément) — double décodage vidéo côté client, rendu saccadé. Forcer
+  // mode=webrtc seul règle ce doublon mais casse l'affichage sous Safari (autoplay WebRTC non
+  // fiable côté Safari, pas de repli possible vers MSE) : NE PAS forcer un mode unique tant
+  // qu'un repli automatique n'est pas garanti. Le port 8555 (TCP+UDP) est ouvert pour les
+  // clients distants (voir deploy/allow-tailscale-camera-webrtc.sh côté MacMiniApps).
+  const mainStreamSrc = `/go2rtc/stream.html?src=${encodeURIComponent(camera.id)}`;
   const previewStreamSrc = `/go2rtc/stream.html?src=${encodeURIComponent(camera.previewPath ? `${camera.id}-preview` : camera.id)}`;
 
   return (
