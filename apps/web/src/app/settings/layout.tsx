@@ -12,10 +12,13 @@ import {
   IconCategory,
   IconLogs,
   IconTool,
+  IconServerCog,
 } from '@tabler/icons-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { AppNav } from '@/components/AppNav';
+
+const LAUNCHER_URL = process.env.NEXT_PUBLIC_LAUNCHER_URL ?? 'https://apps.home';
 
 const SUB_TABS = [
   { value: 'preferences', label: 'Préférences', icon: <IconAdjustments size={16} />, href: '/settings/preferences' },
@@ -72,6 +75,19 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
                 target="_blank"
               >
                 <Box visibleFrom="sm">RFXcom</Box>
+              </Button>
+            </Tooltip>
+            <Tooltip label="Ouvrir Administration (machine et services)">
+              <Button
+                variant="subtle"
+                size="sm"
+                px="xs"
+                leftSection={<IconServerCog size={16} />}
+                component="a"
+                href={`${LAUNCHER_URL}/administration/`}
+                target="_blank"
+              >
+                <Box visibleFrom="sm">Administration</Box>
               </Button>
             </Tooltip>
           </Group>
