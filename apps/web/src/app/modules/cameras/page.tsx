@@ -19,6 +19,7 @@ import {
   Slider,
   Divider,
   Badge,
+  Alert,
 } from '@mantine/core';
 import {
   IconSmartHome,
@@ -37,6 +38,7 @@ import {
   IconRefresh,
   IconPlayerPlay,
   IconPlayerStop,
+  IconAlertCircle,
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useRouter } from 'next/navigation';
@@ -794,6 +796,12 @@ export default function CamerasModulePage() {
               </Button>
             </Group>
           </Group>
+
+          <Alert icon={<IconAlertCircle size={16} />} color="blue">
+            Lecture saccadée sous Safari : go2rtc y garde parfois deux connexions vidéo actives en
+            parallèle pour la même caméra. Utilise Firefox pour un flux fluide en attendant un
+            correctif.
+          </Alert>
 
           {isLoading ? (
             <Center h={200}>
