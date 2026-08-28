@@ -7,6 +7,11 @@ import { RfxcomService } from './rfxcom.service';
 export class RfxcomController {
   constructor(private readonly rfxcom: RfxcomService) {}
 
+  @Post('discovery-mode')
+  setDiscoveryMode(@Body() body: { enable: boolean; duration?: number }) {
+    return this.rfxcom.setDiscoveryMode(body.enable, body.duration);
+  }
+
   @Post('devices/:rfxcomId/command')
   sendCommand(
     @Param('rfxcomId') rfxcomId: string,

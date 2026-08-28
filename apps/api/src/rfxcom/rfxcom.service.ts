@@ -13,6 +13,7 @@ const execAsync = promisify(exec);
 
 const DEFAULT_WATCHDOG_INTERVAL_SEC = 60;
 const DEFAULT_WATCHDOG_TIMEOUT_SEC = 120;
+const DEFAULT_DISCOVERY_DURATION_SEC = 300;
 // Délai minimal entre deux relances automatiques du service systemd : évite une boucle
 // de redémarrages si le bridge reste indisponible pour une raison que le restart ne
 // résout pas (ex. dongle débranché).
@@ -57,6 +58,28 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
     const value = await this.settings.get('rfxcom.watchdogTimeoutSec');
     const seconds = value ? parseInt(value, 10) : NaN;
     return (Number.isFinite(seconds) && seconds > 0 ? seconds : DEFAULT_WATCHDOG_TIMEOUT_SEC) * 1000;
+  }
+
+  // Un capteur RF433 mal reçu (checksum faux, bruit) peut se présenter avec un ID différent
+  // à chaque trame : sans garde, chacun de ces IDs crée un nouveau Device fantôme. En dehors
+  // du mode découverte, un ID inconnu est donc ignoré au lieu d'être auto-créé — seul un
+  // appareil déjà connu (rfxcomId ou reprise "changement de pile") continue d'être mis à jour.
+  async setDiscoveryMode(enable: boolean, durationSec = DEFAULT_DISCOVERY_DURATION_SEC) {
+    if (!enable) {
+      await this.settings.set('rfxcom.discoveryModeUntil', '');
+      this.logger.log('RF433 discovery mode disabled');
+      return { active: false };
+    }
+    const until = new Date(Date.now() + durationSec * 1000);
+    await this.settings.set('rfxcom.discoveryModeUntil', until.toISOString());
+    this.logger.log(`RF433 discovery mode enabled for ${durationSec}s`);
+    return { active: true, until: until.toISOString() };
+  }
+
+  private async isDiscoveryModeActive(): Promise<boolean> {
+    const value = await this.settings.get('rfxcom.discoveryModeUntil');
+    if (!value) return false;
+    return new Date(value).getTime() > Date.now();
   }
 
   async onModuleInit() {
@@ -205,6 +228,13 @@ export class RfxcomService implements OnModuleInit, OnModuleDestroy {
       });
       if (pending) {
         existing = pending;
+      }
+    }
+
+    if (!existing) {
+      if (!(await this.isDiscoveryModeActive())) {
+        this.logger.debug(`Ignoring unknown RF433 device ${rfxcomId} (discovery mode off)`);
+        return;
       }
     }
 
