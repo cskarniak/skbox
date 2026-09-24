@@ -78,6 +78,10 @@ enum Page { P_HOME, P_ALARM, N_PAGES };
 static const char* const PAGE_LABELS[N_PAGES] = {"Maison", "Alarme"};
 static int page = P_HOME;
 
+// Vrai de la mise en veille jusqu'au réveil par toucher (y compris pendant les rafraîchissements
+// périodiques) : l'en-tête l'indique, pour savoir que le prochain toucher ne fera que réveiller.
+static bool asleep = false;
+
 static uint32_t confirmStopUntil = 0;  // fenêtre de confirmation de l'arrêt de la régulation
 static uint32_t lastActivity = 0;
 static uint32_t lastFetch = 0;
@@ -283,16 +287,36 @@ static bool fetchSummary() {
 
 // ---------------------------------------------------------------- Rendu
 
+// Zone centrale de l'en-tête (entre les onglets et la batterie), redessinable seule.
+static const int STATUS_X = 272, STATUS_W = 392;
+
+static void drawStatusLine() {
+  D.fillRect(STATUS_X, 8, STATUS_W, 44, C_WHITE);
+  String middle;
+  if (errorMsg.length()) middle = "! " + errorMsg;
+  else if (hasData) middle = updatedDate + "  maj " + updatedAt;
+  if (asleep) middle += middle.length() ? "  · en veille" : "en veille";
+  D.setFont(&fonts::efontJA_24);
+  D.setTextSize(1);
+  text(fit(middle, STATUS_W), STATUS_X + STATUS_W / 2, 30, &fonts::efontJA_24, textdatum_t::middle_center);
+}
+
+// Mise à jour partielle et rapide de la seule ligne d'état (entrée / sortie de veille).
+static void updateStatusLine() {
+  D.setEpdMode(epd_mode_t::epd_fast);
+  D.startWrite();
+  drawStatusLine();
+  D.endWrite();
+  D.display(STATUS_X, 8, STATUS_W, 44);
+}
+
 static void drawHeader() {
   // Onglets (l'onglet courant est plein).
   for (int i = 0; i < N_PAGES; ++i) {
     drawButton(16 + i * 128, 8, 120, 44, PAGE_LABELS[i], "", i == page, false, A_PAGE, i);
   }
 
-  String middle;
-  if (errorMsg.length()) middle = "! " + errorMsg;
-  else if (hasData) middle = updatedDate + "   maj " + updatedAt;
-  text(middle, 480, 30, &fonts::efontJA_24, textdatum_t::middle_center);
+  drawStatusLine();
 
   int bat = M5.Power.getBatteryLevel();
   String batTxt = bat >= 0 ? String(bat) + " %" : "";
@@ -542,9 +566,14 @@ static void waitTouchRelease() {
 
 static void goToSleep() {
   // En veille, l'écran reste figé : on y laisse la page principale, la plus utile d'un coup d'œil.
-  if (page != P_HOME) {
-    page = P_HOME;
-    render(epd_mode_t::epd_quality);
+  if (!asleep) {
+    asleep = true;
+    if (page != P_HOME) {
+      page = P_HOME;
+      render(epd_mode_t::epd_quality);
+    } else {
+      updateStatusLine();
+    }
   }
   wifiDown();
   D.waitDisplay();
@@ -563,7 +592,9 @@ static void goToSleep() {
     // Réveil par toucher : le premier appui sert seulement à réveiller.
     waitTouchRelease();
     lastActivity = millis();
+    asleep = false;
     if (millis() - lastFetch > 60000UL) refreshAll(epd_mode_t::epd_text);
+    else updateStatusLine();
   }
 }
 
