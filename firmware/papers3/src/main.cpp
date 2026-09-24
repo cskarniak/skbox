@@ -337,15 +337,18 @@ static void drawBoiler() {
     return;
   }
 
-  // Badge d'état
-  String badge = !boiler.enabled ? "ARRÊTÉE" : boiler.heating ? "CHAUFFE" : "en attente";
-  bool badgeFilled = !boiler.enabled || boiler.heating;
-  D.setFont(&fonts::efontJA_24);
-  int bw = D.textWidth(badge.c_str()) + 24;
-  int bx = px + pw - 16 - bw;
-  if (badgeFilled) D.fillRoundRect(bx, py + 8, bw, 34, 8, C_BLACK);
-  else D.drawRoundRect(bx, py + 8, bw, 34, 8, C_BLACK);
-  text(badge, bx + bw / 2, py + 25, &fonts::efontJA_24, textdatum_t::middle_center, badgeFilled ? C_WHITE : C_BLACK);
+  // État du brûleur : indicateur non cliquable. Badge noir seulement quand elle chauffe ; sinon
+  // simple texte, sans cadre, pour ne pas ressembler à un bouton. Régulation arrêtée : rien ici,
+  // le badge ARRÊT du mode le dit déjà.
+  if (boiler.enabled && boiler.heating) {
+    D.setFont(&fonts::efontJA_24);
+    int bw = D.textWidth("CHAUFFE") + 24;
+    int bx = px + pw - 16 - bw;
+    D.fillRoundRect(bx, py + 8, bw, 34, 8, C_BLACK);
+    text("CHAUFFE", bx + bw / 2, py + 25, &fonts::efontJA_24, textdatum_t::middle_center, C_WHITE);
+  } else if (boiler.enabled) {
+    text("ne chauffe pas", px + pw - 16, py + 25, &fonts::efontJA_16, textdatum_t::middle_right, C_GRAY);
+  }
 
   // Températures
   int tw = bigTemp(boiler.currentTemp, x, py + 54);

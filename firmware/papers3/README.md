@@ -8,7 +8,7 @@
 
 - **Températures** : 6 emplacements (2 colonnes × 3). Actuellement Extérieur, Sous-sol et Séjour dans la colonne de gauche ; les 3 emplacements de droite sont réservés pour des ajouts ultérieurs. Un capteur hors ligne apparaît en gris avec l'heure de son dernier message. Le niveau de pile s'affiche quand il passe sous 20 %.
 - Pas de seconde page pour l'instant (réservée à des usages futurs, par exemple le système d'alarme).
-- **Chaudière** : température mesurée et cible, état (*CHAUFFE* / *en attente* / *ARRÊTÉE*), mode actif (programme, niveau par défaut, période dérogatoire ou dérogation en cours), alerte si le relais est hors ligne.
+- **Chaudière** : température mesurée et cible, état (badge *CHAUFFE* quand le brûleur est commandé, sinon « ne chauffe pas » ; ce n'est pas un bouton), mode actif (programme, niveau par défaut, période dérogatoire ou dérogation en cours), alerte si le relais est hors ligne.
 - **Pilotage** :
   - choisir une durée (1 h, 2 h, 4 h ou 8 h), puis toucher un niveau : `POST /api/boiler/boost` ;
   - *Annuler dérogation* : `DELETE /api/boiler/boost` ;
