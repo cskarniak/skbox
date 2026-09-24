@@ -225,26 +225,32 @@ static void wifiStart() {
   wifiStarted = true;
 }
 
-static bool wifiUp() {
-  if (WiFi.status() == WL_CONNECTED) return true;
-  wifiStart();
-  uint32_t start = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - start < 12000) delay(100);
-  if (WiFi.status() != WL_CONNECTED) {
-    LOG("[wifi] échec connexion à %s (statut %d)\n", WIFI_SSID, (int)WiFi.status());
-    return false;
-  }
-  LOG("[wifi] connecté en %lu ms, IP %s, RSSI %d dBm\n", (unsigned long)(millis() - start),
-      WiFi.localIP().toString().c_str(), (int)WiFi.RSSI());
+// Le DNS fourni par le DHCP (box) ne connaît pas les noms locaux servis par skbox-mini. Appliqué à
+// chaque appel, pas seulement à la connexion : une connexion lancée en arrière-plan (réveil par
+// toucher) ou un renouvellement DHCP remettrait sinon le DNS de la box.
+static void applyDns() {
 #ifdef SKBOX_DNS
-  // Le DNS fourni par le DHCP (box) ne connaît pas les noms locaux servis par skbox-mini.
   IPAddress dnsIp;
   if (dnsIp.fromString(SKBOX_DNS)) {
     ip_addr_t d = IPADDR4_INIT((uint32_t)dnsIp);
     dns_setserver(0, &d);
-    LOG("[wifi] DNS forcé : %s\n", SKBOX_DNS);
   }
 #endif
+}
+
+static bool wifiUp() {
+  if (WiFi.status() != WL_CONNECTED) {
+    wifiStart();
+    uint32_t start = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - start < 12000) delay(100);
+    if (WiFi.status() != WL_CONNECTED) {
+      LOG("[wifi] échec connexion à %s (statut %d)\n", WIFI_SSID, (int)WiFi.status());
+      return false;
+    }
+    LOG("[wifi] connecté en %lu ms, IP %s, RSSI %d dBm\n", (unsigned long)(millis() - start),
+        WiFi.localIP().toString().c_str(), (int)WiFi.RSSI());
+  }
+  applyDns();
   return true;
 }
 
