@@ -10,6 +10,8 @@ const devices = [
   { id: 'd2', name: 'Chambre', room: 'Chambre', state: '{"temperature":18.1}', status: 'offline', lastSeen: new Date(), visible: true, active: true },
   { id: 'd3', name: 'Relais chaudière', room: 'Cave', state: '{"state":"ON"}', status: 'online', lastSeen: new Date(), visible: true, active: true },
   { id: 'd4', name: 'Garage', room: null, state: 'pas du json', status: 'online', lastSeen: new Date(), visible: true, active: true },
+  { id: 's1', name: 'Lampe', room: 'Chambre', state: '{"state":"ON"}', status: 'online', lastSeen: new Date(), visible: true, active: true },
+  { id: 's2', name: 'Prise RF', room: null, state: '{"command":"Off"}', status: 'offline', lastSeen: new Date(), visible: true, active: true },
 ];
 
 function makeService() {
@@ -58,6 +60,15 @@ describe('DisplayService', () => {
   it("respecte l'ordre d'une liste explicite de capteurs", async () => {
     const summary = await makeService().getSummary(['d1', 'd2']);
     expect(summary.temperatures.map((t) => t.id)).toEqual(['d1', 'd2']);
+  });
+
+  it('expose les prises et lumières demandées, dans l\'ordre, sans en ajouter', async () => {
+    const summary = await makeService().getSummary(undefined, ['s2', 's1']);
+    expect(summary.switches).toEqual([
+      { id: 's2', name: 'Prise RF', room: null, on: false, online: false },
+      { id: 's1', name: 'Lampe', room: 'Chambre', on: true, online: true },
+    ]);
+    expect((await makeService().getSummary()).switches).toEqual([]);
   });
 
   it("expose l'état de la chaudière et les niveaux avec libellés", async () => {

@@ -2,6 +2,13 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { ApiQuery, ApiTags } from '@nestjs/swagger';
 import { DisplayService } from './display.service';
 
+function parseIds(value?: string): string[] {
+  return (value ?? '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+}
+
 @ApiTags('display')
 @Controller('display')
 export class DisplayController {
@@ -13,11 +20,13 @@ export class DisplayController {
     required: false,
     description: "Ids de capteurs séparés par des virgules (ordre conservé). Absent = tous les capteurs de température visibles.",
   })
-  getSummary(@Query('devices') devices?: string) {
-    const ids = devices
-      ?.split(',')
-      .map((id) => id.trim())
-      .filter(Boolean);
-    return this.display.getSummary(ids?.length ? ids : undefined);
+  @ApiQuery({
+    name: 'switches',
+    required: false,
+    description: 'Ids de prises / lumières séparés par des virgules (ordre conservé). Absent = aucune.',
+  })
+  getSummary(@Query('devices') devices?: string, @Query('switches') switches?: string) {
+    const ids = parseIds(devices);
+    return this.display.getSummary(ids.length ? ids : undefined, parseIds(switches));
   }
 }

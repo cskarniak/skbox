@@ -1,7 +1,9 @@
-// Afficheur e-ink skbox pour M5Stack PaperS3
-// - Températures des capteurs + état de la chaudière (GET /api/display/summary)
-// - Pilotage tactile : dérogation (boost) par niveau et durée, fin de dérogation,
-//   arrêt / reprise de la régulation (arrêt confirmé par un second appui).
+// Afficheur e-ink skbox pour M5Stack PaperS3 — 4 pages (onglets de l'en-tête) :
+// - Maison : températures + prises et lumières (allumer / éteindre d'un toucher)
+// - Chaudière : état, mode et pilotage (dérogation par niveau et durée, fin de dérogation,
+//   arrêt / reprise de la régulation, arrêt confirmé par un second appui)
+// - Alarme : réservée au futur système d'alarme ; Libre : réservée
+// Données : GET /api/display/summary.
 // - Économie d'énergie : Wi-Fi coupé et light sleep après IDLE_S d'inactivité ;
 //   réveil par toucher de l'écran ou par la minuterie de rafraîchissement.
 
@@ -17,6 +19,10 @@
 #include "config.h"
 #else
 #error "Copier include/config.example.h en include/config.h et l'adapter"
+#endif
+
+#ifndef SWITCH_IDS
+#define SWITCH_IDS ""  // prises / lumières de la page Maison (ids skbox séparés par des virgules)
 #endif
 
 #ifndef BEEP_VOLUME
@@ -52,7 +58,13 @@ struct Boiler {
   float targetTemp = NAN, currentTemp = NAN;
 };
 
+struct Switch {
+  String id, name, room;
+  bool on = false, online = true;
+};
+
 static std::vector<Sensor> sensors;
+static std::vector<Switch> switches;
 static std::vector<Level> levels;
 static Boiler boiler;
 static bool hasData = false;
@@ -60,7 +72,7 @@ static String updatedAt, updatedDate, errorMsg;
 
 // ---------------------------------------------------------------- UI
 
-enum Action { A_REFRESH, A_DURATION, A_BOOST, A_CANCEL, A_TOGGLE, A_PAGE };
+enum Action { A_REFRESH, A_DURATION, A_BOOST, A_CANCEL, A_TOGGLE, A_PAGE, A_SWITCH };
 struct Button {
   int16_t x, y, w, h;
   Action action;
@@ -76,10 +88,11 @@ static int durationIndex = BOOST_DEFAULT_INDEX;
 // Les emplacements sans capteur restent réservés (cadre gris « libre »).
 static const int SENSOR_SLOTS = 6;
 
-// Pages, choisies par les onglets de l'en-tête. La page 2 est réservée au futur système
-// d'alarme : pour l'instant un simple écran d'attente, sans appel réseau.
-enum Page { P_HOME, P_ALARM, N_PAGES };
-static const char* const PAGE_LABELS[N_PAGES] = {"Maison", "Alarme"};
+// Pages, choisies par les onglets de l'en-tête. Alarme et Libre sont des écrans d'attente,
+// sans appel réseau, réservés pour plus tard.
+enum Page { P_HOME, P_BOILER, P_ALARM, P_FREE, N_PAGES };
+static const char* const PAGE_LABELS[N_PAGES] = {"Maison", "Chaudière", "Alarme", "Libre"};
+static const int TAB_W[N_PAGES] = {104, 132, 104, 90};
 static int page = P_HOME;
 
 // Vrai de la mise en veille jusqu'au réveil par toucher (y compris pendant les rafraîchissements
@@ -87,6 +100,7 @@ static int page = P_HOME;
 static bool asleep = false;
 static bool pendingRefresh = false;  // rechargement différé après un réveil par toucher
 static uint32_t wakeAt = 0;
+static uint32_t refreshAt = 0;  // rechargement programmé (confirmation de l'état d'une prise)
 
 static uint32_t confirmStopUntil = 0;  // fenêtre de confirmation de l'arrêt de la régulation
 static uint32_t lastActivity = 0;
@@ -254,6 +268,7 @@ static bool fetchSummary() {
   String path = "/api/display/summary?bat=" + String((int)M5.Power.getBatteryLevel()) +
                 "&mv=" + String((int)M5.Power.getBatteryVoltage()) + "&chg=" + String((int)M5.Power.isCharging());
   if (strlen(SENSOR_IDS)) path += "&devices=" + String(SENSOR_IDS);
+  if (strlen(SWITCH_IDS)) path += "&switches=" + String(SWITCH_IDS);
   String body;
   if (httpCall("GET", path, "", &body) != 200) return false;
 
@@ -275,6 +290,17 @@ static bool fetchSummary() {
     s.battery = t["battery"].isNull() ? -1 : t["battery"].as<int>();
     s.online = t["online"] | false;
     sensors.push_back(s);
+  }
+
+  switches.clear();
+  for (JsonObject t : doc["switches"].as<JsonArray>()) {
+    Switch sw;
+    sw.id = (const char*)(t["id"] | "");
+    sw.name = (const char*)(t["name"] | "");
+    sw.room = (const char*)(t["room"] | "");
+    sw.on = t["on"] | false;
+    sw.online = t["online"] | false;
+    switches.push_back(sw);
   }
 
   levels.clear();
@@ -319,21 +345,34 @@ static bool fetchSummary() {
 
 // ---------------------------------------------------------------- Rendu
 
-// Zone centrale de l'en-tête (entre les onglets et la batterie), redessinable seule.
-static const int STATUS_X = 272, STATUS_W = 392;
+// Bloc d'état de l'en-tête (entre les onglets et « Actualiser »), redessinable seul :
+// ligne 1 = date et heure de mise à jour (ou erreur), ligne 2 = batterie et veille.
+static const int STATUS_X = 472, STATUS_W = 308, STATUS_R = STATUS_X + STATUS_W;
 
 static void drawStatusLine() {
   D.fillRect(STATUS_X, 8, STATUS_W, 44, C_WHITE);
-  String middle;
-  if (errorMsg.length()) middle = "! " + errorMsg;
-  else if (hasData) middle = updatedDate + " · maj " + updatedAt;
-  if (asleep) middle += middle.length() ? " · en veille" : "en veille";
+  String l1;
+  if (errorMsg.length()) l1 = "! " + errorMsg;
+  else if (hasData) l1 = updatedDate + " · maj " + updatedAt;
+
+  int bat = M5.Power.getBatteryLevel();
+  int mv = M5.Power.getBatteryVoltage();
+  String l2 = bat >= 0 ? String(bat) + " %" : "? %";
+  if (mv > 0) {
+    char vb[10];
+    snprintf(vb, sizeof(vb), " · %d,%02d V", mv / 1000, (mv % 1000) / 10);
+    l2 += vb;
+  }
+  if (M5.Power.isCharging() == m5::Power_Class::is_charging) l2 += " · charge";
+  if (asleep) l2 += " · en veille";
+
   D.setFont(&fonts::efontJA_16);
   D.setTextSize(1);
-  text(fit(middle, STATUS_W), STATUS_X + STATUS_W / 2, 30, &fonts::efontJA_16, textdatum_t::middle_center);
+  text(fit(l1, STATUS_W), STATUS_R, 19, &fonts::efontJA_16, textdatum_t::middle_right);
+  text(fit(l2, STATUS_W), STATUS_R, 41, &fonts::efontJA_16, textdatum_t::middle_right);
 }
 
-// Mise à jour partielle et rapide de la seule ligne d'état (entrée / sortie de veille).
+// Mise à jour partielle et rapide du seul bloc d'état (entrée / sortie de veille).
 static void updateStatusLine() {
   D.setEpdMode(epd_mode_t::epd_fast);
   D.startWrite();
@@ -344,26 +383,12 @@ static void updateStatusLine() {
 
 static void drawHeader() {
   // Onglets (l'onglet courant est plein).
+  int tx = 16;
   for (int i = 0; i < N_PAGES; ++i) {
-    drawButton(16 + i * 128, 8, 120, 44, PAGE_LABELS[i], "", i == page, false, A_PAGE, i);
+    drawButton(tx, 8, TAB_W[i], 44, PAGE_LABELS[i], "", i == page, false, A_PAGE, i);
+    tx += TAB_W[i] + 6;
   }
-
   drawStatusLine();
-
-  // Batterie sur deux lignes : niveau, puis tension et état du chargeur.
-  int bat = M5.Power.getBatteryLevel();
-  int mv = M5.Power.getBatteryVoltage();
-  auto chg = M5.Power.isCharging();
-  String line2;
-  if (mv > 0) {
-    char vb[8];
-    snprintf(vb, sizeof(vb), "%d,%02d V", mv / 1000, (mv % 1000) / 10);
-    line2 = vb;
-  }
-  if (chg == m5::Power_Class::is_charging) line2 += " · charge";
-  text(bat >= 0 ? String(bat) + " %" : "? %", 780, 19, &fonts::efontJA_16, textdatum_t::middle_right);
-  text(line2, 780, 41, &fonts::efontJA_16, textdatum_t::middle_right);
-
   drawButton(796, 8, 148, 44, "Actualiser", "", false, false, A_REFRESH);
   D.drawFastHLine(0, 60, 960, C_BLACK);
 }
@@ -400,14 +425,61 @@ static void drawSensors() {
   }
 }
 
-static void drawBoiler() {
-  const int px = 576, py = 70, pw = 368, ph = 462;
-  const int x = px + 16, w = pw - 32;
-  D.drawRoundRect(px, py, pw, ph, 12, C_BLACK);
-  text("Chaudière", x, py + 12, &fonts::efontJA_24, textdatum_t::top_left);
+// Panneau « Prises et lumières » de la page Maison : une ligne-bouton par appareil, toucher =
+// allumer / éteindre. Pastille pleine « allumé », pastille creuse « éteint ».
+static const int SW_X = 576, SW_Y = 70, SW_W = 368, SW_H = 462;
+static const int SW_ROW_Y0 = SW_Y + 50, SW_ROW_H = 64, SW_ROW_GAP = 8, SW_MAX = 5;
+
+static void drawSwitches() {
+  const int x = SW_X + 16, w = SW_W - 32;
+  D.drawRoundRect(SW_X, SW_Y, SW_W, SW_H, 12, C_BLACK);
+  text("Prises et lumières", x, SW_Y + 12, &fonts::efontJA_24, textdatum_t::top_left);
+
+  if (switches.empty()) {
+    text("Aucune (SWITCH_IDS)", SW_X + SW_W / 2, SW_Y + SW_H / 2, &fonts::efontJA_24, textdatum_t::middle_center, C_GRAY);
+    return;
+  }
+  for (size_t i = 0; i < switches.size() && i < (size_t)SW_MAX; ++i) {
+    const Switch& sw = switches[i];
+    int y = SW_ROW_Y0 + i * (SW_ROW_H + SW_ROW_GAP);
+    uint16_t c = sw.online ? C_BLACK : C_GRAY;
+    D.drawRoundRect(x, y, w, SW_ROW_H, 10, c);
+
+    const int pw = 72, ph = 32, pxl = x + w - 12 - pw, pyl = y + (SW_ROW_H - ph) / 2;
+    if (!sw.online) {
+      text("hors ligne", x + w - 12, y + SW_ROW_H / 2, &fonts::efontJA_16, textdatum_t::middle_right, C_GRAY);
+    } else if (sw.on) {
+      D.fillRoundRect(pxl, pyl, pw, ph, ph / 2, C_BLACK);
+      text("allumé", pxl + pw / 2, pyl + ph / 2, &fonts::efontJA_16, textdatum_t::middle_center, C_WHITE);
+    } else {
+      D.drawRoundRect(pxl, pyl, pw, ph, ph / 2, C_BLACK);
+      D.drawRoundRect(pxl + 1, pyl + 1, pw - 2, ph - 2, ph / 2 - 1, C_BLACK);
+      text("éteint", pxl + pw / 2, pyl + ph / 2, &fonts::efontJA_16, textdatum_t::middle_center);
+    }
+
+    const int nameW = pxl - x - 24;
+    D.setFont(&fonts::efontJA_24);
+    D.setTextSize(1);
+    if (sw.room.length()) {
+      text(fit(sw.name, nameW), x + 12, y + 8, &fonts::efontJA_24, textdatum_t::top_left, c);
+      D.setFont(&fonts::efontJA_16);
+      text(fit(sw.room, nameW), x + 12, y + SW_ROW_H - 8, &fonts::efontJA_16, textdatum_t::bottom_left, C_GRAY);
+    } else {
+      text(fit(sw.name, nameW), x + 12, y + SW_ROW_H / 2, &fonts::efontJA_24, textdatum_t::middle_left, c);
+    }
+    addButton(x, y, w, SW_ROW_H, A_SWITCH, (int)i);
+  }
+}
+
+// Page Chaudière, plein écran : état à gauche, commandes à droite.
+static void drawBoilerPage() {
+  const int lx = 16, ly = 70, lw = 440, lh = 462;
+  const int x = lx + 20, w = lw - 40;
+  D.drawRoundRect(lx, ly, lw, lh, 12, C_BLACK);
+  text("Chaudière", x, ly + 14, &fonts::efontJA_24, textdatum_t::top_left, C_BLACK, 1.25f);
 
   if (!boiler.configured) {
-    text("Non configurée dans skbox", px + pw / 2, py + ph / 2, &fonts::efontJA_24, textdatum_t::middle_center, C_GRAY);
+    text("Non configurée dans skbox", 480, 300, &fonts::efontJA_24, textdatum_t::middle_center, C_GRAY);
     return;
   }
 
@@ -417,18 +489,19 @@ static void drawBoiler() {
   if (boiler.enabled && boiler.heating) {
     D.setFont(&fonts::efontJA_24);
     int bw = D.textWidth("CHAUFFE") + 24;
-    int bx = px + pw - 16 - bw;
-    D.fillRoundRect(bx, py + 8, bw, 34, 8, C_BLACK);
-    text("CHAUFFE", bx + bw / 2, py + 25, &fonts::efontJA_24, textdatum_t::middle_center, C_WHITE);
+    int bx = lx + lw - 20 - bw;
+    D.fillRoundRect(bx, ly + 12, bw, 36, 8, C_BLACK);
+    text("CHAUFFE", bx + bw / 2, ly + 30, &fonts::efontJA_24, textdatum_t::middle_center, C_WHITE);
   } else if (boiler.enabled) {
-    text("ne chauffe pas", px + pw - 16, py + 25, &fonts::efontJA_24, textdatum_t::middle_right, C_BLACK);
+    text("ne chauffe pas", lx + lw - 20, ly + 30, &fonts::efontJA_24, textdatum_t::middle_right);
   }
 
   // Températures
-  int tw = bigTemp(boiler.currentTemp, x, py + 54);
-  text("cible " + fmtTemp(boiler.targetTemp) + "°", x + tw + 12, py + 72, &fonts::efontJA_24, textdatum_t::middle_left);
+  int tw = bigTemp(boiler.currentTemp, x, ly + 66, C_BLACK, 2.0f);
+  text("cible", x + tw + 16, ly + 84, &fonts::efontJA_16, textdatum_t::top_left, C_GRAY);
+  text(fmtTemp(boiler.targetTemp) + "°", x + tw + 16, ly + 104, &fonts::efontJA_24, textdatum_t::top_left);
 
-  // Mode actif : badge (FORCÉ / PROGRAMME / DÉFAUT) + niveau, puis origine, puis prochain changement.
+  // Mode actif : badge (FORCÉ / PROGRAMME / DÉFAUT / ARRÊT) + niveau, puis origine, puis prochain changement.
   String tag, l2, l3;
   bool forced = boiler.hasOverride || boiler.mode == "override";
   if (!boiler.enabled) {
@@ -451,8 +524,8 @@ static void drawBoiler() {
   }
   D.setFont(&fonts::efontJA_24);
   D.setTextSize(1);
-  const int ty = py + 96, th = 30;
-  int tagW = D.textWidth(tag.c_str()) + 16;
+  const int ty = ly + 176, th = 36;
+  int tagW = D.textWidth(tag.c_str()) + 20;
   if (forced || !boiler.enabled) {
     D.fillRoundRect(x, ty, tagW, th, 6, C_BLACK);
     text(tag, x + tagW / 2, ty + th / 2, &fonts::efontJA_24, textdatum_t::middle_center, C_WHITE);
@@ -466,35 +539,35 @@ static void drawBoiler() {
     text(fit(boiler.activeLabel, w - tagW - 12), x + tagW + 12, ty + th / 2, &fonts::efontJA_24, textdatum_t::middle_left);
   }
   D.setFont(&fonts::efontJA_24);
-  text(fit(l2, w), x, py + 130, &fonts::efontJA_24, textdatum_t::top_left);
-  if (l3.length()) {
-    D.setFont(&fonts::efontJA_16);
-    text(fit(l3, w), x, py + 155, &fonts::efontJA_16, textdatum_t::top_left);
-  }
-  if (!boiler.relayOnline) text("Relais hors ligne !", px + pw - 16, py + 172, &fonts::efontJA_16, textdatum_t::top_right);
+  text(fit(l2, w), x, ly + 226, &fonts::efontJA_24, textdatum_t::top_left);
+  if (l3.length()) text(fit(l3, w), x, ly + 260, &fonts::efontJA_24, textdatum_t::top_left);
+  if (!boiler.relayOnline) text("Relais hors ligne !", x, ly + lh - 20, &fonts::efontJA_24, textdatum_t::bottom_left);
 
-  // Durée de dérogation
-  text("Durée", x, py + 172, &fonts::efontJA_16, textdatum_t::top_left, C_GRAY);
-  const int dg = 8, dw = (w - dg * (N_DURATIONS - 1)) / N_DURATIONS;
+  // ---- Commandes
+  const int rx = 472, rw = 472;
+  const int cx = rx + 20, cw = rw - 40;
+  D.drawRoundRect(rx, ly, rw, lh, 12, C_BLACK);
+
+  text("Durée de la dérogation", cx, ly + 14, &fonts::efontJA_16, textdatum_t::top_left, C_GRAY);
+  const int dg = 8, dw = (cw - dg * (N_DURATIONS - 1)) / N_DURATIONS;
   for (int i = 0; i < N_DURATIONS; ++i) {
-    drawButton(x + i * (dw + dg), py + 190, dw, 42, fmtDuration(durations[i]), "", i == durationIndex, false,
+    drawButton(cx + i * (dw + dg), ly + 38, dw, 52, fmtDuration(durations[i]), "", i == durationIndex, false,
                A_DURATION, i);
   }
 
-  // Niveaux (3 par ligne) + fin de dérogation
-  text("Dérogation", x, py + 240, &fonts::efontJA_16, textdatum_t::top_left, C_GRAY);
-  const int lg = 8, lw = (w - 2 * lg) / 3, lh = 56;
+  text("Forcer un niveau", cx, ly + 108, &fonts::efontJA_16, textdatum_t::top_left, C_GRAY);
+  const int lg = 8, lbw = (cw - 2 * lg) / 3, lbh = 72;
   int slot = 0;
   for (size_t i = 0; i < levels.size() && slot < 6; ++i, ++slot) {
-    int bx2 = x + (slot % 3) * (lw + lg);
-    int by2 = py + 258 + (slot / 3) * (lh + lg);
+    int bx = cx + (slot % 3) * (lbw + lg);
+    int by = ly + 132 + (slot / 3) * (lbh + lg);
     bool active = levels[i].key == boiler.activeLevel;
-    drawButton(bx2, by2, lw, lh, levels[i].label, fmtTemp(levels[i].temp) + "°", false, active, A_BOOST, (int)i);
+    drawButton(bx, by, lbw, lbh, levels[i].label, fmtTemp(levels[i].temp) + "°", false, active, A_BOOST, (int)i);
   }
   if (boiler.hasOverride && slot < 6) {
-    int bx2 = x + (slot % 3) * (lw + lg);
-    int by2 = py + 258 + (slot / 3) * (lh + lg);
-    drawButton(bx2, by2, lw, lh, "Annuler", "dérogation", true, false, A_CANCEL);
+    int bx = cx + (slot % 3) * (lbw + lg);
+    int by = ly + 132 + (slot / 3) * (lbh + lg);
+    drawButton(bx, by, lbw, lbh, "Annuler", "dérogation", true, false, A_CANCEL);
   }
 
   // Arrêt / reprise de la régulation
@@ -502,13 +575,31 @@ static void drawBoiler() {
   String label = !boiler.enabled ? "Reprendre la régulation"
                  : confirming    ? "Confirmer l'arrêt ?"
                                  : "Arrêter la régulation";
-  drawButton(x, py + ph - 16 - 52, w, 52, label, "", confirming, false, A_TOGGLE);
+  drawButton(cx, ly + lh - 20 - 60, cw, 60, label, "", confirming, false, A_TOGGLE);
 }
 
-static void drawAlarmPage() {
+static void drawPlaceholderPage(const char* title, const char* subtitle) {
   D.drawRoundRect(16, 72, 928, 460, 12, C_LIGHTGRAY);
-  text("Système d'alarme", 480, 270, &fonts::efontJA_24, textdatum_t::middle_center, C_GRAY, 1.5);
-  text("à venir", 480, 320, &fonts::efontJA_24, textdatum_t::middle_center, C_LIGHTGRAY);
+  text(title, 480, 270, &fonts::efontJA_24, textdatum_t::middle_center, C_GRAY, 1.5);
+  text(subtitle, 480, 320, &fonts::efontJA_24, textdatum_t::middle_center, C_LIGHTGRAY);
+}
+
+static void drawPage() {
+  drawHeader();
+  if (page == P_ALARM) {
+    drawPlaceholderPage("Système d'alarme", "à venir");
+  } else if (page == P_FREE) {
+    drawPlaceholderPage("Page libre", "à définir");
+  } else if (!hasData) {
+    text(errorMsg.length() ? errorMsg : "Connexion à skbox...", 480, 290, &fonts::efontJA_24,
+         textdatum_t::middle_center, C_BLACK, 1.5);
+    text(SKBOX_URL, 480, 340, &fonts::efontJA_16, textdatum_t::middle_center, C_GRAY);
+  } else if (page == P_BOILER) {
+    drawBoilerPage();
+  } else {
+    drawSensors();
+    drawSwitches();
+  }
 }
 
 static void render(epd_mode_t mode) {
@@ -516,34 +607,24 @@ static void render(epd_mode_t mode) {
   D.setEpdMode(mode);
   D.startWrite();
   D.fillScreen(C_WHITE);
-  drawHeader();
-  if (page == P_ALARM) {
-    drawAlarmPage();
-  } else if (hasData) {
-    drawSensors();
-    drawBoiler();
-  } else {
-    text(errorMsg.length() ? errorMsg : "Connexion à skbox...", 480, 290, &fonts::efontJA_24,
-         textdatum_t::middle_center, C_BLACK, 1.5);
-    text(SKBOX_URL, 480, 340, &fonts::efontJA_16, textdatum_t::middle_center, C_GRAY);
-  }
+  drawPage();
   D.endWrite();
   D.display();
 }
 
-// Même rendu, mais seule la bande [y, y+h) du panneau chaudière est envoyée à l'écran : bien plus
-// rapide qu'un rafraîchissement complet quand un seul rang de boutons change.
-static void renderBand(int y, int h) {
+// Même rendu, mais seul le rectangle donné est envoyé à l'écran : bien plus rapide qu'un
+// rafraîchissement complet quand un seul rang de boutons change.
+static void renderRect(int x, int y, int w, int h) {
   buttons.clear();
   D.setEpdMode(epd_mode_t::epd_fast);
   D.startWrite();
   D.fillScreen(C_WHITE);
-  drawHeader();
-  drawSensors();
-  drawBoiler();
+  drawPage();
   D.endWrite();
-  D.display(576, y, 368, h);
+  D.display(x, y, w, h);
 }
+
+static void renderBand(int y, int h) { renderRect(0, y, 960, h); }
 
 static const Button* findButton(Action a) {
   for (const Button& b : buttons)
@@ -617,6 +698,26 @@ static void onTap(int tx, int ty) {
           renderBand(b.y, b.h);
         }
         break;
+      case A_SWITCH: {
+        // Affichage optimiste dès que skbox accepte la commande, puis relecture de l'état réel
+        // quelques secondes plus tard (l'appareil confirme via MQTT, ou pas s'il est injoignable).
+        if ((size_t)b.arg >= switches.size()) break;
+        Switch& sw = switches[b.arg];
+        const int bx = b.x, by = b.y, bw = b.w, bh = b.h;  // `buttons` est vidé par le rendu
+        flashButton(b);
+        bool target = !sw.on;
+        int code = httpCall("POST", "/api/devices/" + sw.id + "/command",
+                            target ? "{\"command\":\"on\"}" : "{\"command\":\"off\"}", nullptr);
+        if (code >= 200 && code < 300) {
+          beepOk();
+          sw.on = target;
+          refreshAt = millis() + 3000;
+        } else {
+          beepError();
+        }
+        renderRect(bx, by, bw, bh);
+        break;
+      }
     }
     return;
   }
@@ -701,8 +802,12 @@ void loop() {
   if (confirmStopUntil && millis() >= confirmStopUntil) {
     confirmStopUntil = 0;
     const Button* tb = findButton(A_TOGGLE);
-    if (tb) renderBand(tb->y, tb->h);
-    else render(epd_mode_t::epd_fast);
+    if (tb) renderBand(tb->y, tb->h);  // absent si on a quitté la page Chaudière : rien à redessiner
+  }
+
+  if (refreshAt && millis() >= refreshAt) {
+    refreshAt = 0;
+    if (fetchSummary() && page == P_HOME) renderRect(SW_X, SW_Y, SW_W, SW_H);
   }
 
   if (pendingRefresh && (WiFi.status() == WL_CONNECTED || millis() - wakeAt > 12000UL)) {

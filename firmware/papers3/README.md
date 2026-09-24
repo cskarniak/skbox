@@ -6,13 +6,19 @@
 
 ## Fonctions
 
-- **Températures** : 6 emplacements (2 colonnes × 3). Actuellement Extérieur, Sous-sol et Séjour dans la colonne de gauche ; les 3 emplacements de droite sont réservés pour des ajouts ultérieurs. Un capteur hors ligne apparaît en gris avec l'heure de son dernier message. Le niveau de pile s'affiche quand il passe sous 20 %.
-- **Pages** : onglets *Maison* / *Alarme* dans l'en-tête. La page *Alarme* est un écran d'attente, prêt à accueillir le futur système d'alarme (`drawAlarmPage()` dans `src/main.cpp`). À la mise en veille, l'écran revient sur *Maison*.
-- **Chaudière** : température mesurée et cible, état (badge *CHAUFFE* quand le brûleur est commandé, sinon « ne chauffe pas » en texte simple ; ce n'est pas un bouton), mode actif (programme, niveau par défaut, période dérogatoire ou dérogation en cours), alerte si le relais est hors ligne.
-- **Pilotage** :
-  - choisir une durée (1 h, 2 h, 4 h ou 8 h), puis toucher un niveau : `POST /api/boiler/boost` ;
-  - *Annuler dérogation* : `DELETE /api/boiler/boost` ;
-  - *Arrêter la régulation* : il faut toucher deux fois en moins de 5 s, puis `PUT /api/boiler/enabled`. *Reprendre la régulation* fonctionne en un seul toucher.
+Quatre pages, choisies par les onglets de l'en-tête. L'en-tête affiche aussi la date, l'heure de la dernière mise à jour, la batterie (niveau, tension, charge) et « en veille ».
+
+- **Maison** :
+  - *Températures* : 6 emplacements (2 colonnes × 3). Actuellement Extérieur, Sous-sol et Séjour dans la colonne de gauche ; les 3 emplacements de droite sont réservés pour des ajouts ultérieurs. Un capteur hors ligne apparaît en gris avec l'heure de son dernier message. Le niveau de pile s'affiche quand il passe sous 20 %.
+  - *Prises et lumières* (`SWITCH_IDS`, 5 au plus, liste explicite : ni ventilation ni relais de chaudière) : un toucher allume ou éteint (`POST /api/devices/:id/command`). L'état s'affiche tout de suite, puis il est relu 3 s plus tard pour vérifier que l'appareil a bien obéi.
+- **Chaudière** (plein écran) :
+  - *État* : température mesurée et cible, état du brûleur (badge *CHAUFFE* quand le brûleur est commandé, sinon « ne chauffe pas » en texte simple ; ce n'est pas un bouton), mode (*FORCÉ* / *PROGRAMME* / *DÉFAUT* / *ARRÊT*) avec le programme et le prochain changement, alerte si le relais est hors ligne.
+  - *Pilotage* :
+    - choisir une durée (1 h, 2 h, 4 h ou 8 h), puis toucher un niveau : `POST /api/boiler/boost` ;
+    - *Annuler dérogation* : `DELETE /api/boiler/boost` ;
+    - *Arrêter la régulation* : il faut toucher deux fois en moins de 5 s, puis `PUT /api/boiler/enabled`. *Reprendre la régulation* fonctionne en un seul toucher.
+- **Alarme** : écran d'attente pour le futur système d'alarme.
+- **Libre** : écran d'attente, réservé.
 - **Sons** (buzzer intégré, volume `BEEP_VOLUME`, 0 = muet) : bip court à chaque bouton touché (un toucher hors bouton reste silencieux, pratique pour vérifier le calage) ; deux notes montantes quand skbox accepte une commande ; note grave en cas d'erreur (commande refusée, skbox ou Wi-Fi injoignable, échec d'« Actualiser »).
 - **Veille** : après `IDLE_S` secondes sans toucher, le Wi-Fi est coupé et l'appareil passe en *light sleep*. L'en-tête affiche alors « en veille ». Il se réveille au toucher (ce premier toucher sert seulement à réveiller l'écran) ou toutes les `REFRESH_S` secondes pour se rafraîchir.
 

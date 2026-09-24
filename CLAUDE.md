@@ -53,7 +53,7 @@
   ```
   Timeout is set to 5min (Z2M default is 10min) so that critical devices (e.g. the boiler-control Shelly relay) are detected offline promptly, without polling so aggressively it strains the network.
 - Swagger docs at http://localhost:3001/docs
-- External e-ink display (M5Stack PaperS3): firmware in `firmware/papers3` (PlatformIO, not a pnpm package). It reads `GET /api/display/summary` (`apps/api/src/display`, compact JSON: temperatures + boiler) and drives the boiler through the existing `/api/boiler/boost` and `/api/boiler/enabled` endpoints — keep those contracts stable or update the firmware.
+- External e-ink display (M5Stack PaperS3): firmware in `firmware/papers3` (PlatformIO, not a pnpm package). It reads `GET /api/display/summary` (`apps/api/src/display`, compact JSON: temperatures, switches, boiler with mode/program/next change) and drives the boiler through the existing `/api/boiler/boost` and `/api/boiler/enabled` endpoints, and switches through `POST /api/devices/:id/command` (`on`/`off`) — keep those contracts stable or update the firmware.
 - Zigbee2MQTT UI at http://localhost:8080
 
 ## Deploying to the test server (skbox-mini)

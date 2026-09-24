@@ -13,6 +13,14 @@ export interface DisplayTemperature {
   lastSeen: string; // "HH:MM" heure locale
 }
 
+export interface DisplaySwitch {
+  id: string;
+  name: string;
+  room: string | null;
+  on: boolean;
+  online: boolean;
+}
+
 export interface DisplayLevel {
   key: LevelKey;
   label: string;
@@ -24,6 +32,7 @@ export interface DisplaySummary {
   localTime: string; // "HH:MM"
   localDate: string; // "jeu. 24 sept."
   temperatures: DisplayTemperature[];
+  switches: DisplaySwitch[];
   boiler: {
     configured: boolean;
     enabled: boolean;
@@ -77,10 +86,11 @@ export class DisplayService {
     private readonly boiler: BoilerService,
   ) {}
 
-  async getSummary(deviceIds?: string[]): Promise<DisplaySummary> {
+  async getSummary(deviceIds?: string[], switchIds?: string[]): Promise<DisplaySummary> {
     const now = new Date();
-    const [temperatures, status, config] = await Promise.all([
+    const [temperatures, switches, status, config] = await Promise.all([
       this.readTemperatures(deviceIds),
+      this.readSwitches(switchIds ?? []),
       this.boiler.getStatus(),
       this.boiler.getConfig(),
     ]);
@@ -90,6 +100,7 @@ export class DisplayService {
       localTime: hhmm(now),
       localDate: shortDate(now),
       temperatures,
+      switches,
       boiler: {
         configured: status.deviceId !== null,
         enabled: status.enabled,
@@ -125,6 +136,34 @@ export class DisplayService {
         temp: config.levels[key],
       })),
     };
+  }
+
+  // Prises et lumières commandables depuis l'afficheur, dans l'ordre demandé. Seulement sur liste
+  // explicite : pas de découverte automatique, pour ne jamais exposer par erreur un relais
+  // sensible (chaudière, ventilation...).
+  private async readSwitches(ids: string[]): Promise<DisplaySwitch[]> {
+    if (!ids.length) return [];
+    const devices = await this.prisma.device.findMany({ where: { id: { in: ids } } });
+    const position = new Map(ids.map((id, i) => [id, i]));
+    return devices
+      .map((device: { id: string; name: string; room: string | null; state: string | null; status: string }) => {
+        let state: Record<string, unknown> = {};
+        try {
+          state = JSON.parse(device.state || '{}');
+        } catch {
+          // état illisible : affiché éteint
+        }
+        // Zigbee (Z2M) : { state: "ON" } ; RF433 (rfxcom) : { command: "On" }.
+        const raw = String(state.state ?? state.command ?? '').toUpperCase();
+        return {
+          id: device.id,
+          name: device.name,
+          room: device.room,
+          on: raw === 'ON',
+          online: device.status === 'online',
+        };
+      })
+      .sort((a: DisplaySwitch, b: DisplaySwitch) => position.get(a.id)! - position.get(b.id)!);
   }
 
   // Capteurs ayant une température numérique dans leur état (déjà corrigée de l'offset de
