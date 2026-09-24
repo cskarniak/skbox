@@ -22,6 +22,7 @@ import { NetworkHealthModule } from './network-health/network-health.module';
 import { TerminalModule } from './terminal/terminal.module';
 import { PresenceSimulationModule } from './presence-simulation/presence-simulation.module';
 import { NetatmoModule } from './netatmo/netatmo.module';
+import { DisplayModule } from './display/display.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { NetatmoModule } from './netatmo/netatmo.module';
     TerminalModule,
     PresenceSimulationModule,
     NetatmoModule,
+    DisplayModule,
   ],
 })
 export class AppModule {}

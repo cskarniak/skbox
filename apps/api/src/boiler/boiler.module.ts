@@ -7,5 +7,6 @@ import { BoilerController } from './boiler.controller';
   imports: [SettingsModule],
   controllers: [BoilerController],
   providers: [BoilerService],
+  exports: [BoilerService],
 })
 export class BoilerModule {}
