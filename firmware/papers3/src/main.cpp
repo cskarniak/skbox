@@ -314,11 +314,11 @@ static void drawStatusLine() {
   D.fillRect(STATUS_X, 8, STATUS_W, 44, C_WHITE);
   String middle;
   if (errorMsg.length()) middle = "! " + errorMsg;
-  else if (hasData) middle = updatedDate + "  maj " + updatedAt;
-  if (asleep) middle += middle.length() ? "  · en veille" : "en veille";
-  D.setFont(&fonts::efontJA_24);
+  else if (hasData) middle = updatedDate + " · maj " + updatedAt;
+  if (asleep) middle += middle.length() ? " · en veille" : "en veille";
+  D.setFont(&fonts::efontJA_16);
   D.setTextSize(1);
-  text(fit(middle, STATUS_W), STATUS_X + STATUS_W / 2, 30, &fonts::efontJA_24, textdatum_t::middle_center);
+  text(fit(middle, STATUS_W), STATUS_X + STATUS_W / 2, 30, &fonts::efontJA_16, textdatum_t::middle_center);
 }
 
 // Mise à jour partielle et rapide de la seule ligne d'état (entrée / sortie de veille).
