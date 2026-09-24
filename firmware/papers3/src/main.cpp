@@ -104,7 +104,21 @@ static uint32_t refreshAt = 0;  // rechargement programmé (confirmation de l'é
 
 static uint32_t confirmStopUntil = 0;  // fenêtre de confirmation de l'arrêt de la régulation
 static uint32_t lastActivity = 0;
-static uint32_t lastFetch = 0;
+static uint32_t lastFetch = 0;    // dernier appel réussi
+static uint32_t lastAttempt = 0;  // dernier appel, réussi ou non
+static int failures = 0;          // échecs consécutifs
+
+// Délai avant le prochain rechargement automatique : REFRESH_S en temps normal ; après un échec,
+// 30 s puis doublé à chaque nouvel échec (plafonné à REFRESH_S), pour ne pas marteler skbox ni
+// faire clignoter l'écran quand la box est injoignable.
+static uint32_t refreshDelayMs() {
+  uint32_t normal = REFRESH_S * 1000UL;
+  if (!failures) return normal;
+  uint32_t d = 30000UL << (failures > 5 ? 4 : failures - 1);
+  return d < normal ? d : normal;
+}
+
+static bool refreshDue() { return millis() - lastAttempt >= refreshDelayMs(); }
 
 static const uint16_t C_BLACK = TFT_BLACK;
 static const uint16_t C_WHITE = TFT_WHITE;
@@ -262,7 +276,16 @@ static int httpCall(const char* method, const String& path, const String& body, 
   return code;
 }
 
+static bool fetchSummaryOnce();
+
 static bool fetchSummary() {
+  lastAttempt = millis();
+  bool ok = fetchSummaryOnce();
+  failures = ok ? 0 : failures + 1;
+  return ok;
+}
+
+static bool fetchSummaryOnce() {
   // bat / mv / chg : ignorés par l'API, mais visibles dans le journal nginx de skbox-mini, ce qui
   // permet de suivre la batterie à distance (le moniteur série est peu utilisable sous macOS).
   String path = "/api/display/summary?bat=" + String((int)M5.Power.getBatteryLevel()) +
@@ -632,9 +655,12 @@ static const Button* findButton(Action a) {
   return nullptr;
 }
 
+// Échec avec des données déjà affichées : seul le bloc d'état change (message d'erreur), le
+// reste de l'écran garde les dernières valeurs — pas de rafraîchissement complet qui clignote.
 static bool refreshAll(epd_mode_t mode) {
   bool ok = fetchSummary();
-  render(mode);
+  if (ok || !hasData) render(mode);
+  else updateStatusLine();
   return ok;
 }
 
@@ -747,8 +773,8 @@ static void goToSleep() {
   wifiDown();
   D.waitDisplay();
   while (M5.Speaker.isPlaying()) delay(5);  // laisser finir un son avant de couper
-  uint32_t since = (millis() - lastFetch) / 1000;
-  uint32_t wait = since >= REFRESH_S ? 1 : REFRESH_S - since;
+  uint32_t elapsed = millis() - lastAttempt, delayMs = refreshDelayMs();
+  uint32_t wait = elapsed >= delayMs ? 1 : (delayMs - elapsed + 999) / 1000;
   LOG("[veille] light sleep %lu s (batterie %d %%)\n", (unsigned long)wait, (int)M5.Power.getBatteryLevel());
   Serial.flush();
   M5.Power.lightSleep((uint64_t)wait * 1000000ULL, true);
@@ -815,7 +841,7 @@ void loop() {
     refreshAll(epd_mode_t::epd_fast);
   }
 
-  if (millis() - lastFetch >= REFRESH_S * 1000UL) refreshAll(epd_mode_t::epd_quality);
+  if (refreshDue()) refreshAll(epd_mode_t::epd_quality);
 
   if (millis() - lastActivity >= IDLE_S * 1000UL) goToSleep();
 
