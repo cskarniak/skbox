@@ -51,7 +51,7 @@ struct Boiler {
   bool configured = false, enabled = true, relayOnline = false, heating = false, scheduleActive = false;
   String activeLevel, activeLabel, exception;
   bool hasOverride = false;
-  String overrideLabel, overrideUntil;
+  String overrideLevel, overrideLabel, overrideUntil;
   String mode, programName;  // mode : "override" | "program" | "default"
   bool hasNext = false;
   String nextDay, nextTime, nextLabel;  // nextDay : "" (aujourd'hui), "demain" ou "sam."
@@ -353,6 +353,7 @@ static bool fetchSummaryOnce() {
   boiler.targetTemp = b["targetTemp"].isNull() ? NAN : b["targetTemp"].as<float>();
   boiler.currentTemp = b["currentTemp"].isNull() ? NAN : b["currentTemp"].as<float>();
   boiler.hasOverride = !b["override"].isNull();
+  boiler.overrideLevel = (const char*)(b["override"]["level"] | "");
   boiler.overrideLabel = (const char*)(b["override"]["label"] | "");
   boiler.overrideUntil = (const char*)(b["override"]["until"] | "");
   boiler.mode = (const char*)(b["mode"] | "");
@@ -710,7 +711,15 @@ static void onTap(int tx, int ty) {
         break;
       case A_DURATION:
         durationIndex = b.arg;
-        renderBand(b.y, b.h);
+        if (boiler.hasOverride && boiler.overrideLevel.length()) {
+          // Dérogation en cours : la nouvelle durée s'applique tout de suite (même niveau, à partir
+          // de maintenant), pour que l'heure de fin et le prochain changement soient recalculés.
+          flashButton(b);
+          command("POST", "/api/boiler/boost",
+                  "{\"level\":\"" + boiler.overrideLevel + "\",\"minutes\":" + String(durations[durationIndex]) + "}");
+        } else {
+          renderBand(b.y, b.h);  // simple choix pour la prochaine dérogation
+        }
         break;
       case A_BOOST: {
         flashButton(b);

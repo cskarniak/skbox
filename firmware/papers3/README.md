@@ -16,6 +16,7 @@ Quatre pages, choisies par les onglets de l'en-tête. L'en-tête affiche aussi l
   - *État* : température mesurée et cible, état du brûleur (badge *CHAUFFE* quand le brûleur est commandé, sinon « ne chauffe pas » en texte simple ; ce n'est pas un bouton), mode (*FORCÉ* / *PROGRAMME* / *DÉFAUT* / *ARRÊT*) avec le programme et le prochain changement, alerte si le relais est hors ligne.
   - *Pilotage* :
     - choisir une durée (1 h, 2 h, 4 h ou 8 h), puis toucher un niveau : `POST /api/boiler/boost` ;
+    - pendant une dérogation, toucher une autre durée la prolonge ou la raccourcit tout de suite (même niveau, durée comptée à partir de maintenant) ;
     - *Annuler dérogation* : `DELETE /api/boiler/boost` ;
     - *Arrêter la régulation* : il faut toucher deux fois en moins de 5 s, puis `PUT /api/boiler/enabled`. *Reprendre la régulation* fonctionne en un seul toucher.
 - **Alarme** : écran d'attente pour le futur système d'alarme.
