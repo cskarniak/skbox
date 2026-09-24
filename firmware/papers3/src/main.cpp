@@ -397,7 +397,7 @@ static void drawBoiler() {
     D.fillRoundRect(bx, py + 8, bw, 34, 8, C_BLACK);
     text("CHAUFFE", bx + bw / 2, py + 25, &fonts::efontJA_24, textdatum_t::middle_center, C_WHITE);
   } else if (boiler.enabled) {
-    text("ne chauffe pas", px + pw - 16, py + 25, &fonts::efontJA_16, textdatum_t::middle_right, C_GRAY);
+    text("ne chauffe pas", px + pw - 16, py + 25, &fonts::efontJA_24, textdatum_t::middle_right, C_BLACK);
   }
 
   // Températures
