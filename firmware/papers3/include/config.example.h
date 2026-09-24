@@ -6,7 +6,11 @@
 #define WIFI_PASS "motdepasse"
 
 // URL de l'API skbox, sans slash final (même réseau local que skbox-mini).
-#define SKBOX_URL "http://192.168.1.50:3001"
+// Sur skbox-mini, l'API n'écoute que sur 127.0.0.1 : passer par le virtual host nginx.
+#define SKBOX_URL "http://skbox.lan.home"
+
+// Serveur DNS qui résout le nom ci-dessus (skbox-mini). Commenter pour garder celui du DHCP.
+#define SKBOX_DNS "192.168.1.11"
 
 // --- Capteurs affichés --------------------------------------------------
 // Ids skbox séparés par des virgules, dans l'ordre d'affichage (6 emplacements,

@@ -10,6 +10,7 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <esp_sleep.h>
+#include <lwip/dns.h>
 #include <vector>
 
 #if __has_include("config.h")
@@ -19,6 +20,8 @@
 #endif
 
 #define D M5.Display
+// Journal de diagnostic sur l'USB série (pio device monitor, 115200 bauds).
+#define LOG(...) Serial.printf(__VA_ARGS__)
 
 // ---------------------------------------------------------------- Données
 
@@ -158,7 +161,22 @@ static bool wifiUp() {
   WiFi.begin(WIFI_SSID, WIFI_PASS);
   uint32_t start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - start < 12000) delay(100);
-  return WiFi.status() == WL_CONNECTED;
+  if (WiFi.status() != WL_CONNECTED) {
+    LOG("[wifi] échec connexion à %s (statut %d)\n", WIFI_SSID, (int)WiFi.status());
+    return false;
+  }
+  LOG("[wifi] connecté en %lu ms, IP %s, RSSI %d dBm\n", (unsigned long)(millis() - start),
+      WiFi.localIP().toString().c_str(), (int)WiFi.RSSI());
+#ifdef SKBOX_DNS
+  // Le DNS fourni par le DHCP (box) ne connaît pas les noms locaux servis par skbox-mini.
+  IPAddress dnsIp;
+  if (dnsIp.fromString(SKBOX_DNS)) {
+    ip_addr_t d = IPADDR4_INIT((uint32_t)dnsIp);
+    dns_setserver(0, &d);
+    LOG("[wifi] DNS forcé : %s\n", SKBOX_DNS);
+  }
+#endif
+  return true;
 }
 
 static void wifiDown() {
@@ -180,6 +198,7 @@ static int httpCall(const char* method, const String& path, const String& body, 
   }
   if (body.length()) http.addHeader("Content-Type", "application/json");
   int code = http.sendRequest(method, body);
+  LOG("[http] %s %s -> %d%s\n", method, path.c_str(), code, code <= 0 ? (" (" + http.errorToString(code) + ")").c_str() : "");
   if (code > 0 && response) *response = http.getString();
   http.end();
   if (code <= 0) errorMsg = "skbox injoignable";
@@ -196,6 +215,7 @@ static bool fetchSummary() {
   JsonDocument doc;
   if (deserializeJson(doc, body)) {
     errorMsg = "Réponse illisible";
+    LOG("[json] réponse illisible (%u octets)\n", body.length());
     return false;
   }
 
@@ -241,6 +261,8 @@ static bool fetchSummary() {
   hasData = true;
   errorMsg = "";
   lastFetch = millis();
+  LOG("[data] %u capteurs, %u niveaux, chaudière %s\n", sensors.size(), levels.size(),
+      boiler.configured ? boiler.activeLabel.c_str() : "non configurée");
   return true;
 }
 
@@ -464,8 +486,11 @@ static void goToSleep() {
   D.waitDisplay();
   uint32_t since = (millis() - lastFetch) / 1000;
   uint32_t wait = since >= REFRESH_S ? 1 : REFRESH_S - since;
+  LOG("[veille] light sleep %lu s (batterie %d %%)\n", (unsigned long)wait, (int)M5.Power.getBatteryLevel());
+  Serial.flush();
   M5.Power.lightSleep((uint64_t)wait * 1000000ULL, true);
 
+  LOG("[veille] réveil, cause %d\n", (int)esp_sleep_get_wakeup_cause());
   if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) {
     // Rafraîchissement périodique, puis retour immédiat en veille.
     refreshAll(epd_mode_t::epd_quality);
@@ -483,6 +508,9 @@ static void goToSleep() {
 void setup() {
   auto cfg = M5.config();
   M5.begin(cfg);
+  Serial.begin(115200);
+  LOG("[boot] skbox PaperS3, écran %dx%d, batterie %d %%, PSRAM %u o\n", (int)D.width(), (int)D.height(),
+      (int)M5.Power.getBatteryLevel(), (unsigned)ESP.getPsramSize());
   if (D.width() < D.height()) D.setRotation(D.getRotation() ^ 1);  // paysage 960x540
   render(epd_mode_t::epd_quality);                                 // écran "Connexion..."
   refreshAll(epd_mode_t::epd_quality);
@@ -495,6 +523,7 @@ void loop() {
   if (t.isPressed()) lastActivity = millis();
   if (t.wasClicked()) {
     lastActivity = millis();
+    LOG("[touch] %d,%d\n", (int)t.x, (int)t.y);
     onTap(t.x, t.y);
   }
 

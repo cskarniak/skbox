@@ -20,7 +20,7 @@ Les données viennent d'un seul appel : `GET /api/display/summary` (module `apps
 ## Installation
 
 1. Installer [PlatformIO](https://platformio.org/) (extension VS Code ou `pip install platformio`).
-2. `cp include/config.example.h include/config.h`, puis renseigner le Wi-Fi et l'URL de l'API (`http://<ip-skbox-mini>:3001`).
+2. `cp include/config.example.h include/config.h`, puis renseigner le Wi-Fi et l'URL de l'API (`http://skbox.lan.home` : sur skbox-mini l'API n'écoute qu'en local derrière nginx, et ce nom n'est résolu que par le DNS de skbox-mini, d'où `SKBOX_DNS`).
 3. Brancher le PaperS3 en USB-C, puis lancer `pio run -t upload` et `pio device monitor`.
 
 Renseigner `SENSOR_IDS` avec les ids skbox des capteurs Extérieur, Sous-sol et Séjour, séparés par des virgules et dans cet ordre. Les ids sont visibles dans Swagger (`/docs`, `GET /api/devices`). Pour ajouter un capteur plus tard, il suffit d'ajouter son id : il prendra le premier emplacement libre.
@@ -29,3 +29,4 @@ Renseigner `SENSOR_IDS` avec les ids skbox des capteurs Extérieur, Sous-sol et 
 
 - L'API skbox n'a pas d'authentification : le PaperS3 doit être sur le même réseau local que skbox-mini.
 - Si l'appareil ne démarre pas en mode téléversement, maintenir le bouton latéral pendant le branchement.
+- **Moniteur série sous macOS** : ouvrir le port (`pio device monitor` compris) active DTR/RTS, ce qui réinitialise l'ESP32-S3 en mode téléchargement (`boot:0x0 … waiting for download`). Pour relancer le firmware, éteindre/rallumer l'appareil avec le bouton latéral sans le maintenir. Les journaux `[wifi]`, `[http]`, `[veille]`… ne sont donc lisibles que si le port reste ouvert pendant ce redémarrage.
