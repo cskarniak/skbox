@@ -85,6 +85,8 @@ static int page = P_HOME;
 // Vrai de la mise en veille jusqu'au réveil par toucher (y compris pendant les rafraîchissements
 // périodiques) : l'en-tête l'indique, pour savoir que le prochain toucher ne fera que réveiller.
 static bool asleep = false;
+static bool pendingRefresh = false;  // rechargement différé après un réveil par toucher
+static uint32_t wakeAt = 0;
 
 static uint32_t confirmStopUntil = 0;  // fenêtre de confirmation de l'arrêt de la régulation
 static uint32_t lastActivity = 0;
@@ -185,10 +187,19 @@ static void beepError() { M5.Speaker.tone(330, 350); }
 
 // ---------------------------------------------------------------- Réseau
 
-static bool wifiUp() {
-  if (WiFi.status() == WL_CONNECTED) return true;
+static bool wifiStarted = false;
+
+// Lance la connexion sans attendre (au réveil), pour qu'elle soit prête au premier toucher.
+static void wifiStart() {
+  if (wifiStarted || WiFi.status() == WL_CONNECTED) return;
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
+  wifiStarted = true;
+}
+
+static bool wifiUp() {
+  if (WiFi.status() == WL_CONNECTED) return true;
+  wifiStart();
   uint32_t start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - start < 12000) delay(100);
   if (WiFi.status() != WL_CONNECTED) {
@@ -212,6 +223,7 @@ static bool wifiUp() {
 static void wifiDown() {
   WiFi.disconnect(true);
   WiFi.mode(WIFI_OFF);
+  wifiStarted = false;
 }
 
 // Retourne le code HTTP, ou -1 si le Wi-Fi ou la connexion échoue.
@@ -519,6 +531,26 @@ static void render(epd_mode_t mode) {
   D.display();
 }
 
+// Même rendu, mais seule la bande [y, y+h) du panneau chaudière est envoyée à l'écran : bien plus
+// rapide qu'un rafraîchissement complet quand un seul rang de boutons change.
+static void renderBand(int y, int h) {
+  buttons.clear();
+  D.setEpdMode(epd_mode_t::epd_fast);
+  D.startWrite();
+  D.fillScreen(C_WHITE);
+  drawHeader();
+  drawSensors();
+  drawBoiler();
+  D.endWrite();
+  D.display(576, y, 368, h);
+}
+
+static const Button* findButton(Action a) {
+  for (const Button& b : buttons)
+    if (b.action == a) return &b;
+  return nullptr;
+}
+
 static bool refreshAll(epd_mode_t mode) {
   bool ok = fetchSummary();
   render(mode);
@@ -531,7 +563,7 @@ static void command(const char* method, const char* path, const String& body) {
   int code = httpCall(method, path, body, nullptr);
   if (code >= 200 && code < 300) beepOk();
   else beepError();
-  refreshAll(epd_mode_t::epd_text);
+  refreshAll(epd_mode_t::epd_fast);
 }
 
 // ---------------------------------------------------------------- Actions
@@ -556,11 +588,11 @@ static void onTap(int tx, int ty) {
       case A_PAGE:
         if (b.arg == page) break;
         page = b.arg;
-        render(epd_mode_t::epd_quality);  // changement complet d'écran : rendu propre sans rémanence
+        render(epd_mode_t::epd_text);  // tout l'écran change : mode net, plus rapide que "quality"
         break;
       case A_DURATION:
         durationIndex = b.arg;
-        render(epd_mode_t::epd_fast);
+        renderBand(b.y, b.h);
         break;
       case A_BOOST: {
         flashButton(b);
@@ -582,7 +614,7 @@ static void onTap(int tx, int ty) {
           command("PUT", "/api/boiler/enabled", "{\"enabled\":false}");
         } else {
           confirmStopUntil = millis() + 5000;
-          render(epd_mode_t::epd_fast);
+          renderBand(b.y, b.h);
         }
         break;
     }
@@ -627,11 +659,17 @@ static void goToSleep() {
     lastActivity = millis() - IDLE_S * 1000UL;
   } else {
     // Réveil par toucher : le premier appui sert seulement à réveiller.
+    // Retour immédiat (petit bip + « en veille » effacé), Wi-Fi relancé en arrière-plan ; les
+    // données trop anciennes sont rechargées par loop() dès que le Wi-Fi est prêt, sans bloquer
+    // les touchers entre-temps.
+    M5.Speaker.tone(1500, 15);
+    wifiStart();
     waitTouchRelease();
     lastActivity = millis();
+    wakeAt = millis();
     asleep = false;
-    if (millis() - lastFetch > 60000UL) refreshAll(epd_mode_t::epd_text);
-    else updateStatusLine();
+    updateStatusLine();
+    pendingRefresh = millis() - lastFetch > 60000UL;
   }
 }
 
@@ -654,7 +692,7 @@ void loop() {
   M5.update();
   auto t = M5.Touch.getDetail();
   if (t.isPressed()) lastActivity = millis();
-  if (t.wasClicked()) {
+  if (t.wasPressed()) {  // réagir dès l'appui, sans attendre que le doigt se lève
     lastActivity = millis();
     LOG("[touch] %d,%d\n", (int)t.x, (int)t.y);
     onTap(t.x, t.y);
@@ -662,7 +700,14 @@ void loop() {
 
   if (confirmStopUntil && millis() >= confirmStopUntil) {
     confirmStopUntil = 0;
-    render(epd_mode_t::epd_fast);
+    const Button* tb = findButton(A_TOGGLE);
+    if (tb) renderBand(tb->y, tb->h);
+    else render(epd_mode_t::epd_fast);
+  }
+
+  if (pendingRefresh && (WiFi.status() == WL_CONNECTED || millis() - wakeAt > 12000UL)) {
+    pendingRefresh = false;
+    refreshAll(epd_mode_t::epd_fast);
   }
 
   if (millis() - lastFetch >= REFRESH_S * 1000UL) refreshAll(epd_mode_t::epd_quality);
