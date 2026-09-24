@@ -90,6 +90,15 @@ export interface BoilerConfig {
   minOffMinutes: number;
 }
 
+// Origine du niveau actif : dérogation forcée, programme du jour (y compris hors créneau, où
+// le niveau par défaut s'applique), ou niveau par défaut faute de programme ce jour-là.
+export type BoilerMode = 'override' | 'program' | 'default';
+
+export interface BoilerNextChange {
+  at: string; // ISO
+  level: LevelKey;
+}
+
 export interface BoilerStatus {
   deviceId: string | null;
   deviceName: string | null;
@@ -104,10 +113,15 @@ export interface BoilerStatus {
   lastChangeAt: string | null;
   enabled: boolean;
   activeDateException: { id: string; name: string } | null;
+  mode: BoilerMode;
+  programName: string | null; // programme qui régit la journée (période dérogatoire comprise)
+  nextChange: BoilerNextChange | null; // prochain changement de niveau (ou fin de dérogation)
 }
 
 const STATE_KEY = 'boiler';
 const TICK_MS = 60_000;
+// Horizon de recherche du prochain changement : une semaine couvre tout planning hebdomadaire.
+const NEXT_CHANGE_HORIZON_MIN = 7 * 24 * 60;
 
 function toMinutes(t: string): number {
   const [h, m] = t.split(':').map(Number);
@@ -308,8 +322,10 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
       : null;
     const currentTemp = await this.readCurrentTemp(state);
 
+    const now = new Date();
     const activeOverride = this.activeOverride(state);
     const activeLevel = this.computeActiveLevel(state, activeOverride);
+    const program = this.programForDate(state, now);
 
     return {
       deviceId: state.deviceId,
@@ -324,7 +340,10 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
       override: activeOverride,
       lastChangeAt: state.lastChangeAt,
       enabled: state.enabled,
-      activeDateException: this.activeDateException(state, new Date()),
+      activeDateException: this.activeDateException(state, now),
+      mode: activeOverride ? 'override' : program ? 'program' : 'default',
+      programName: program?.name ?? null,
+      nextChange: this.nextChange(state, activeOverride, activeLevel, now),
     };
   }
 
@@ -405,14 +424,42 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
     return match ? { id: match.id, name: match.name } : null;
   }
 
-  private levelFromProgram(state: BoilerState, now: Date): LevelKey | null {
+  private programForDate(state: BoilerState, now: Date): BoilerProgram | null {
     const today = this.todayDateString(now);
     const exception = state.dateExceptions.find((ex) => ex.startDate <= today && today <= ex.endDate);
     // Une période dérogatoire (vacances...) remplace le planning hebdomadaire habituel tant
     // qu'elle est active, plutôt que de s'y ajouter.
     const programId = exception ? exception.programId : state.dayPrograms[(now.getDay() + 6) % 7]; // JS: 0=dimanche -> 0=lundi..6=dimanche
     if (!programId) return null;
-    const program = state.programs.find((p) => p.id === programId);
+    return state.programs.find((p) => p.id === programId) ?? null;
+  }
+
+  // Dérogation active : le changement a lieu à son expiration, vers le niveau du planning à
+  // ce moment-là. Sinon on avance minute par minute jusqu'au premier niveau différent : plus
+  // simple et plus sûr que de raisonner sur les bornes de créneaux (minuit, périodes
+  // dérogatoires, jours sans programme).
+  private nextChange(
+    state: BoilerState,
+    activeOverride: BoilerOverride | null,
+    activeLevel: LevelKey,
+    now: Date,
+  ): BoilerNextChange | null {
+    if (activeOverride) {
+      const until = new Date(activeOverride.until);
+      return { at: until.toISOString(), level: this.levelFromProgram(state, until) ?? state.defaultLevel };
+    }
+    const t = new Date(now);
+    t.setSeconds(0, 0);
+    for (let i = 0; i < NEXT_CHANGE_HORIZON_MIN; i++) {
+      t.setMinutes(t.getMinutes() + 1);
+      const level = this.levelFromProgram(state, t) ?? state.defaultLevel;
+      if (level !== activeLevel) return { at: t.toISOString(), level };
+    }
+    return null;
+  }
+
+  private levelFromProgram(state: BoilerState, now: Date): LevelKey | null {
+    const program = this.programForDate(state, now);
     if (!program) return null;
 
     const current = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;

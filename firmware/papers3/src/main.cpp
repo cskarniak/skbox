@@ -42,6 +42,9 @@ struct Boiler {
   String activeLevel, activeLabel, exception;
   bool hasOverride = false;
   String overrideLabel, overrideUntil;
+  String mode, programName;  // mode : "override" | "program" | "default"
+  bool hasNext = false;
+  String nextDay, nextTime, nextLabel;  // nextDay : "" (aujourd'hui), "demain" ou "sam."
   float targetTemp = NAN, currentTemp = NAN;
 };
 
@@ -255,6 +258,12 @@ static bool fetchSummary() {
   boiler.hasOverride = !b["override"].isNull();
   boiler.overrideLabel = (const char*)(b["override"]["label"] | "");
   boiler.overrideUntil = (const char*)(b["override"]["until"] | "");
+  boiler.mode = (const char*)(b["mode"] | "");
+  boiler.programName = (const char*)(b["programName"] | "");
+  boiler.hasNext = !b["next"].isNull();
+  boiler.nextDay = (const char*)(b["next"]["day"] | "");
+  boiler.nextTime = (const char*)(b["next"]["time"] | "");
+  boiler.nextLabel = (const char*)(b["next"]["label"] | "");
 
   updatedAt = (const char*)(doc["localTime"] | "");
   updatedDate = (const char*)(doc["localDate"] | "");
@@ -342,24 +351,49 @@ static void drawBoiler() {
   int tw = bigTemp(boiler.currentTemp, x, py + 54);
   text("cible " + fmtTemp(boiler.targetTemp) + "°", x + tw + 12, py + 72, &fonts::efontJA_24, textdatum_t::middle_left);
 
-  // Mode actif (2 lignes)
-  String l1, l2;
-  if (boiler.hasOverride) {
-    l1 = "Dérogation " + boiler.overrideLabel;
+  // Mode actif : badge (FORCÉ / PROGRAMME / DÉFAUT) + niveau, puis origine, puis prochain changement.
+  String tag, l2, l3;
+  bool forced = boiler.hasOverride || boiler.mode == "override";
+  if (!boiler.enabled) {
+    tag = "ARRÊT";
+    l2 = "Régulation arrêtée";
+  } else if (forced) {
+    tag = "FORCÉ";
     l2 = "jusqu'à " + boiler.overrideUntil;
-  } else if (boiler.exception.length()) {
-    l1 = "Période : " + boiler.exception;
-    l2 = "niveau " + boiler.activeLabel;
-  } else if (boiler.scheduleActive) {
-    l1 = "Programme";
-    l2 = "niveau " + boiler.activeLabel;
+    if (boiler.hasNext) l3 = "ensuite " + boiler.nextLabel + " (programme)";
+  } else if (boiler.programName.length()) {
+    tag = "PROGRAMME";
+    l2 = boiler.exception.length() ? boiler.exception + " : " + boiler.programName : boiler.programName;
   } else {
-    l1 = "Niveau par défaut";
-    l2 = boiler.activeLabel;
+    tag = "DÉFAUT";
+    l2 = "aucun programme aujourd'hui";
+  }
+  if (boiler.enabled && !forced && boiler.hasNext) {
+    String when = boiler.nextDay.length() ? boiler.nextDay + " " + boiler.nextTime : "à " + boiler.nextTime;
+    l3 = "puis " + boiler.nextLabel + " " + when;
   }
   D.setFont(&fonts::efontJA_24);
-  text(fit(l1, w), x, py + 100, &fonts::efontJA_24, textdatum_t::top_left);
-  text(fit(l2, w), x, py + 126, &fonts::efontJA_24, textdatum_t::top_left);
+  D.setTextSize(1);
+  const int ty = py + 96, th = 30;
+  int tagW = D.textWidth(tag.c_str()) + 16;
+  if (forced || !boiler.enabled) {
+    D.fillRoundRect(x, ty, tagW, th, 6, C_BLACK);
+    text(tag, x + tagW / 2, ty + th / 2, &fonts::efontJA_24, textdatum_t::middle_center, C_WHITE);
+  } else {
+    D.drawRoundRect(x, ty, tagW, th, 6, C_BLACK);
+    D.drawRoundRect(x + 1, ty + 1, tagW - 2, th - 2, 5, C_BLACK);
+    text(tag, x + tagW / 2, ty + th / 2, &fonts::efontJA_24, textdatum_t::middle_center);
+  }
+  if (boiler.enabled) {
+    D.setFont(&fonts::efontJA_24);
+    text(fit(boiler.activeLabel, w - tagW - 12), x + tagW + 12, ty + th / 2, &fonts::efontJA_24, textdatum_t::middle_left);
+  }
+  D.setFont(&fonts::efontJA_24);
+  text(fit(l2, w), x, py + 130, &fonts::efontJA_24, textdatum_t::top_left);
+  if (l3.length()) {
+    D.setFont(&fonts::efontJA_16);
+    text(fit(l3, w), x, py + 155, &fonts::efontJA_16, textdatum_t::top_left);
+  }
   if (!boiler.relayOnline) text("Relais hors ligne !", px + pw - 16, py + 172, &fonts::efontJA_16, textdatum_t::top_right);
 
   // Durée de dérogation

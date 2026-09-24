@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { PrismaClient } from '@skbox/db';
-import { BoilerService, LEVEL_LABELS, LevelKey } from '../boiler/boiler.service';
+import { BoilerMode, BoilerService, LEVEL_LABELS, LevelKey } from '../boiler/boiler.service';
 
 export interface DisplayTemperature {
   id: string;
@@ -36,6 +36,10 @@ export interface DisplaySummary {
     scheduleActive: boolean;
     exception: string | null; // nom de la période dérogatoire active
     override: { level: LevelKey; label: string; until: string } | null; // until = "HH:MM"
+    mode: BoilerMode;
+    programName: string | null;
+    // day = "" (aujourd'hui), "demain" ou jour abrégé ("sam.") ; time = "HH:MM"
+    next: { day: string; time: string; level: LevelKey; label: string } | null;
   };
   levels: DisplayLevel[];
 }
@@ -49,6 +53,17 @@ function hhmm(date: Date): string {
 
 function shortDate(date: Date): string {
   return new Intl.DateTimeFormat('fr-FR', { timeZone: TZ, weekday: 'short', day: 'numeric', month: 'short' }).format(date);
+}
+
+function dayKey(date: Date): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+}
+
+// "" pour aujourd'hui, "demain", sinon le jour abrégé : assez pour un horizon d'une semaine.
+function relativeDay(date: Date, now: Date): string {
+  if (dayKey(date) === dayKey(now)) return '';
+  if (dayKey(date) === dayKey(new Date(now.getTime() + 86_400_000))) return 'demain';
+  return new Intl.DateTimeFormat('fr-FR', { timeZone: TZ, weekday: 'short' }).format(date);
 }
 
 function num(value: unknown): number | null {
@@ -91,6 +106,16 @@ export class DisplayService {
               level: status.override.level,
               label: LEVEL_LABELS[status.override.level],
               until: hhmm(new Date(status.override.until)),
+            }
+          : null,
+        mode: status.mode,
+        programName: status.programName,
+        next: status.nextChange
+          ? {
+              day: relativeDay(new Date(status.nextChange.at), now),
+              time: hhmm(new Date(status.nextChange.at)),
+              level: status.nextChange.level,
+              label: LEVEL_LABELS[status.nextChange.level],
             }
           : null,
       },

@@ -255,4 +255,50 @@ describe('BoilerService', () => {
       expect(mqtt.publish).not.toHaveBeenCalled();
     });
   });
+
+  describe('mode et prochain changement', () => {
+    const dayProgram = {
+      id: 'p1',
+      name: 'Mercredi',
+      slots: [
+        { from: '06:00', to: '08:00', level: 'confort' as LevelKey },
+        { from: '12:00', to: '14:00', level: 'confort' as LevelKey },
+      ],
+    };
+    const config = () => baseConfig({ defaultLevel: 'eco', programs: [dayProgram], dayPrograms: { 2: 'p1' } });
+
+    it('indique le programme du jour et le prochain créneau, même hors créneau', async () => {
+      await service.setConfig(config()); // mercredi 10:00, entre deux créneaux
+      const status = await service.getStatus();
+
+      expect(status).toMatchObject({ mode: 'program', programName: 'Mercredi', activeLevel: 'eco' });
+      expect(status.nextChange).toEqual({ at: new Date('2026-07-15T12:00:00').toISOString(), level: 'confort' });
+    });
+
+    it('trouve le prochain changement un autre jour', async () => {
+      vi.setSystemTime(new Date('2026-07-15T15:00:00')); // après le dernier créneau du mercredi
+      await service.setConfig(config());
+
+      expect((await service.getStatus()).nextChange).toEqual({
+        at: new Date('2026-07-22T06:00:00').toISOString(),
+        level: 'confort',
+      });
+    });
+
+    it("en dérogation, le changement a lieu à son expiration vers le niveau du planning", async () => {
+      await service.setConfig(config());
+      await service.setBoost('confort_plus', 150); // jusqu'à 12:30, en plein créneau confort
+      const status = await service.getStatus();
+
+      expect(status.mode).toBe('override');
+      expect(status.nextChange).toEqual({ at: new Date('2026-07-15T12:30:00').toISOString(), level: 'confort' });
+    });
+
+    it('sans programme : niveau par défaut et aucun changement prévu', async () => {
+      await service.setConfig(baseConfig());
+      const status = await service.getStatus();
+
+      expect(status).toMatchObject({ mode: 'default', programName: null, nextChange: null });
+    });
+  });
 });

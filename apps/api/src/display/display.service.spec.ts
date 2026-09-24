@@ -36,6 +36,9 @@ function makeService() {
       lastChangeAt: null,
       enabled: true,
       activeDateException: null,
+      mode: 'override',
+      programName: 'Semaine',
+      nextChange: { at: new Date(Date.now() + 3_600_000).toISOString(), level: 'eco' },
     })),
     getConfig: vi.fn(async () => ({
       levels: { eco: 17, confort: 19, confort_plus: 21, vacances: 12, nuit: 16 },
@@ -67,6 +70,8 @@ describe('DisplayService', () => {
       override: { level: 'confort_plus', label: 'Confort+' },
     });
     expect(summary.boiler.override!.until).toMatch(/^\d{2}:\d{2}$/);
+    expect(summary.boiler).toMatchObject({ mode: 'override', programName: 'Semaine' });
+    expect(summary.boiler.next).toMatchObject({ level: 'eco', label: 'Éco', time: summary.boiler.override!.until });
     expect(summary.levels).toHaveLength(5);
     expect(summary.levels.find((l) => l.key === 'eco')).toEqual({ key: 'eco', label: 'Éco', temp: 17 });
   });
