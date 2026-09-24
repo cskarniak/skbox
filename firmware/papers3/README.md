@@ -13,6 +13,7 @@
   - choisir une durée (1 h, 2 h, 4 h ou 8 h), puis toucher un niveau : `POST /api/boiler/boost` ;
   - *Annuler dérogation* : `DELETE /api/boiler/boost` ;
   - *Arrêter la régulation* : il faut toucher deux fois en moins de 5 s, puis `PUT /api/boiler/enabled`. *Reprendre la régulation* fonctionne en un seul toucher.
+- **Sons** (buzzer intégré, volume `BEEP_VOLUME`, 0 = muet) : bip court à chaque bouton touché (un toucher hors bouton reste silencieux, pratique pour vérifier le calage) ; deux notes montantes quand skbox accepte une commande ; note grave en cas d'erreur (commande refusée, skbox ou Wi-Fi injoignable, échec d'« Actualiser »).
 - **Veille** : après `IDLE_S` secondes sans toucher, le Wi-Fi est coupé et l'appareil passe en *light sleep*. L'en-tête affiche alors « en veille ». Il se réveille au toucher (ce premier toucher sert seulement à réveiller l'écran) ou toutes les `REFRESH_S` secondes pour se rafraîchir.
 
 Les données viennent d'un seul appel : `GET /api/display/summary` (module `apps/api/src/display`).

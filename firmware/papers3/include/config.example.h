@@ -26,3 +26,6 @@
 // Durées de dérogation proposées (minutes) et choix par défaut (index).
 #define BOOST_DURATIONS {60, 120, 240, 480}
 #define BOOST_DEFAULT_INDEX 1
+
+// Volume du buzzer intégré (bips de toucher, confirmation, erreur) : 0 = muet ... 255.
+#define BEEP_VOLUME 128

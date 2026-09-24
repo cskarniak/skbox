@@ -19,6 +19,10 @@
 #error "Copier include/config.example.h en include/config.h et l'adapter"
 #endif
 
+#ifndef BEEP_VOLUME
+#define BEEP_VOLUME 128  // buzzer intégré (GPIO21) : 0 = muet ... 255
+#endif
+
 #define D M5.Display
 // Journal de diagnostic sur l'USB série (pio device monitor, 115200 bauds).
 #define LOG(...) Serial.printf(__VA_ARGS__)
@@ -165,6 +169,19 @@ static void drawButton(int x, int y, int w, int h, const String& line1, const St
   }
   addButton(x, y, w, h, a, arg);
 }
+
+// ---------------------------------------------------------------- Sons
+// Buzzer passif : tone() est non bloquant, d'où les petites attentes entre deux notes.
+
+static void beepClick() { M5.Speaker.tone(2200, 25); }
+
+static void beepOk() {
+  M5.Speaker.tone(1400, 60);
+  delay(80);
+  M5.Speaker.tone(2100, 90);
+}
+
+static void beepError() { M5.Speaker.tone(330, 350); }
 
 // ---------------------------------------------------------------- Réseau
 
@@ -490,9 +507,19 @@ static void render(epd_mode_t mode) {
   D.display();
 }
 
-static void refreshAll(epd_mode_t mode) {
-  fetchSummary();
+static bool refreshAll(epd_mode_t mode) {
+  bool ok = fetchSummary();
   render(mode);
+  return ok;
+}
+
+// Commande de la chaudière depuis l'écran : son de confirmation ou d'erreur selon la réponse de
+// skbox, puis rechargement pour afficher le nouvel état.
+static void command(const char* method, const char* path, const String& body) {
+  int code = httpCall(method, path, body, nullptr);
+  if (code >= 200 && code < 300) beepOk();
+  else beepError();
+  refreshAll(epd_mode_t::epd_text);
 }
 
 // ---------------------------------------------------------------- Actions
@@ -507,11 +534,12 @@ static void onTap(int tx, int ty) {
   for (const Button& b : buttons) {
     if (tx < b.x || tx >= b.x + b.w || ty < b.y || ty >= b.y + b.h) continue;
 
+    beepClick();
     if (b.action != A_TOGGLE || !boiler.enabled) confirmStopUntil = 0;
     switch (b.action) {
       case A_REFRESH:
         flashButton(b);
-        refreshAll(epd_mode_t::epd_quality);
+        if (!refreshAll(epd_mode_t::epd_quality)) beepError();
         break;
       case A_PAGE:
         if (b.arg == page) break;
@@ -525,25 +553,21 @@ static void onTap(int tx, int ty) {
       case A_BOOST: {
         flashButton(b);
         String body = "{\"level\":\"" + levels[b.arg].key + "\",\"minutes\":" + String(durations[durationIndex]) + "}";
-        httpCall("POST", "/api/boiler/boost", body, nullptr);
-        refreshAll(epd_mode_t::epd_text);
+        command("POST", "/api/boiler/boost", body);
         break;
       }
       case A_CANCEL:
         flashButton(b);
-        httpCall("DELETE", "/api/boiler/boost", "", nullptr);
-        refreshAll(epd_mode_t::epd_text);
+        command("DELETE", "/api/boiler/boost", "");
         break;
       case A_TOGGLE:
         if (!boiler.enabled) {
           flashButton(b);
-          httpCall("PUT", "/api/boiler/enabled", "{\"enabled\":true}", nullptr);
-          refreshAll(epd_mode_t::epd_text);
+          command("PUT", "/api/boiler/enabled", "{\"enabled\":true}");
         } else if (confirmStopUntil && millis() < confirmStopUntil) {
           confirmStopUntil = 0;
           flashButton(b);
-          httpCall("PUT", "/api/boiler/enabled", "{\"enabled\":false}", nullptr);
-          refreshAll(epd_mode_t::epd_text);
+          command("PUT", "/api/boiler/enabled", "{\"enabled\":false}");
         } else {
           confirmStopUntil = millis() + 5000;
           render(epd_mode_t::epd_fast);
@@ -577,6 +601,7 @@ static void goToSleep() {
   }
   wifiDown();
   D.waitDisplay();
+  while (M5.Speaker.isPlaying()) delay(5);  // laisser finir un son avant de couper
   uint32_t since = (millis() - lastFetch) / 1000;
   uint32_t wait = since >= REFRESH_S ? 1 : REFRESH_S - since;
   LOG("[veille] light sleep %lu s (batterie %d %%)\n", (unsigned long)wait, (int)M5.Power.getBatteryLevel());
@@ -603,6 +628,7 @@ static void goToSleep() {
 void setup() {
   auto cfg = M5.config();
   M5.begin(cfg);
+  M5.Speaker.setVolume(BEEP_VOLUME);
   Serial.begin(115200);
   LOG("[boot] skbox PaperS3, écran %dx%d, batterie %d %%, PSRAM %u o\n", (int)D.width(), (int)D.height(),
       (int)M5.Power.getBatteryLevel(), (unsigned)ESP.getPsramSize());
