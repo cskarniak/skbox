@@ -416,16 +416,29 @@ static void drawHeader() {
   D.drawFastHLine(0, 60, 960, C_BLACK);
 }
 
+// Page Maison : grille de 4 colonnes x 3 lignes de cartes identiques. Colonnes 1-2 : températures,
+// colonnes 3-4 : prises et lumières. Remplissage colonne par colonne.
+static const int CARD_X0 = 16, CARD_Y0 = 72, CARD_W = 224, CARD_H = 146, CARD_GAP = 10;
+
+static void cardPos(int col, int row, int& x, int& y) {
+  x = CARD_X0 + col * (CARD_W + CARD_GAP);
+  y = CARD_Y0 + row * (CARD_H + CARD_GAP);
+}
+
+static void drawFreeCard(int x, int y) {
+  D.drawRoundRect(x, y, CARD_W, CARD_H, 10, C_LIGHTGRAY);
+  text("libre", x + CARD_W / 2, y + CARD_H / 2, &fonts::efontJA_16, textdatum_t::middle_center, C_LIGHTGRAY);
+}
+
 static void drawSensors() {
-  const int x0 = 16, y0 = 72, cw = 264, ch = 146, gap = 10;
+  const int cw = CARD_W, ch = CARD_H;
 
   for (int i = 0; i < SENSOR_SLOTS; ++i) {
-    int x = x0 + (i / 3) * (cw + gap);
-    int y = y0 + (i % 3) * (ch + gap);
+    int x, y;
+    cardPos(i / 3, i % 3, x, y);
 
     if ((size_t)i >= sensors.size()) {  // emplacement réservé pour un ajout ultérieur
-      D.drawRoundRect(x, y, cw, ch, 10, C_LIGHTGRAY);
-      text("libre", x + cw / 2, y + ch / 2, &fonts::efontJA_16, textdatum_t::middle_center, C_LIGHTGRAY);
+      drawFreeCard(x, y);
       continue;
     }
 
@@ -448,49 +461,41 @@ static void drawSensors() {
   }
 }
 
-// Panneau « Prises et lumières » de la page Maison : une ligne-bouton par appareil, toucher =
-// allumer / éteindre. Pastille pleine « allumé », pastille creuse « éteint ».
-static const int SW_X = 576, SW_Y = 70, SW_W = 368, SW_H = 462;
-static const int SW_ROW_Y0 = SW_Y + 50, SW_ROW_H = 64, SW_ROW_GAP = 8, SW_MAX = 5;
+// Prises et lumières (colonnes 3-4 de la page Maison), même format que les températures.
+// Carte entière = bouton : allumée = fond noir, texte blanc ; éteinte = fond blanc.
+static const int SW_SLOTS = 6;
+static const int SW_X = CARD_X0 + 2 * (CARD_W + CARD_GAP), SW_Y = CARD_Y0;
+static const int SW_W = 2 * CARD_W + CARD_GAP, SW_H = 3 * CARD_H + 2 * CARD_GAP;
 
 static void drawSwitches() {
-  const int x = SW_X + 16, w = SW_W - 32;
-  D.drawRoundRect(SW_X, SW_Y, SW_W, SW_H, 12, C_BLACK);
-  text("Prises et lumières", x, SW_Y + 12, &fonts::efontJA_24, textdatum_t::top_left);
-
-  if (switches.empty()) {
-    text("Aucune (SWITCH_IDS)", SW_X + SW_W / 2, SW_Y + SW_H / 2, &fonts::efontJA_24, textdatum_t::middle_center, C_GRAY);
-    return;
-  }
-  for (size_t i = 0; i < switches.size() && i < (size_t)SW_MAX; ++i) {
-    const Switch& sw = switches[i];
-    int y = SW_ROW_Y0 + i * (SW_ROW_H + SW_ROW_GAP);
-    uint16_t c = sw.online ? C_BLACK : C_GRAY;
-    D.drawRoundRect(x, y, w, SW_ROW_H, 10, c);
-
-    const int pw = 72, ph = 32, pxl = x + w - 12 - pw, pyl = y + (SW_ROW_H - ph) / 2;
-    if (!sw.online) {
-      text("hors ligne", x + w - 12, y + SW_ROW_H / 2, &fonts::efontJA_16, textdatum_t::middle_right, C_GRAY);
-    } else if (sw.on) {
-      D.fillRoundRect(pxl, pyl, pw, ph, ph / 2, C_BLACK);
-      text("allumé", pxl + pw / 2, pyl + ph / 2, &fonts::efontJA_16, textdatum_t::middle_center, C_WHITE);
-    } else {
-      D.drawRoundRect(pxl, pyl, pw, ph, ph / 2, C_BLACK);
-      D.drawRoundRect(pxl + 1, pyl + 1, pw - 2, ph - 2, ph / 2 - 1, C_BLACK);
-      text("éteint", pxl + pw / 2, pyl + ph / 2, &fonts::efontJA_16, textdatum_t::middle_center);
+  const int cw = CARD_W, ch = CARD_H;
+  for (int i = 0; i < SW_SLOTS; ++i) {
+    int x, y;
+    cardPos(2 + i / 3, i % 3, x, y);
+    if ((size_t)i >= switches.size()) {
+      drawFreeCard(x, y);
+      continue;
     }
 
-    const int nameW = pxl - x - 24;
+    const Switch& sw = switches[i];
+    bool lit = sw.online && sw.on;
+    uint16_t fg = lit ? C_WHITE : sw.online ? C_BLACK : C_GRAY;
+    if (lit) {
+      D.fillRoundRect(x, y, cw, ch, 10, C_BLACK);
+    } else {
+      D.drawRoundRect(x, y, cw, ch, 10, fg);
+      D.drawRoundRect(x + 1, y + 1, cw - 2, ch - 2, 9, fg);
+    }
     D.setFont(&fonts::efontJA_24);
     D.setTextSize(1);
+    text(fit(sw.name, cw - 24), x + 12, y + 10, &fonts::efontJA_24, textdatum_t::top_left, fg);
+    String state = !sw.online ? "hors ligne" : sw.on ? "allumé" : "éteint";
+    text(state, x + 12, y + 58, &fonts::efontJA_24, textdatum_t::top_left, fg, sw.online ? 1.5f : 1.0f);
     if (sw.room.length()) {
-      text(fit(sw.name, nameW), x + 12, y + 8, &fonts::efontJA_24, textdatum_t::top_left, c);
       D.setFont(&fonts::efontJA_16);
-      text(fit(sw.room, nameW), x + 12, y + SW_ROW_H - 8, &fonts::efontJA_16, textdatum_t::bottom_left, C_GRAY);
-    } else {
-      text(fit(sw.name, nameW), x + 12, y + SW_ROW_H / 2, &fonts::efontJA_24, textdatum_t::middle_left, c);
+      text(fit(sw.room, cw - 24), x + cw - 12, y + ch - 10, &fonts::efontJA_16, textdatum_t::bottom_right, fg);
     }
-    addButton(x, y, w, SW_ROW_H, A_SWITCH, (int)i);
+    addButton(x, y, cw, ch, A_SWITCH, i);
   }
 }
 

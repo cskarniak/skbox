@@ -9,8 +9,9 @@
 Quatre pages, choisies par les onglets de l'en-tête. L'en-tête affiche aussi la date, l'heure de la dernière mise à jour, la batterie (niveau, tension, charge) et « en veille ».
 
 - **Maison** :
-  - *Températures* : 6 emplacements (2 colonnes × 3). Actuellement Extérieur, Sous-sol et Séjour dans la colonne de gauche ; les 3 emplacements de droite sont réservés pour des ajouts ultérieurs. Un capteur hors ligne apparaît en gris avec l'heure de son dernier message. Le niveau de pile s'affiche quand il passe sous 20 %.
-  - *Prises et lumières* (`SWITCH_IDS`, 5 au plus, liste explicite : ni ventilation ni relais de chaudière) : un toucher allume ou éteint (`POST /api/devices/:id/command`). L'état s'affiche tout de suite, puis il est relu 3 s plus tard pour vérifier que l'appareil a bien obéi.
+  Grille de 4 colonnes × 3 cartes, remplie colonne par colonne. Libellés : 16 caractères environ par carte, au-delà ils sont tronqués par « ... ».
+  - *Températures* (colonnes 1-2, `SENSOR_IDS`, 6 au plus) : actuellement Extérieur, Sous-sol et Séjour dans la 1re colonne. Un capteur hors ligne apparaît en gris avec l'heure de son dernier message. Le niveau de pile s'affiche quand il passe sous 20 %.
+  - *Prises et lumières* (colonnes 3-4, `SWITCH_IDS`, 6 au plus, liste explicite : ni ventilation ni relais de chaudière) : carte noire quand c'est allumé, blanche quand c'est éteint, grise quand l'appareil est hors ligne. Un toucher sur la carte allume ou éteint (`POST /api/devices/:id/command`) ; l'état s'affiche tout de suite, puis il est relu 3 s plus tard.
 - **Chaudière** (plein écran) :
   - *État* : température mesurée et cible, état du brûleur (badge *CHAUFFE* quand le brûleur est commandé, sinon « ne chauffe pas » en texte simple ; ce n'est pas un bouton), mode (*FORCÉ* / *PROGRAMME* / *DÉFAUT* / *ARRÊT*) avec le programme et le prochain changement, alerte si le relais est hors ligne.
   - *Pilotage* :

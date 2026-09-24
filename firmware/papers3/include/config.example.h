@@ -20,7 +20,7 @@
 #define SENSOR_IDS "id_exterieur,id_sous_sol,id_sejour"
 
 // --- Prises et lumières (page Maison) ------------------------------------
-// Ids skbox séparés par des virgules, dans l'ordre d'affichage (5 au plus). Liste explicite
+// Ids skbox séparés par des virgules, dans l'ordre d'affichage (6 au plus). Liste explicite
 // uniquement : ne pas y mettre la ventilation ni le relais de la chaudière.
 #define SWITCH_IDS "id_lampe,id_prise"
 
