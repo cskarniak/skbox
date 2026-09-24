@@ -56,7 +56,7 @@ static String updatedAt, updatedDate, errorMsg;
 
 // ---------------------------------------------------------------- UI
 
-enum Action { A_REFRESH, A_DURATION, A_BOOST, A_CANCEL, A_TOGGLE };
+enum Action { A_REFRESH, A_DURATION, A_BOOST, A_CANCEL, A_TOGGLE, A_PAGE };
 struct Button {
   int16_t x, y, w, h;
   Action action;
@@ -71,6 +71,12 @@ static int durationIndex = BOOST_DEFAULT_INDEX;
 // Emplacements de capteurs : 2 colonnes x 3 lignes, remplis colonne par colonne.
 // Les emplacements sans capteur restent réservés (cadre gris « libre »).
 static const int SENSOR_SLOTS = 6;
+
+// Pages, choisies par les onglets de l'en-tête. La page 2 est réservée au futur système
+// d'alarme : pour l'instant un simple écran d'attente, sans appel réseau.
+enum Page { P_HOME, P_ALARM, N_PAGES };
+static const char* const PAGE_LABELS[N_PAGES] = {"Maison", "Alarme"};
+static int page = P_HOME;
 
 static uint32_t confirmStopUntil = 0;  // fenêtre de confirmation de l'arrêt de la régulation
 static uint32_t lastActivity = 0;
@@ -278,7 +284,10 @@ static bool fetchSummary() {
 // ---------------------------------------------------------------- Rendu
 
 static void drawHeader() {
-  text("skbox", 16, 30, &fonts::efontJA_24, textdatum_t::middle_left, C_BLACK, 1.5);
+  // Onglets (l'onglet courant est plein).
+  for (int i = 0; i < N_PAGES; ++i) {
+    drawButton(16 + i * 128, 8, 120, 44, PAGE_LABELS[i], "", i == page, false, A_PAGE, i);
+  }
 
   String middle;
   if (errorMsg.length()) middle = "! " + errorMsg;
@@ -431,13 +440,21 @@ static void drawBoiler() {
   drawButton(x, py + ph - 16 - 52, w, 52, label, "", confirming, false, A_TOGGLE);
 }
 
+static void drawAlarmPage() {
+  D.drawRoundRect(16, 72, 928, 460, 12, C_LIGHTGRAY);
+  text("Système d'alarme", 480, 270, &fonts::efontJA_24, textdatum_t::middle_center, C_GRAY, 1.5);
+  text("à venir", 480, 320, &fonts::efontJA_24, textdatum_t::middle_center, C_LIGHTGRAY);
+}
+
 static void render(epd_mode_t mode) {
   buttons.clear();
   D.setEpdMode(mode);
   D.startWrite();
   D.fillScreen(C_WHITE);
   drawHeader();
-  if (hasData) {
+  if (page == P_ALARM) {
+    drawAlarmPage();
+  } else if (hasData) {
     drawSensors();
     drawBoiler();
   } else {
@@ -471,6 +488,11 @@ static void onTap(int tx, int ty) {
       case A_REFRESH:
         flashButton(b);
         refreshAll(epd_mode_t::epd_quality);
+        break;
+      case A_PAGE:
+        if (b.arg == page) break;
+        page = b.arg;
+        render(epd_mode_t::epd_quality);  // changement complet d'écran : rendu propre sans rémanence
         break;
       case A_DURATION:
         durationIndex = b.arg;
@@ -519,6 +541,11 @@ static void waitTouchRelease() {
 }
 
 static void goToSleep() {
+  // En veille, l'écran reste figé : on y laisse la page principale, la plus utile d'un coup d'œil.
+  if (page != P_HOME) {
+    page = P_HOME;
+    render(epd_mode_t::epd_quality);
+  }
   wifiDown();
   D.waitDisplay();
   uint32_t since = (millis() - lastFetch) / 1000;
