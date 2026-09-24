@@ -237,8 +237,11 @@ static int httpCall(const char* method, const String& path, const String& body, 
 }
 
 static bool fetchSummary() {
-  String path = "/api/display/summary";
-  if (strlen(SENSOR_IDS)) path += "?devices=" + String(SENSOR_IDS);
+  // bat / mv / chg : ignorés par l'API, mais visibles dans le journal nginx de skbox-mini, ce qui
+  // permet de suivre la batterie à distance (le moniteur série est peu utilisable sous macOS).
+  String path = "/api/display/summary?bat=" + String((int)M5.Power.getBatteryLevel()) +
+                "&mv=" + String((int)M5.Power.getBatteryVoltage()) + "&chg=" + String((int)M5.Power.isCharging());
+  if (strlen(SENSOR_IDS)) path += "&devices=" + String(SENSOR_IDS);
   String body;
   if (httpCall("GET", path, "", &body) != 200) return false;
 
@@ -335,10 +338,19 @@ static void drawHeader() {
 
   drawStatusLine();
 
+  // Batterie sur deux lignes : niveau, puis tension et état du chargeur.
   int bat = M5.Power.getBatteryLevel();
-  String batTxt = bat >= 0 ? String(bat) + " %" : "";
-  if (M5.Power.isCharging() == m5::Power_Class::is_charging) batTxt += " (charge)";
-  text(batTxt, 780, 30, &fonts::efontJA_16, textdatum_t::middle_right);
+  int mv = M5.Power.getBatteryVoltage();
+  auto chg = M5.Power.isCharging();
+  String line2;
+  if (mv > 0) {
+    char vb[8];
+    snprintf(vb, sizeof(vb), "%d,%02d V", mv / 1000, (mv % 1000) / 10);
+    line2 = vb;
+  }
+  if (chg == m5::Power_Class::is_charging) line2 += " · charge";
+  text(bat >= 0 ? String(bat) + " %" : "? %", 780, 19, &fonts::efontJA_16, textdatum_t::middle_right);
+  text(line2, 780, 41, &fonts::efontJA_16, textdatum_t::middle_right);
 
   drawButton(796, 8, 148, 44, "Actualiser", "", false, false, A_REFRESH);
   D.drawFastHLine(0, 60, 960, C_BLACK);
