@@ -13,6 +13,8 @@
 #include <ArduinoJson.h>
 #include <esp_sleep.h>
 #include <lwip/dns.h>
+#include <Preferences.h>
+#include <esp_system.h>
 #include <vector>
 
 #if __has_include("config.h")
@@ -200,6 +202,33 @@ static void drawButton(int x, int y, int w, int h, const String& line1, const St
   addButton(x, y, w, h, a, arg);
 }
 
+// ---------------------------------------------------------------- Diagnostic
+// Étapes de la veille notées en mémoire non volatile (NVS), qui survit à une coupure
+// d'alimentation. Au démarrage suivant, la raison du reset et la dernière étape notée sont
+// jointes à chaque requête (&rst=&last=&boot=&wk=) : lisibles dans le journal nginx de
+// skbox-mini, sans moniteur série. Écriture seulement quand l'étape change (≈ 2 par cycle).
+enum Phase : uint8_t { PH_AWAKE = 1, PH_SLEEPING = 2, PH_WOKE_TIMER = 3, PH_WOKE_TOUCH = 4 };
+static Preferences diag;
+static uint8_t phase = 0, lastPhaseAtBoot = 0;
+static int resetReason = 0;
+static uint32_t bootCount = 0;
+static char lastWake = '-';  // t = minuterie, p = toucher (pression)
+
+static void setPhase(uint8_t p) {
+  if (p == phase) return;
+  phase = p;
+  diag.putUChar("phase", p);
+}
+
+static void diagBegin() {
+  diag.begin("diag", false);
+  lastPhaseAtBoot = diag.getUChar("phase", 0);
+  bootCount = diag.getUInt("boots", 0) + 1;
+  diag.putUInt("boots", bootCount);
+  resetReason = (int)esp_reset_reason();
+  setPhase(PH_AWAKE);
+}
+
 // ---------------------------------------------------------------- Sons
 // Buzzer passif : tone() est non bloquant, d'où les petites attentes entre deux notes.
 
@@ -296,6 +325,8 @@ static bool fetchSummaryOnce() {
   // permet de suivre la batterie à distance (le moniteur série est peu utilisable sous macOS).
   String path = "/api/display/summary?bat=" + String((int)M5.Power.getBatteryLevel()) +
                 "&mv=" + String((int)M5.Power.getBatteryVoltage()) + "&chg=" + String((int)M5.Power.isCharging());
+  path += "&rst=" + String(resetReason) + "&last=" + String((int)lastPhaseAtBoot) + "&boot=" + String(bootCount) +
+          "&wk=" + String(lastWake);
   if (strlen(SENSOR_IDS)) path += "&devices=" + String(SENSOR_IDS);
   if (strlen(SWITCH_IDS)) path += "&switches=" + String(SWITCH_IDS);
   String body;
@@ -797,7 +828,11 @@ static void goToSleep() {
   uint32_t wait = elapsed >= delayMs ? 1 : (delayMs - elapsed + 999) / 1000;
   LOG("[veille] light sleep %lu s (batterie %d %%)\n", (unsigned long)wait, (int)M5.Power.getBatteryLevel());
   Serial.flush();
+  setPhase(PH_SLEEPING);
   M5.Power.lightSleep((uint64_t)wait * 1000000ULL, true);
+  bool timerWake = esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER;
+  lastWake = timerWake ? 't' : 'p';
+  setPhase(timerWake ? PH_WOKE_TIMER : PH_WOKE_TOUCH);
 
   LOG("[veille] réveil, cause %d\n", (int)esp_sleep_get_wakeup_cause());
   if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) {
@@ -817,6 +852,7 @@ static void goToSleep() {
     asleep = false;
     updateStatusLine();
     pendingRefresh = millis() - lastFetch > 60000UL;
+    setPhase(PH_AWAKE);  // réveil par toucher entièrement traité
   }
 }
 
@@ -825,6 +861,7 @@ static void goToSleep() {
 void setup() {
   auto cfg = M5.config();
   M5.begin(cfg);
+  diagBegin();
   M5.Speaker.setVolume(BEEP_VOLUME);
   Serial.begin(115200);
   LOG("[boot] skbox PaperS3, écran %dx%d, batterie %d %%, PSRAM %u o\n", (int)D.width(), (int)D.height(),
