@@ -28,6 +28,19 @@
 #define SWITCH_IDS ""  // prises / lumières de la page Maison (ids skbox séparés par des virgules)
 #endif
 
+#ifndef NIGHT_REFRESH_S
+#define NIGHT_REFRESH_S 1800  // rafraîchissement la nuit (secondes)
+#endif
+#ifndef NIGHT_START_H
+#define NIGHT_START_H 22  // début de la nuit (heure locale, fournie par skbox)
+#endif
+#ifndef NIGHT_END_H
+#define NIGHT_END_H 6
+#endif
+#ifndef WIFI_IDLE_OFF_MS
+#define WIFI_IDLE_OFF_MS 5000  // Wi-Fi coupé après ce délai sans échange, même éveillé
+#endif
+
 #ifndef BEEP_VOLUME
 #define BEEP_VOLUME 128  // buzzer intégré (GPIO21) : 0 = muet ... 255
 #endif
@@ -71,7 +84,9 @@ static std::vector<Switch> switches;
 static std::vector<Level> levels;
 static Boiler boiler;
 static bool hasData = false;
-static String updatedAt, updatedDate, errorMsg;
+static bool dataChanged = true;  // la dernière réponse modifie ce qui est affiché
+static String lastSig;
+static String updatedDate, errorMsg;
 
 // ---------------------------------------------------------------- UI
 
@@ -103,7 +118,9 @@ static int page = P_HOME;
 static bool asleep = false;
 static bool pendingRefresh = false;  // rechargement différé après un réveil par toucher
 static uint32_t wakeAt = 0;
-static uint32_t refreshAt = 0;  // rechargement programmé (confirmation de l'état d'une prise)
+static uint32_t refreshAt = 0;
+static uint32_t lastFullRender = 0;
+static uint32_t lastNetAt = 0;  // fin du dernier échange HTTP (coupure du Wi-Fi après WIFI_IDLE_OFF_MS)  // rechargement programmé (confirmation de l'état d'une prise)
 
 static uint32_t confirmStopUntil = 0;  // fenêtre de confirmation de l'arrêt de la régulation
 static uint32_t lastActivity = 0;
@@ -114,8 +131,21 @@ static int failures = 0;          // échecs consécutifs
 // Délai avant le prochain rechargement automatique : REFRESH_S en temps normal ; après un échec,
 // 30 s puis doublé à chaque nouvel échec (plafonné à REFRESH_S), pour ne pas marteler skbox ni
 // faire clignoter l'écran quand la box est injoignable.
+static String updatedAt;  // "HH:MM" de la dernière réponse (déclaré ici pour isNight())
+static uint32_t lastFetchForClock = 0;
+
+// Nuit d'après l'heure locale de skbox (dernière réponse + temps écoulé) : l'ESP32 n'a pas d'heure.
+static bool isNight() {
+  if (updatedAt.length() < 5) return false;
+  uint32_t minutes = updatedAt.substring(0, 2).toInt() * 60 + updatedAt.substring(3, 5).toInt() +
+                     (millis() - lastFetchForClock) / 60000UL;
+  int h = (minutes / 60) % 24;
+  return NIGHT_START_H > NIGHT_END_H ? (h >= NIGHT_START_H || h < NIGHT_END_H)
+                                     : (h >= NIGHT_START_H && h < NIGHT_END_H);
+}
+
 static uint32_t refreshDelayMs() {
-  uint32_t normal = REFRESH_S * 1000UL;
+  uint32_t normal = (isNight() ? NIGHT_REFRESH_S : REFRESH_S) * 1000UL;
   if (!failures) return normal;
   uint32_t d = 30000UL << (failures > 5 ? 4 : failures - 1);
   return d < normal ? d : normal;
@@ -344,6 +374,7 @@ static int httpCall(const char* method, const String& path, const String& body, 
   LOG("[http] %s %s -> %d%s\n", method, path.c_str(), code, code <= 0 ? (" (" + http.errorToString(code) + ")").c_str() : "");
   if (code > 0 && response) *response = http.getString();
   http.end();
+  lastNetAt = millis();
   if (code <= 0) errorMsg = "skbox injoignable";
   else if (code >= 300) errorMsg = "Erreur API " + String(code);
   return code;
@@ -434,6 +465,22 @@ static bool fetchSummaryOnce() {
 
   updatedAt = (const char*)(doc["localTime"] | "");
   updatedDate = (const char*)(doc["localDate"] | "");
+  lastFetchForClock = millis();
+
+  // Signature de ce qui est affiché (hors heures de mise à jour) : si elle n'a pas changé, inutile
+  // de redessiner tout l'écran, seule la ligne d'état est mise à jour.
+  String sig = updatedDate;
+  for (const Sensor& t : sensors)
+    sig += "|" + t.name + fmtTemp(t.temp) + (isnan(t.humidity) ? -1 : (int)lroundf(t.humidity)) +
+           (t.battery <= 20 ? t.battery : 100) + (t.online ? String() : String("off") + t.lastSeen);
+  for (const Switch& w : switches) sig += "|" + w.name + (w.on ? "1" : "0") + (w.online ? "" : "off");
+  for (const Level& l : levels) sig += "|" + l.key + fmtTemp(l.temp);
+  sig += "|" + String((int)boiler.configured) + (int)boiler.enabled + (int)boiler.relayOnline +
+         (int)boiler.heating + (int)boiler.scheduleActive + boiler.activeLevel + boiler.exception + boiler.overrideLevel +
+         boiler.overrideUntil + fmtTemp(boiler.targetTemp) + fmtTemp(boiler.currentTemp) + boiler.mode +
+         boiler.programName + boiler.nextDay + boiler.nextTime + boiler.nextLabel;
+  dataChanged = sig != lastSig;
+  lastSig = sig;
   hasData = true;
   errorMsg = "";
   lastFetch = millis();
@@ -729,6 +776,7 @@ static void drawPage() {
 }
 
 static void render(epd_mode_t mode) {
+  lastFullRender = millis();
   buttons.clear();
   D.setEpdMode(mode);
   D.startWrite();
@@ -760,9 +808,14 @@ static const Button* findButton(Action a) {
 
 // Échec avec des données déjà affichées : seul le bloc d'état change (message d'erreur), le
 // reste de l'écran garde les dernières valeurs — pas de rafraîchissement complet qui clignote.
-static bool refreshAll(epd_mode_t mode) {
+// force = redessin complet quoi qu'il arrive (Actualiser, commande, démarrage). Sinon (rafraîchissement
+// automatique) : redessin complet seulement si l'affichage change, ou une fois par heure pour effacer
+// la rémanence ; sinon seule la ligne d'état est mise à jour (rapide, et bien moins coûteux).
+static bool refreshAll(epd_mode_t mode, bool force = true) {
   bool ok = fetchSummary();
-  if (ok || !hasData) render(mode);
+  if (!hasData) render(mode);
+  else if (!ok) updateStatusLine();
+  else if (force || dataChanged || millis() - lastFullRender >= 3600000UL) render(mode);
   else updateStatusLine();
   return ok;
 }
@@ -937,7 +990,7 @@ static void goToSleep() {
   LOG("[veille] réveil, cause %d\n", (int)esp_sleep_get_wakeup_cause());
   if (timerWake) {
     // Rafraîchissement périodique, puis retour immédiat en veille.
-    refreshAll(epd_mode_t::epd_quality);
+    refreshAll(epd_mode_t::epd_quality, false);
     lastActivity = millis() - IDLE_S * 1000UL;
   } else {
     // Réveil par toucher : seul « Activer » réveille l'écran ; tout autre toucher est ignoré (pas de
@@ -1010,12 +1063,17 @@ void loop() {
 
   if (wifiStarted) wifiPoll();  // repli de la connexion rapide, mémorisation du point d'accès
 
+  // Wi-Fi coupé dès qu'il n'y a plus d'échange en cours, même écran éveillé (la reconnexion rapide
+  // prend ~1 s au toucher suivant) : c'est l'un des plus gros consommateurs.
+  if (WiFi.status() == WL_CONNECTED && !pendingRefresh && !refreshAt && millis() - lastNetAt > WIFI_IDLE_OFF_MS)
+    wifiDown();
+
   if (pendingRefresh && (WiFi.status() == WL_CONNECTED || millis() - wakeAt > 12000UL)) {
     pendingRefresh = false;
-    refreshAll(epd_mode_t::epd_fast);
+    refreshAll(epd_mode_t::epd_fast, false);
   }
 
-  if (refreshDue()) refreshAll(epd_mode_t::epd_quality);
+  if (refreshDue()) refreshAll(epd_mode_t::epd_quality, false);
 
   if (millis() - lastActivity >= IDLE_S * 1000UL) goToSleep();
 

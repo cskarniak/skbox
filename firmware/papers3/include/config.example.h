@@ -26,7 +26,10 @@
 
 // --- Rythme -------------------------------------------------------------
 #define REFRESH_S 300   // rafraîchissement automatique (secondes)
-#define IDLE_S 45       // inactivité avant mise en veille (secondes)
+#define IDLE_S 30       // inactivité avant mise en veille (secondes)
+#define NIGHT_REFRESH_S 1800  // rafraîchissement la nuit, de NIGHT_START_H à NIGHT_END_H
+#define NIGHT_START_H 22
+#define NIGHT_END_H 6
 
 // Durées de dérogation proposées (minutes) et choix par défaut (index).
 #define BOOST_DURATIONS {60, 120, 240, 480}
