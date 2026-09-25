@@ -949,6 +949,16 @@ void setup() {
   auto cfg = M5.config();
   M5.begin(cfg);
   diagBegin();
+  // Le pilote GT911 de M5GFX ne lit le tactile que si sa ligne d'interruption (GPIO48) est active
+  // au moment de la lecture ; ses impulsions sont brèves, et un « doigt relevé » survenu pendant un
+  // rendu ou un appel réseau est alors perdu : le pilote croit le doigt toujours posé et ignore les
+  // touchers suivants (écran « bloqué »). Sans broche d'interruption, il interroge le GT911 par I2C à
+  // chaque M5.update() et l'état reste juste. Le réveil de veille utilise GPIO48 directement.
+  if (auto* touch = D.touch()) {
+    auto tcfg = touch->config();
+    tcfg.pin_int = -1;
+    touch->config(tcfg);
+  }
   M5.Speaker.setVolume(BEEP_VOLUME);
   Serial.begin(115200);
   LOG("[boot] skbox PaperS3, écran %dx%d, batterie %d %%, PSRAM %u o\n", (int)D.width(), (int)D.height(),
