@@ -472,13 +472,33 @@ static void drawStatusLine() {
   text(fit(l2, STATUS_W), STATUS_R, 41, &fonts::efontJA_16, textdatum_t::middle_right);
 }
 
-// Mise à jour partielle et rapide du seul bloc d'état (entrée / sortie de veille).
+// Bouton de droite de l'en-tête : « Actualiser » quand l'écran est actif, « Activer » (plein, pour
+// qu'on le remarque) pendant la veille — seul bouton qui réveille alors l'écran.
+static const int ACT_X = 796, ACT_Y = 8, ACT_W = 148, ACT_H = 44;
+
+static void drawActionButton() {
+  D.fillRoundRect(ACT_X, ACT_Y, ACT_W, ACT_H, 10, C_WHITE);
+  if (asleep) {
+    D.fillRoundRect(ACT_X, ACT_Y, ACT_W, ACT_H, 10, C_BLACK);
+    text("Activer", ACT_X + ACT_W / 2, ACT_Y + ACT_H / 2, &fonts::efontJA_24, textdatum_t::middle_center, C_WHITE);
+  } else {
+    D.drawRoundRect(ACT_X, ACT_Y, ACT_W, ACT_H, 10, C_BLACK);
+    text("Actualiser", ACT_X + ACT_W / 2, ACT_Y + ACT_H / 2, &fonts::efontJA_24, textdatum_t::middle_center);
+  }
+}
+
+static bool inActionButton(int x, int y) {
+  return x >= ACT_X && x < ACT_X + ACT_W && y >= ACT_Y && y < ACT_Y + ACT_H;
+}
+
+// Mise à jour partielle et rapide du bloc d'état et du bouton de droite (entrée / sortie de veille).
 static void updateStatusLine() {
   D.setEpdMode(epd_mode_t::epd_fast);
   D.startWrite();
   drawStatusLine();
+  drawActionButton();
   D.endWrite();
-  D.display(STATUS_X, 8, STATUS_W, 44);
+  D.display(STATUS_X, 8, ACT_X + ACT_W - STATUS_X, 44);
 }
 
 static void drawHeader() {
@@ -489,7 +509,8 @@ static void drawHeader() {
     tx += TAB_W[i] + 6;
   }
   drawStatusLine();
-  drawButton(796, 8, 148, 44, "Actualiser", "", false, false, A_REFRESH);
+  drawActionButton();
+  addButton(ACT_X, ACT_Y, ACT_W, ACT_H, A_REFRESH);
   D.drawFastHLine(0, 60, 960, C_BLACK);
 }
 
@@ -883,12 +904,6 @@ static void waitTouchRelease(int& x, int& y) {
   } while (M5.Touch.getCount() > 0 && millis() - start < 2000);
 }
 
-static const Button* buttonAt(int x, int y) {
-  for (const Button& b : buttons)
-    if (x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h) return &b;
-  return nullptr;
-}
-
 static void goToSleep() {
   // En veille, l'écran reste figé : on y laisse la page principale, la plus utile d'un coup d'œil.
   if (!asleep) {
@@ -897,7 +912,7 @@ static void goToSleep() {
       page = P_HOME;
       render(epd_mode_t::epd_quality);
     } else {
-      updateStatusLine();
+      updateStatusLine();  // « en veille » + bouton « Activer »
     }
   }
   wifiDown();
@@ -913,33 +928,29 @@ static void goToSleep() {
   setPhase(timerWake ? PH_WOKE_TIMER : PH_WOKE_TOUCH);
 
   LOG("[veille] réveil, cause %d\n", (int)esp_sleep_get_wakeup_cause());
-  if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) {
+  if (timerWake) {
     // Rafraîchissement périodique, puis retour immédiat en veille.
     refreshAll(epd_mode_t::epd_quality);
     lastActivity = millis() - IDLE_S * 1000UL;
   } else {
-    // Réveil par toucher : le premier appui sert seulement à réveiller.
-    // Retour immédiat (petit bip + « en veille » effacé), Wi-Fi relancé en arrière-plan ; les
-    // données trop anciennes sont rechargées par loop() dès que le Wi-Fi est prêt, sans bloquer
-    // les touchers entre-temps.
-    M5.Speaker.tone(1500, 15);
-    wifiStart();
+    // Réveil par toucher : seul « Activer » réveille l'écran ; tout autre toucher est ignoré (pas de
+    // bip, rien ne change) et l'appareil se rendort aussitôt. Position illisible : on réveille quand
+    // même, pour ne jamais rester impossible à réactiver.
     int wx, wy;
     waitTouchRelease(wx, wy);
+    if (wx >= 0 && !inActionButton(wx, wy)) {
+      lastActivity = millis() - IDLE_S * 1000UL;  // loop() rappelle goToSleep() immédiatement
+      setPhase(PH_AWAKE);
+      return;
+    }
+    beepClick();
+    wifiStart();  // Wi-Fi relancé en arrière-plan ; données trop anciennes rechargées par loop()
     lastActivity = millis();
     wakeAt = millis();
     asleep = false;
-    updateStatusLine();
+    updateStatusLine();  // « en veille » effacé, « Activer » redevient « Actualiser »
     pendingRefresh = millis() - lastFetch > 60000UL;
     setPhase(PH_AWAKE);  // réveil par toucher entièrement traité
-
-    // Le toucher de réveil agit s'il vise un onglet ou « Actualiser » (sans risque) ; les commandes
-    // (dérogation, prises, arrêt) demandent toujours un second toucher, contre les effleurements.
-    const Button* wb = buttonAt(wx, wy);
-    if (wb && (wb->action == A_PAGE || wb->action == A_REFRESH)) {
-      if (wb->action == A_REFRESH) pendingRefresh = false;  // « Actualiser » recharge déjà
-      onTap(wx, wy);
-    }
   }
 }
 

@@ -22,7 +22,7 @@ Quatre pages, choisies par les onglets de l'en-tête. L'en-tête affiche aussi l
 - **Alarme** : écran d'attente pour le futur système d'alarme.
 - **Libre** : écran d'attente, réservé.
 - **Sons** (buzzer intégré, volume `BEEP_VOLUME`, 0 = muet) : bip court à chaque bouton touché (un toucher hors bouton reste silencieux, pratique pour vérifier le calage) ; deux notes montantes quand skbox accepte une commande ; note grave en cas d'erreur (commande refusée, skbox ou Wi-Fi injoignable, échec d'« Actualiser »).
-- **Veille** : après `IDLE_S` secondes sans toucher, le Wi-Fi est coupé et l'appareil passe en *light sleep*. L'en-tête affiche alors « en veille ». Il se réveille au toucher (ce premier toucher sert seulement à réveiller l'écran) ou toutes les `REFRESH_S` secondes pour se rafraîchir.
+- **Veille** : après `IDLE_S` secondes sans toucher, le Wi-Fi est coupé et l'appareil passe en *light sleep* ; l'en-tête affiche « en veille » et le bouton « Actualiser » devient **« Activer »** (noir). Pendant la veille, seul « Activer » réveille l'écran (et recharge les données si elles ont plus d'une minute) ; un toucher ailleurs est ignoré et l'appareil se rendort aussitôt. Il se réveille aussi seul toutes les `REFRESH_S` secondes pour se rafraîchir, puis se rendort.
 
 Les données viennent d'un seul appel : `GET /api/display/summary` (module `apps/api/src/display`).
 
