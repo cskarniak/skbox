@@ -30,7 +30,7 @@ Les données viennent d'un seul appel : `GET /api/display/summary` (module `apps
 
 1. Installer [PlatformIO](https://platformio.org/) (extension VS Code ou `pip install platformio`).
 2. `cp include/config.example.h include/config.h`, puis renseigner le Wi-Fi et l'URL de l'API (`http://skbox.lan.home` : sur skbox-mini l'API n'écoute qu'en local derrière nginx, et ce nom n'est résolu que par le DNS de skbox-mini, d'où `SKBOX_DNS`).
-3. Brancher le PaperS3 en USB-C, puis lancer `pio run -t upload` et `pio device monitor`.
+3. Brancher le PaperS3 en USB-C, compiler avec `pio run`, puis flasher avec `"$(head -1 "$(which pio)" | cut -c3-)" flash.py`. Ce script remplace `pio run -t upload` : il attend que le port USB apparaisse (il disparaît pendant la veille), désactive le chien de garde RTC qui coupait la puce au milieu de l'écriture, exige que les 4 blocs soient vérifiés, puis redémarre la puce sur le firmware (plus besoin d'éteindre et de rallumer).
 
 Renseigner `SENSOR_IDS` avec les ids skbox des capteurs Extérieur, Sous-sol et Séjour, séparés par des virgules et dans cet ordre. Les ids sont visibles dans Swagger (`/docs`, `GET /api/devices`). Pour ajouter un capteur plus tard, il suffit d'ajouter son id : il prendra le premier emplacement libre.
 
