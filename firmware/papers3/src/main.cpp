@@ -208,7 +208,7 @@ static void drawButton(int x, int y, int w, int h, const String& line1, const St
 // d'alimentation. Au démarrage suivant, la raison du reset et la dernière étape notée sont
 // jointes à chaque requête (&rst=&last=&boot=&wk=) : lisibles dans le journal nginx de
 // skbox-mini, sans moniteur série. Écriture seulement quand l'étape change (≈ 2 par cycle).
-enum Phase : uint8_t { PH_AWAKE = 1, PH_SLEEPING = 2, PH_WOKE_TIMER = 3, PH_WOKE_TOUCH = 4 };
+enum Phase : uint8_t { PH_AWAKE = 1, PH_SLEEPING = 2, PH_WOKE_TIMER = 3, PH_WOKE_TOUCH = 4, PH_TOUCH_RELEASE = 5 };
 static Preferences diag;
 static uint8_t phase = 0, lastPhaseAtBoot = 0;
 static int resetReason = 0, rawResetReason = 0;
@@ -841,6 +841,33 @@ static void onTap(int tx, int ty) {
 
 // ---------------------------------------------------------------- Veille
 
+// Mise en veille légère, à la place de M5.Power.lightSleep() : celle-ci attend SANS LIMITE que le
+// contrôleur tactile (GT911) relâche sa ligne d'interruption (GPIO48) avant de dormir. Si la ligne
+// reste active, l'appareil reste bloqué avec « en veille » affiché, Wi-Fi coupé, sans minuterie
+// ni réveil possible. Ici l'attente est bornée : ligne toujours active après 500 ms -> sommeil sur
+// minuterie seule, raccourci à 30 s, pour retrouver vite le réveil au toucher.
+static const gpio_num_t TOUCH_INT_PIN = GPIO_NUM_48;
+
+static void lightSleepSafe(uint32_t seconds) {
+  setPhase(PH_TOUCH_RELEASE);
+  uint32_t t0 = millis();
+  while (gpio_get_level(TOUCH_INT_PIN) == 0 && millis() - t0 < 500) {
+    M5.update();  // la lecture du tactile acquitte l'interruption du GT911
+    delay(10);
+  }
+  bool touchWake = gpio_get_level(TOUCH_INT_PIN) != 0;
+  if (!touchWake && seconds > 30) seconds = 30;
+
+  esp_sleep_enable_timer_wakeup((uint64_t)seconds * 1000000ULL);
+  if (touchWake) {
+    gpio_wakeup_enable(TOUCH_INT_PIN, GPIO_INTR_LOW_LEVEL);
+    esp_sleep_enable_gpio_wakeup();
+  }
+  setPhase(PH_SLEEPING);
+  esp_light_sleep_start();
+  if (touchWake) gpio_wakeup_disable(TOUCH_INT_PIN);
+}
+
 // Attend que le doigt se lève ; renvoie dans (x, y) la première position lue (-1 si aucune).
 static void waitTouchRelease(int& x, int& y) {
   x = y = -1;
@@ -880,8 +907,7 @@ static void goToSleep() {
   uint32_t wait = elapsed >= delayMs ? 1 : (delayMs - elapsed + 999) / 1000;
   LOG("[veille] light sleep %lu s (batterie %d %%)\n", (unsigned long)wait, (int)M5.Power.getBatteryLevel());
   Serial.flush();
-  setPhase(PH_SLEEPING);
-  M5.Power.lightSleep((uint64_t)wait * 1000000ULL, true);
+  lightSleepSafe(wait);
   bool timerWake = esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER;
   lastWake = timerWake ? 't' : 'p';
   setPhase(timerWake ? PH_WOKE_TIMER : PH_WOKE_TOUCH);
