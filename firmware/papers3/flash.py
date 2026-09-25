@@ -19,6 +19,7 @@ import time
 
 sys.path.insert(0, os.path.expanduser("~/.platformio/packages/tool-esptoolpy"))
 import esptool  # noqa: E402
+import serial  # noqa: E402  (pyserial, fourni avec PlatformIO)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BUILD = os.path.join(HERE, ".pio", "build", "papers3")
@@ -70,7 +71,21 @@ def main():
     for attempt in range(1, 6):
         port = wait_port()
         try:
-            esp = esptool.detect_chip(port, 460800, "default_reset")
+            # Sous macOS, ouvrir le port relance la puce en mode téléchargement : elle affiche sa
+            # bannière « ESP-ROM... », qu'esptool prend pour une réponse invalide (« Invalid head of
+            # packet 0x45 »). Essais impairs : on ouvre le port nous-mêmes, on laisse passer la
+            # bannière, on vide le tampon, puis on dialogue sans reset sur ce même port.
+            # Essais pairs : séquence de reset propre à l'USB-Serial/JTAG natif.
+            if attempt % 2:
+                ser = serial.serial_for_url(port, do_not_open=True)
+                ser.baudrate, ser.timeout = 115200, 0.5
+                ser.dtr = ser.rts = False
+                ser.open()
+                time.sleep(1.0)
+                ser.reset_input_buffer()
+                esp = esptool.detect_chip(ser, 115200, "no_reset")
+            else:
+                esp = esptool.detect_chip(port, 460800, "usb_reset")
             disable_watchdogs(esp)
             args = ["--chip", "esp32s3", "--port", port, "--baud", "460800",
                     "--before", "no_reset", "--after", "no_reset",
@@ -78,12 +93,18 @@ def main():
             for addr, path in images:
                 args += [addr, path]
             esptool.main(args, esp=esp)  # lève une exception si un bloc n'est pas vérifié
-            watchdog_reset(esp)
-            print("Flash OK (4/4 blocs vérifiés), PaperS3 redémarré sur le firmware.")
-            return
         except Exception as exc:  # port perdu, puce endormie pendant la connexion...
             print(f"Essai {attempt} échoué : {exc}")
             time.sleep(1)
+            continue
+        # Écriture réussie : ne plus rien réécrire, seulement tenter de démarrer le firmware.
+        try:
+            watchdog_reset(esp)
+            print("Flash OK (4/4 blocs vérifiés), PaperS3 redémarré sur le firmware.")
+        except Exception:
+            print("Flash OK (4/4 blocs vérifiés). Redémarrage automatique impossible : débrancher "
+                  "l'USB, éteindre (appui long) puis rallumer (appui bref) le PaperS3.")
+        return
     sys.exit("Échec après 5 essais : brancher en maintenant le bouton latéral (mode téléchargement), puis relancer.")
 
 

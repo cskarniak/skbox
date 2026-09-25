@@ -918,11 +918,18 @@ static void goToSleep() {
   wifiDown();
   D.waitDisplay();
   while (M5.Speaker.isPlaying()) delay(5);  // laisser finir un son avant de couper
+  // Le buzzer est piloté par un périphérique I2S et une tâche de fond qui restent actifs après un
+  // son. Une veille lancée ainsi ne se réveillait plus (ni minuterie ni toucher) : les blocages
+  // survenaient tous à la première veille suivant une utilisation (bips), jamais après des réveils
+  // par minuterie seuls. On arrête donc complètement le son avant de dormir.
+  M5.Speaker.end();
   uint32_t elapsed = millis() - lastAttempt, delayMs = refreshDelayMs();
   uint32_t wait = elapsed >= delayMs ? 1 : (delayMs - elapsed + 999) / 1000;
   LOG("[veille] light sleep %lu s (batterie %d %%)\n", (unsigned long)wait, (int)M5.Power.getBatteryLevel());
   Serial.flush();
   lightSleepSafe(wait);
+  M5.Speaker.begin();
+  M5.Speaker.setVolume(BEEP_VOLUME);
   bool timerWake = esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER;
   lastWake = timerWake ? 't' : 'p';
   setPhase(timerWake ? PH_WOKE_TIMER : PH_WOKE_TOUCH);
