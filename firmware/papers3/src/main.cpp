@@ -15,6 +15,7 @@
 #include <lwip/dns.h>
 #include <Preferences.h>
 #include <esp_system.h>
+#include <esp32s3/rom/rtc.h>
 #include <vector>
 
 #if __has_include("config.h")
@@ -210,7 +211,7 @@ static void drawButton(int x, int y, int w, int h, const String& line1, const St
 enum Phase : uint8_t { PH_AWAKE = 1, PH_SLEEPING = 2, PH_WOKE_TIMER = 3, PH_WOKE_TOUCH = 4 };
 static Preferences diag;
 static uint8_t phase = 0, lastPhaseAtBoot = 0;
-static int resetReason = 0;
+static int resetReason = 0, rawResetReason = 0;
 static uint32_t bootCount = 0;
 static char lastWake = '-';  // t = minuterie, p = toucher (pression)
 
@@ -226,6 +227,7 @@ static void diagBegin() {
   bootCount = diag.getUInt("boots", 0) + 1;
   diag.putUInt("boots", bootCount);
   resetReason = (int)esp_reset_reason();
+  rawResetReason = (int)rtc_get_reset_reason(0);  // code matériel brut (0x15 = reset par l'USB, etc.)
   setPhase(PH_AWAKE);
 }
 
@@ -245,13 +247,42 @@ static void beepError() { M5.Speaker.tone(330, 350); }
 // ---------------------------------------------------------------- Réseau
 
 static bool wifiStarted = false;
+static uint32_t wifiStartedAt = 0;
+// Point d'accès de la dernière connexion réussie (la RAM est conservée pendant la veille) :
+// se reconnecter directement à ce canal / BSSID évite le balayage des canaux, soit environ 1 s
+// de gagnée à chaque réveil.
+static uint8_t lastBssid[6];
+static int32_t lastChannel = 0;
+static bool fastConnect = false;  // tentative rapide en cours (repli sur la connexion normale)
+
+static void updateStatusLine();
+static String statusNote;  // message transitoire du bloc d'état (ex. « connexion Wi-Fi… »)
 
 // Lance la connexion sans attendre (au réveil), pour qu'elle soit prête au premier toucher.
 static void wifiStart() {
   if (wifiStarted || WiFi.status() == WL_CONNECTED) return;
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  fastConnect = lastChannel > 0;
+  if (fastConnect) WiFi.begin(WIFI_SSID, WIFI_PASS, lastChannel, lastBssid, true);
+  else WiFi.begin(WIFI_SSID, WIFI_PASS);
   wifiStarted = true;
+  wifiStartedAt = millis();
+}
+
+// À appeler régulièrement pendant l'attente : si la connexion rapide n'a pas abouti en 4 s (point
+// d'accès ou canal changé), on repart sur une connexion normale avec balayage.
+static void wifiPoll() {
+  if (fastConnect && WiFi.status() != WL_CONNECTED && millis() - wifiStartedAt > 4000) {
+    fastConnect = false;
+    lastChannel = 0;
+    WiFi.disconnect();
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+    wifiStartedAt = millis();
+  }
+  if (WiFi.status() == WL_CONNECTED && !lastChannel) {
+    lastChannel = WiFi.channel();
+    memcpy(lastBssid, WiFi.BSSID(), 6);
+  }
 }
 
 // Le DNS fourni par le DHCP (box) ne connaît pas les noms locaux servis par skbox-mini. Appliqué à
@@ -271,7 +302,14 @@ static bool wifiUp() {
   if (WiFi.status() != WL_CONNECTED) {
     wifiStart();
     uint32_t start = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - start < 12000) delay(100);
+    statusNote = "connexion Wi-Fi...";
+    updateStatusLine();  // retour visuel : l'attente peut durer plusieurs secondes
+    while (WiFi.status() != WL_CONNECTED && millis() - start < 12000) {
+      wifiPoll();
+      delay(50);
+    }
+    wifiPoll();
+    statusNote = "";
     if (WiFi.status() != WL_CONNECTED) {
       LOG("[wifi] échec connexion à %s (statut %d)\n", WIFI_SSID, (int)WiFi.status());
       return false;
@@ -325,7 +363,7 @@ static bool fetchSummaryOnce() {
   // permet de suivre la batterie à distance (le moniteur série est peu utilisable sous macOS).
   String path = "/api/display/summary?bat=" + String((int)M5.Power.getBatteryLevel()) +
                 "&mv=" + String((int)M5.Power.getBatteryVoltage()) + "&chg=" + String((int)M5.Power.isCharging());
-  path += "&rst=" + String(resetReason) + "&last=" + String((int)lastPhaseAtBoot) + "&boot=" + String(bootCount) +
+  path += "&rst=" + String(resetReason) + "&rr=" + String(rawResetReason) + "&last=" + String((int)lastPhaseAtBoot) + "&boot=" + String(bootCount) +
           "&wk=" + String(lastWake);
   if (strlen(SENSOR_IDS)) path += "&devices=" + String(SENSOR_IDS);
   if (strlen(SWITCH_IDS)) path += "&switches=" + String(SWITCH_IDS);
@@ -413,7 +451,8 @@ static const int STATUS_X = 472, STATUS_W = 308, STATUS_R = STATUS_X + STATUS_W;
 static void drawStatusLine() {
   D.fillRect(STATUS_X, 8, STATUS_W, 44, C_WHITE);
   String l1;
-  if (errorMsg.length()) l1 = "! " + errorMsg;
+  if (statusNote.length()) l1 = statusNote;
+  else if (errorMsg.length()) l1 = "! " + errorMsg;
   else if (hasData) l1 = updatedDate + " · maj " + updatedAt;
 
   int bat = M5.Power.getBatteryLevel();
@@ -733,7 +772,7 @@ static void onTap(int tx, int ty) {
     switch (b.action) {
       case A_REFRESH:
         flashButton(b);
-        if (!refreshAll(epd_mode_t::epd_quality)) beepError();
+        if (!refreshAll(epd_mode_t::epd_text)) beepError();
         break;
       case A_PAGE:
         if (b.arg == page) break;
@@ -802,12 +841,25 @@ static void onTap(int tx, int ty) {
 
 // ---------------------------------------------------------------- Veille
 
-static void waitTouchRelease() {
+// Attend que le doigt se lève ; renvoie dans (x, y) la première position lue (-1 si aucune).
+static void waitTouchRelease(int& x, int& y) {
+  x = y = -1;
   uint32_t start = millis();
   do {
     M5.update();
+    auto d = M5.Touch.getDetail();
+    if (x < 0 && d.isPressed()) {
+      x = d.x;
+      y = d.y;
+    }
     delay(10);
   } while (M5.Touch.getCount() > 0 && millis() - start < 2000);
+}
+
+static const Button* buttonAt(int x, int y) {
+  for (const Button& b : buttons)
+    if (x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h) return &b;
+  return nullptr;
 }
 
 static void goToSleep() {
@@ -846,13 +898,22 @@ static void goToSleep() {
     // les touchers entre-temps.
     M5.Speaker.tone(1500, 15);
     wifiStart();
-    waitTouchRelease();
+    int wx, wy;
+    waitTouchRelease(wx, wy);
     lastActivity = millis();
     wakeAt = millis();
     asleep = false;
     updateStatusLine();
     pendingRefresh = millis() - lastFetch > 60000UL;
     setPhase(PH_AWAKE);  // réveil par toucher entièrement traité
+
+    // Le toucher de réveil agit s'il vise un onglet ou « Actualiser » (sans risque) ; les commandes
+    // (dérogation, prises, arrêt) demandent toujours un second toucher, contre les effleurements.
+    const Button* wb = buttonAt(wx, wy);
+    if (wb && (wb->action == A_PAGE || wb->action == A_REFRESH)) {
+      if (wb->action == A_REFRESH) pendingRefresh = false;  // « Actualiser » recharge déjà
+      onTap(wx, wy);
+    }
   }
 }
 
@@ -892,6 +953,8 @@ void loop() {
     refreshAt = 0;
     if (fetchSummary() && page == P_HOME) renderRect(SW_X, SW_Y, SW_W, SW_H);
   }
+
+  if (wifiStarted) wifiPoll();  // repli de la connexion rapide, mémorisation du point d'accès
 
   if (pendingRefresh && (WiFi.status() == WL_CONNECTED || millis() - wakeAt > 12000UL)) {
     pendingRefresh = false;
