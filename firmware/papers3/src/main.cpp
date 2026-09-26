@@ -284,6 +284,11 @@ static uint32_t wifiStartedAt = 0;
 static uint8_t lastBssid[6];
 static int32_t lastChannel = 0;
 static bool fastConnect = false;  // tentative rapide en cours (repli sur la connexion normale)
+// Télémétrie de consommation (jointe aux requêtes) : durée de la dernière connexion Wi-Fi, succès de
+// la connexion rapide, durée d'éveil du cycle précédent, type du dernier redessin automatique.
+static uint32_t wifiBeginAt = 0, wifiConnMs = 0, lastAwakeMs = 0, wokeAt = 0;
+static bool connRecorded = false, fastUsed = false;
+static char lastRedraw = '-';  // f = écran complet, s = ligne d'état seule
 
 static void updateStatusLine();
 static String statusNote;  // message transitoire du bloc d'état (ex. « connexion Wi-Fi… »)
@@ -296,7 +301,8 @@ static void wifiStart() {
   if (fastConnect) WiFi.begin(WIFI_SSID, WIFI_PASS, lastChannel, lastBssid, true);
   else WiFi.begin(WIFI_SSID, WIFI_PASS);
   wifiStarted = true;
-  wifiStartedAt = millis();
+  wifiStartedAt = wifiBeginAt = millis();
+  connRecorded = false;
 }
 
 // À appeler régulièrement pendant l'attente : si la connexion rapide n'a pas abouti en 4 s (point
@@ -308,6 +314,11 @@ static void wifiPoll() {
     WiFi.disconnect();
     WiFi.begin(WIFI_SSID, WIFI_PASS);
     wifiStartedAt = millis();
+  }
+  if (WiFi.status() == WL_CONNECTED && !connRecorded) {
+    connRecorded = true;
+    wifiConnMs = millis() - wifiBeginAt;
+    fastUsed = fastConnect;  // encore vrai = la connexion rapide a abouti sans repli
   }
   if (WiFi.status() == WL_CONNECTED && !lastChannel) {
     lastChannel = WiFi.channel();
@@ -332,8 +343,10 @@ static bool wifiUp() {
   if (WiFi.status() != WL_CONNECTED) {
     wifiStart();
     uint32_t start = millis();
-    statusNote = "connexion Wi-Fi...";
-    updateStatusLine();  // retour visuel : l'attente peut durer plusieurs secondes
+    if (!asleep) {  // en veille (réveil par minuterie) personne ne regarde : pas de rafraîchissement inutile
+      statusNote = "connexion Wi-Fi...";
+      updateStatusLine();  // retour visuel : l'attente peut durer plusieurs secondes
+    }
     while (WiFi.status() != WL_CONNECTED && millis() - start < 12000) {
       wifiPoll();
       delay(50);
@@ -395,7 +408,8 @@ static bool fetchSummaryOnce() {
   String path = "/api/display/summary?bat=" + String((int)M5.Power.getBatteryLevel()) +
                 "&mv=" + String((int)M5.Power.getBatteryVoltage()) + "&chg=" + String((int)M5.Power.isCharging());
   path += "&rst=" + String(resetReason) + "&rr=" + String(rawResetReason) + "&last=" + String((int)lastPhaseAtBoot) + "&boot=" + String(bootCount) +
-          "&wk=" + String(lastWake);
+          "&wk=" + String(lastWake) + "&aw=" + String(lastAwakeMs) + "&wc=" + String(wifiConnMs) +
+          "&fc=" + String((int)fastUsed) + "&rd=" + String(lastRedraw);
   if (strlen(SENSOR_IDS)) path += "&devices=" + String(SENSOR_IDS);
   if (strlen(SWITCH_IDS)) path += "&switches=" + String(SWITCH_IDS);
   String body;
@@ -815,8 +829,13 @@ static bool refreshAll(epd_mode_t mode, bool force = true) {
   bool ok = fetchSummary();
   if (!hasData) render(mode);
   else if (!ok) updateStatusLine();
-  else if (force || dataChanged || millis() - lastFullRender >= 3600000UL) render(mode);
-  else updateStatusLine();
+  else if (force || dataChanged || millis() - lastFullRender >= 3600000UL) {
+    render(mode);
+    lastRedraw = 'f';
+  } else {
+    updateStatusLine();
+    lastRedraw = 's';
+  }
   return ok;
 }
 
@@ -980,7 +999,9 @@ static void goToSleep() {
   uint32_t wait = elapsed >= delayMs ? 1 : (delayMs - elapsed + 999) / 1000;
   LOG("[veille] light sleep %lu s (batterie %d %%)\n", (unsigned long)wait, (int)M5.Power.getBatteryLevel());
   Serial.flush();
+  lastAwakeMs = millis() - wokeAt;
   lightSleepSafe(wait);
+  wokeAt = millis();
   M5.Speaker.begin();
   M5.Speaker.setVolume(BEEP_VOLUME);
   bool timerWake = esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER;
