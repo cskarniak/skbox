@@ -289,6 +289,9 @@ static bool fastConnect = false;  // tentative rapide en cours (repli sur la con
 static uint32_t wifiBeginAt = 0, wifiConnMs = 0, lastAwakeMs = 0, wokeAt = 0;
 static bool connRecorded = false, fastUsed = false;
 static char lastRedraw = '-';  // f = écran complet, s = ligne d'état seule
+// Compteurs cumulés depuis la dernière requête réussie : réveils par minuterie / tactile / autre
+// (ou veille refusée), temps total éveillé et endormi. Disent si l'appareil dort vraiment.
+static uint32_t cntTimer = 0, cntGpio = 0, cntOther = 0, awakeAccum = 0, sleptAccum = 0;
 
 static void updateStatusLine();
 static String statusNote;  // message transitoire du bloc d'état (ex. « connexion Wi-Fi… »)
@@ -409,7 +412,9 @@ static bool fetchSummaryOnce() {
                 "&mv=" + String((int)M5.Power.getBatteryVoltage()) + "&chg=" + String((int)M5.Power.isCharging());
   path += "&rst=" + String(resetReason) + "&rr=" + String(rawResetReason) + "&last=" + String((int)lastPhaseAtBoot) + "&boot=" + String(bootCount) +
           "&wk=" + String(lastWake) + "&aw=" + String(lastAwakeMs) + "&wc=" + String(wifiConnMs) +
-          "&fc=" + String((int)fastUsed) + "&rd=" + String(lastRedraw);
+          "&fc=" + String((int)fastUsed) + "&rd=" + String(lastRedraw) + "&nt=" + String(cntTimer) +
+          "&ng=" + String(cntGpio) + "&no=" + String(cntOther) + "&at=" + String(awakeAccum) +
+          "&sl=" + String(sleptAccum);
   if (strlen(SENSOR_IDS)) path += "&devices=" + String(SENSOR_IDS);
   if (strlen(SWITCH_IDS)) path += "&switches=" + String(SWITCH_IDS);
   String body;
@@ -498,6 +503,7 @@ static bool fetchSummaryOnce() {
   hasData = true;
   errorMsg = "";
   lastFetch = millis();
+  cntTimer = cntGpio = cntOther = awakeAccum = sleptAccum = 0;  // compteurs transmis
   LOG("[data] %u capteurs, %u niveaux, chaudière %s\n", sensors.size(), levels.size(),
       boiler.configured ? boiler.activeLabel.c_str() : "non configurée");
   return true;
@@ -957,8 +963,15 @@ static void lightSleepSafe(uint32_t seconds) {
     esp_sleep_enable_gpio_wakeup();
   }
   setPhase(PH_SLEEPING);
-  esp_light_sleep_start();
+  uint32_t before = millis();
+  esp_err_t err = esp_light_sleep_start();
+  sleptAccum += millis() - before;
   if (touchWake) gpio_wakeup_disable(TOUCH_INT_PIN);
+  auto cause = esp_sleep_get_wakeup_cause();
+  if (err != ESP_OK) cntOther++;
+  else if (cause == ESP_SLEEP_WAKEUP_TIMER) cntTimer++;
+  else if (cause == ESP_SLEEP_WAKEUP_GPIO) cntGpio++;
+  else cntOther++;
 }
 
 // Attend que le doigt se lève ; renvoie dans (x, y) la première position lue (-1 si aucune).
@@ -1000,6 +1013,7 @@ static void goToSleep() {
   LOG("[veille] light sleep %lu s (batterie %d %%)\n", (unsigned long)wait, (int)M5.Power.getBatteryLevel());
   Serial.flush();
   lastAwakeMs = millis() - wokeAt;
+  awakeAccum += lastAwakeMs;
   lightSleepSafe(wait);
   wokeAt = millis();
   M5.Speaker.begin();
