@@ -84,8 +84,7 @@ static std::vector<Switch> switches;
 static std::vector<Level> levels;
 static Boiler boiler;
 static bool hasData = false;
-static bool dataChanged = true;  // la dernière réponse modifie ce qui est affiché
-static String lastSig;
+static uint32_t remoteRefreshS = 0;  // intervalle de jour imposé par skbox (0 = REFRESH_S)
 static String updatedDate, errorMsg;
 
 // ---------------------------------------------------------------- UI
@@ -145,7 +144,8 @@ static bool isNight() {
 }
 
 static uint32_t refreshDelayMs() {
-  uint32_t normal = (isNight() ? NIGHT_REFRESH_S : REFRESH_S) * 1000UL;
+  uint32_t day = remoteRefreshS ? remoteRefreshS : REFRESH_S;
+  uint32_t normal = (isNight() ? (NIGHT_REFRESH_S > day ? NIGHT_REFRESH_S : day) : day) * 1000UL;
   if (!failures) return normal;
   uint32_t d = 30000UL << (failures > 5 ? 4 : failures - 1);
   return d < normal ? d : normal;
@@ -486,20 +486,7 @@ static bool fetchSummaryOnce() {
   updatedDate = (const char*)(doc["localDate"] | "");
   lastFetchForClock = millis();
 
-  // Signature de ce qui est affiché (hors heures de mise à jour) : si elle n'a pas changé, inutile
-  // de redessiner tout l'écran, seule la ligne d'état est mise à jour.
-  String sig = updatedDate;
-  for (const Sensor& t : sensors)
-    sig += "|" + t.name + fmtTemp(t.temp) + (isnan(t.humidity) ? -1 : (int)lroundf(t.humidity)) +
-           (t.battery <= 20 ? t.battery : 100) + (t.online ? String() : String("off") + t.lastSeen);
-  for (const Switch& w : switches) sig += "|" + w.name + (w.on ? "1" : "0") + (w.online ? "" : "off");
-  for (const Level& l : levels) sig += "|" + l.key + fmtTemp(l.temp);
-  sig += "|" + String((int)boiler.configured) + (int)boiler.enabled + (int)boiler.relayOnline +
-         (int)boiler.heating + (int)boiler.scheduleActive + boiler.activeLevel + boiler.exception + boiler.overrideLevel +
-         boiler.overrideUntil + fmtTemp(boiler.targetTemp) + fmtTemp(boiler.currentTemp) + boiler.mode +
-         boiler.programName + boiler.nextDay + boiler.nextTime + boiler.nextLabel;
-  dataChanged = sig != lastSig;
-  lastSig = sig;
+  remoteRefreshS = doc["refreshSeconds"] | 0;
   hasData = true;
   errorMsg = "";
   lastFetch = millis();
@@ -795,8 +782,52 @@ static void drawPage() {
   }
 }
 
+// Ce qui est affiché, pris à chaque redessin complet : un rafraîchissement automatique ne redessine
+// tout l'écran que pour un vrai changement (état, texte, ou écart d'au moins 0,3 °C / 3 % d'humidité
+// par rapport à l'affiché), pas pour chaque dixième de degré.
+static String drawnSig;
+static std::vector<float> drawnTemps, drawnHums;
+static float drawnBoilerTemp = NAN;
+
+static String displaySig() {  // tout l'affiché sauf les mesures de température / humidité
+  String sig = updatedDate;
+  for (const Sensor& t : sensors)
+    sig += "|" + t.name + (t.battery <= 20 ? t.battery : 100) + (t.online ? String() : String("off") + t.lastSeen);
+  for (const Switch& w : switches) sig += "|" + w.name + (w.on ? "1" : "0") + (w.online ? "" : "off");
+  for (const Level& l : levels) sig += "|" + l.key + fmtTemp(l.temp);
+  sig += "|" + String((int)boiler.configured) + (int)boiler.enabled + (int)boiler.relayOnline +
+         (int)boiler.heating + (int)boiler.scheduleActive + boiler.activeLevel + boiler.exception +
+         boiler.overrideLevel + boiler.overrideUntil + fmtTemp(boiler.targetTemp) + boiler.mode +
+         boiler.programName + boiler.nextDay + boiler.nextTime + boiler.nextLabel;
+  return sig;
+}
+
+static bool moved(float a, float b, float threshold) {
+  if (isnan(a) || isnan(b)) return isnan(a) != isnan(b);
+  return fabsf(a - b) >= threshold;
+}
+
+static bool displayChanged() {
+  if (displaySig() != drawnSig || sensors.size() != drawnTemps.size()) return true;
+  for (size_t i = 0; i < sensors.size(); ++i)
+    if (moved(sensors[i].temp, drawnTemps[i], 0.3f) || moved(sensors[i].humidity, drawnHums[i], 3.0f)) return true;
+  return moved(boiler.currentTemp, drawnBoilerTemp, 0.3f);
+}
+
+static void snapshotDrawn() {
+  drawnSig = displaySig();
+  drawnTemps.clear();
+  drawnHums.clear();
+  for (const Sensor& t : sensors) {
+    drawnTemps.push_back(t.temp);
+    drawnHums.push_back(t.humidity);
+  }
+  drawnBoilerTemp = boiler.currentTemp;
+}
+
 static void render(epd_mode_t mode) {
-  lastFullRender = millis();
+  if (mode == epd_mode_t::epd_quality) lastFullRender = millis();  // nettoyage de la rémanence
+  if (hasData) snapshotDrawn();
   buttons.clear();
   D.setEpdMode(mode);
   D.startWrite();
@@ -835,8 +866,14 @@ static bool refreshAll(epd_mode_t mode, bool force = true) {
   bool ok = fetchSummary();
   if (!hasData) render(mode);
   else if (!ok) updateStatusLine();
-  else if (force || dataChanged || millis() - lastFullRender >= 3600000UL) {
+  else if (force) {
     render(mode);
+    lastRedraw = 'f';
+  } else if (millis() - lastFullRender >= 3600000UL) {
+    render(epd_mode_t::epd_quality);  // nettoyage horaire en haute qualité
+    lastRedraw = 'q';
+  } else if (displayChanged()) {
+    render(epd_mode_t::epd_fast);  // changement réel : redessin rapide, bien moins gourmand
     lastRedraw = 'f';
   } else {
     updateStatusLine();

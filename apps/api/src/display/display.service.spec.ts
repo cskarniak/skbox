@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DisplayService } from './display.service';
 import { BoilerService } from '../boiler/boiler.service';
+import { SettingsService } from '../settings/settings.service';
+
+let refreshSetting: string | null = null;
 
 // Le client Prisma n'est pas nécessaire : les accès base sont simulés ci-dessous.
 vi.mock('@skbox/db', () => ({ PrismaClient: class {} }));
@@ -46,7 +49,8 @@ function makeService() {
       levels: { eco: 17, confort: 19, confort_plus: 21, vacances: 12, nuit: 16 },
     })),
   } as unknown as BoilerService;
-  return new DisplayService(prisma, boiler);
+  const settings = { get: vi.fn(async () => refreshSetting) } as unknown as SettingsService;
+  return new DisplayService(prisma, boiler, settings);
 }
 
 describe('DisplayService', () => {
@@ -69,6 +73,16 @@ describe('DisplayService', () => {
       { id: 's1', name: 'Lampe', room: 'Chambre', on: true, online: true },
     ]);
     expect((await makeService().getSummary()).switches).toEqual([]);
+  });
+
+  it('transmet l\'intervalle de rafraîchissement imposé, ou null', async () => {
+    refreshSetting = null;
+    expect((await makeService().getSummary()).refreshSeconds).toBeNull();
+    refreshSetting = '1800';
+    expect((await makeService().getSummary()).refreshSeconds).toBe(1800);
+    refreshSetting = '5'; // trop court : ignoré
+    expect((await makeService().getSummary()).refreshSeconds).toBeNull();
+    refreshSetting = null;
   });
 
   it("expose l'état de la chaudière et les niveaux avec libellés", async () => {

@@ -1,6 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { PrismaClient } from '@skbox/db';
 import { BoilerMode, BoilerService, LEVEL_LABELS, LevelKey } from '../boiler/boiler.service';
+import { SettingsService } from '../settings/settings.service';
+
+// Réglage skbox (PUT /api/settings/displayRefreshSeconds { value }) : intervalle de rafraîchissement
+// de jour imposé à l'afficheur, sans reflasher (mesures de consommation...). Absent = défaut du firmware.
+export const DISPLAY_REFRESH_SETTING = 'displayRefreshSeconds';
 
 export interface DisplayTemperature {
   id: string;
@@ -29,6 +34,7 @@ export interface DisplayLevel {
 
 export interface DisplaySummary {
   generatedAt: string; // ISO
+  refreshSeconds: number | null; // intervalle de jour imposé à l'afficheur (null = défaut du firmware)
   localTime: string; // "HH:MM"
   localDate: string; // "jeu. 24 sept."
   temperatures: DisplayTemperature[];
@@ -84,19 +90,23 @@ export class DisplayService {
   constructor(
     @Inject('PRISMA') private readonly prisma: PrismaClient,
     private readonly boiler: BoilerService,
+    private readonly settings: SettingsService,
   ) {}
 
   async getSummary(deviceIds?: string[], switchIds?: string[]): Promise<DisplaySummary> {
     const now = new Date();
-    const [temperatures, switches, status, config] = await Promise.all([
+    const [temperatures, switches, status, config, refreshRaw] = await Promise.all([
       this.readTemperatures(deviceIds),
       this.readSwitches(switchIds ?? []),
       this.boiler.getStatus(),
       this.boiler.getConfig(),
+      this.settings.get(DISPLAY_REFRESH_SETTING),
     ]);
+    const refresh = Number(refreshRaw);
 
     return {
       generatedAt: now.toISOString(),
+      refreshSeconds: Number.isFinite(refresh) && refresh >= 60 ? Math.round(refresh) : null,
       localTime: hhmm(now),
       localDate: shortDate(now),
       temperatures,
