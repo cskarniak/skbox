@@ -983,6 +983,7 @@ static void onTap(int tx, int ty) {
 // ni réveil possible. Ici l'attente est bornée : ligne toujours active après 500 ms -> sommeil sur
 // minuterie seule, raccourci à 30 s, pour retrouver vite le réveil au toucher.
 static const gpio_num_t TOUCH_INT_PIN = GPIO_NUM_48;
+static const int BUZZER_PIN = 21;  // buzzer intégré du PaperS3 (M5Unified : spk_cfg.pin_data_out)
 
 static void lightSleepSafe(uint32_t seconds) {
   setPhase(PH_TOUCH_RELEASE);
@@ -1045,6 +1046,10 @@ static void goToSleep() {
   // survenaient tous à la première veille suivant une utilisation (bips), jamais après des réveils
   // par minuterie seuls. On arrête donc complètement le son avant de dormir.
   M5.Speaker.end();
+  // end() arrête l'I2S sans remettre la broche du buzzer au repos (M5Unified ne le fait que pour la
+  // sortie DAC) : restée à l'état haut, elle alimenterait la bobine du buzzer pendant toute la veille.
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
   uint32_t elapsed = millis() - lastAttempt, delayMs = refreshDelayMs();
   uint32_t wait = elapsed >= delayMs ? 1 : (delayMs - elapsed + 999) / 1000;
   LOG("[veille] light sleep %lu s (batterie %d %%)\n", (unsigned long)wait, (int)M5.Power.getBatteryLevel());
