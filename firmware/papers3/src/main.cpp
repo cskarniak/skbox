@@ -103,7 +103,8 @@ static int durationIndex = BOOST_DEFAULT_INDEX;
 
 // Emplacements de capteurs : 2 colonnes x 3 lignes, remplis colonne par colonne.
 // Les emplacements sans capteur restent réservés (cadre gris « libre »).
-static const int SENSOR_SLOTS = 6;
+static const int SENSOR_SLOTS = 5;   // + 1 emplacement fixe pour l'état de la chaudière (6 au total)
+static const int BOILER_CARD_SLOT = 5;  // bas de la 2e colonne
 
 // Pages, choisies par les onglets de l'en-tête. Alarme et Libre sont des écrans d'attente,
 // sans appel réseau, réservés pour plus tard.
@@ -588,6 +589,56 @@ static void drawFreeCard(int x, int y) {
   text("libre", x + CARD_W / 2, y + CARD_H / 2, &fonts::efontJA_16, textdatum_t::middle_center, C_LIGHTGRAY);
 }
 
+// Carte compacte de l'état chaudière, dans la grille des températures (emplacement fixe) : de quoi
+// jeter un coup d'œil sans changer de page — mode, programme et cible. Pilotage et détail complet
+// (température mesurée, relais, dérogation...) restent sur l'onglet Chaudière.
+static void drawBoilerCard(int x, int y) {
+  const int cw = CARD_W, ch = CARD_H;
+  uint16_t c = boiler.configured ? C_BLACK : C_GRAY;
+  D.drawRoundRect(x, y, cw, ch, 10, c);
+  D.drawRoundRect(x + 1, y + 1, cw - 2, ch - 2, 9, c);
+
+  if (!boiler.configured) {
+    text("Chaudière", x + cw / 2, y + ch / 2 - 12, &fonts::efontJA_24, textdatum_t::middle_center, C_GRAY);
+    text("non configurée", x + cw / 2, y + ch / 2 + 14, &fonts::efontJA_16, textdatum_t::middle_center, C_GRAY);
+    return;
+  }
+
+  D.setFont(&fonts::efontJA_24);
+  D.setTextSize(1);
+  text(fit("Chaudière", cw - 90), x + 12, y + 10, &fonts::efontJA_24, textdatum_t::top_left, C_BLACK);
+
+  // Chauffe / ne chauffe pas / arrêt : badge plein quand elle chauffe, sinon texte simple (pas un bouton).
+  if (!boiler.enabled) {
+    D.setFont(&fonts::efontJA_16);
+    int bw = D.textWidth("ARRÊT") + 14;
+    int bx = x + cw - 10 - bw;
+    D.fillRoundRect(bx, y + 8, bw, 24, 6, C_BLACK);
+    text("ARRÊT", bx + bw / 2, y + 20, &fonts::efontJA_16, textdatum_t::middle_center, C_WHITE);
+  } else if (boiler.heating) {
+    D.setFont(&fonts::efontJA_16);
+    int bw = D.textWidth("CHAUFFE") + 14;
+    int bx = x + cw - 10 - bw;
+    D.fillRoundRect(bx, y + 8, bw, 24, 6, C_BLACK);
+    text("CHAUFFE", bx + bw / 2, y + 20, &fonts::efontJA_16, textdatum_t::middle_center, C_WHITE);
+  } else {
+    text("ne chauffe pas", x + cw - 10, y + 20, &fonts::efontJA_16, textdatum_t::middle_right, C_GRAY);
+  }
+
+  if (boiler.enabled) {
+    text("cible", x + 12, y + 56, &fonts::efontJA_16, textdatum_t::top_left, C_GRAY);
+    bigTemp(boiler.targetTemp, x + 12, y + 70, C_BLACK, 1.3f);
+  }
+
+  // Mode en une ligne : dérogation, programme (ou période dérogatoire), défaut, ou arrêt.
+  bool forced = boiler.hasOverride || boiler.mode == "override";
+  String modeLine = !boiler.enabled                ? "Régulation arrêtée"
+                    : forced                        ? "Forcé jusqu'à " + boiler.overrideUntil
+                    : boiler.programName.length()   ? (boiler.exception.length() ? boiler.exception : boiler.programName)
+                                                     : "Défaut";
+  text(fit(modeLine, cw - 24), x + 12, y + ch - 10, &fonts::efontJA_16, textdatum_t::bottom_left, C_GRAY);
+}
+
 static void drawSensors() {
   const int cw = CARD_W, ch = CARD_H;
 
@@ -617,6 +668,10 @@ static void drawSensors() {
       text("pile " + String(s.battery) + " %", x + cw - 12, y + 12, &fonts::efontJA_16, textdatum_t::top_right, C_BLACK);
     }
   }
+
+  int bx, by;
+  cardPos(BOILER_CARD_SLOT / 3, BOILER_CARD_SLOT % 3, bx, by);
+  drawBoilerCard(bx, by);
 }
 
 // Prises et lumières (colonnes 3-4 de la page Maison), même format que les températures.
