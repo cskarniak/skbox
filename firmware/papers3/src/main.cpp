@@ -143,7 +143,13 @@ static bool isNight() {
                                      : (h >= NIGHT_START_H && h < NIGHT_END_H);
 }
 
+// NIGHT_REFRESH_S == 0 : aucun réveil programmé la nuit (le réveil par minuterie, notre plus gros
+// poste de consommation, est le seul qu'on puisse supprimer sans rien perdre : personne ne regarde
+// l'écran la nuit). Le retour à jour se fait au premier toucher sur « Activer ».
+static bool nightNoRefresh() { return isNight() && NIGHT_REFRESH_S == 0; }
+
 static uint32_t refreshDelayMs() {
+  if (nightNoRefresh()) return UINT32_MAX;
   uint32_t day = remoteRefreshS ? remoteRefreshS : REFRESH_S;
   uint32_t normal = (isNight() ? (NIGHT_REFRESH_S > day ? NIGHT_REFRESH_S : day) : day) * 1000UL;
   if (!failures) return normal;
@@ -985,6 +991,9 @@ static void onTap(int tx, int ty) {
 static const gpio_num_t TOUCH_INT_PIN = GPIO_NUM_48;
 static const int BUZZER_PIN = 21;  // buzzer intégré du PaperS3 (M5Unified : spk_cfg.pin_data_out)
 
+// seconds == 0 : pas de réveil programmé, l'appareil dort jusqu'au toucher (nuit sans rafraîchissement).
+// Si le tactile reste bloqué (ligne INT jamais relâchée), un réveil de secours à 30 s est conservé
+// dans tous les cas, pour ne jamais rester définitivement endormi.
 static void lightSleepSafe(uint32_t seconds) {
   setPhase(PH_TOUCH_RELEASE);
   uint32_t t0 = millis();
@@ -993,9 +1002,10 @@ static void lightSleepSafe(uint32_t seconds) {
     delay(10);
   }
   bool touchWake = gpio_get_level(TOUCH_INT_PIN) != 0;
-  if (!touchWake && seconds > 30) seconds = 30;
+  if (!touchWake && (seconds == 0 || seconds > 30)) seconds = 30;
 
-  esp_sleep_enable_timer_wakeup((uint64_t)seconds * 1000000ULL);
+  if (seconds > 0) esp_sleep_enable_timer_wakeup((uint64_t)seconds * 1000000ULL);
+  else esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
   if (touchWake) {
     gpio_wakeup_enable(TOUCH_INT_PIN, GPIO_INTR_LOW_LEVEL);
     esp_sleep_enable_gpio_wakeup();
@@ -1051,8 +1061,9 @@ static void goToSleep() {
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(BUZZER_PIN, LOW);
   uint32_t elapsed = millis() - lastAttempt, delayMs = refreshDelayMs();
-  uint32_t wait = elapsed >= delayMs ? 1 : (delayMs - elapsed + 999) / 1000;
-  LOG("[veille] light sleep %lu s (batterie %d %%)\n", (unsigned long)wait, (int)M5.Power.getBatteryLevel());
+  uint32_t wait = delayMs == UINT32_MAX ? 0 : (elapsed >= delayMs ? 1 : (delayMs - elapsed + 999) / 1000);
+  if (wait) LOG("[veille] light sleep %lu s (batterie %d %%)\n", (unsigned long)wait, (int)M5.Power.getBatteryLevel());
+  else LOG("[veille] pas de réveil programmé (nuit), batterie %d %%\n", (int)M5.Power.getBatteryLevel());
   Serial.flush();
   lastAwakeMs = millis() - wokeAt;
   awakeAccum += lastAwakeMs;

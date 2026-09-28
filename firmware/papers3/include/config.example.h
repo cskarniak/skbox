@@ -25,9 +25,9 @@
 #define SWITCH_IDS "id_lampe,id_prise"
 
 // --- Rythme -------------------------------------------------------------
-#define REFRESH_S 300   // rafraîchissement automatique (secondes)
+#define REFRESH_S 1800  // rafraîchissement automatique de jour (secondes)
 #define IDLE_S 30       // inactivité avant mise en veille (secondes)
-#define NIGHT_REFRESH_S 1800  // rafraîchissement la nuit, de NIGHT_START_H à NIGHT_END_H
+#define NIGHT_REFRESH_S 0     // 0 = aucun réveil programmé la nuit (réveil manuel via « Activer »)
 #define NIGHT_START_H 22
 #define NIGHT_END_H 6
 
