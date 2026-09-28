@@ -103,8 +103,7 @@ static int durationIndex = BOOST_DEFAULT_INDEX;
 
 // Emplacements de capteurs : 2 colonnes x 3 lignes, remplis colonne par colonne.
 // Les emplacements sans capteur restent réservés (cadre gris « libre »).
-static const int SENSOR_SLOTS = 5;   // + 1 emplacement fixe pour l'état de la chaudière (6 au total)
-static const int BOILER_CARD_SLOT = 5;  // bas de la 2e colonne
+static const int SENSOR_SLOTS = 6;
 
 // Pages, choisies par les onglets de l'en-tête. Alarme et Libre sont des écrans d'attente,
 // sans appel réseau, réservés pour plus tard.
@@ -660,23 +659,29 @@ static void drawSensors() {
     }
   }
 
-  int bx, by;
-  cardPos(BOILER_CARD_SLOT / 3, BOILER_CARD_SLOT % 3, bx, by);
-  drawBoilerCard(bx, by);
 }
 
 // Prises et lumières (colonnes 3-4 de la page Maison), même format que les températures.
 // Carte entière = bouton : allumée = fond noir, texte blanc ; éteinte = fond blanc.
-static const int SW_SLOTS = 6;
+static const int SW_SLOTS = 6;         // emplacements de la grille (2 colonnes x 3 lignes)
+static const int SW_BOILER_SLOT = 3;   // dernière colonne, en haut : réservé à la chaudière
+static const int SW_MAX_SWITCHES = SW_SLOTS - 1;  // un emplacement de moins pour les prises
 static const int SW_X = CARD_X0 + 2 * (CARD_W + CARD_GAP), SW_Y = CARD_Y0;
 static const int SW_W = 2 * CARD_W + CARD_GAP, SW_H = 3 * CARD_H + 2 * CARD_GAP;
 
 static void drawSwitches() {
   const int cw = CARD_W, ch = CARD_H;
-  for (int i = 0; i < SW_SLOTS; ++i) {
+  for (int slot = 0; slot < SW_SLOTS; ++slot) {
     int x, y;
-    cardPos(2 + i / 3, i % 3, x, y);
-    if ((size_t)i >= switches.size()) {
+    cardPos(2 + slot / 3, slot % 3, x, y);
+
+    if (slot == SW_BOILER_SLOT) {
+      drawBoilerCard(x, y);
+      continue;
+    }
+    // Un emplacement de la grille est réservé à la chaudière : les index suivants glissent d'un cran.
+    size_t i = slot < SW_BOILER_SLOT ? (size_t)slot : (size_t)slot - 1;
+    if (i >= switches.size() || i >= (size_t)SW_MAX_SWITCHES) {
       drawFreeCard(x, y);
       continue;
     }
@@ -699,7 +704,7 @@ static void drawSwitches() {
       D.setFont(&fonts::efontJA_16);
       text(fit(sw.room, cw - 24), x + cw - 12, y + ch - 10, &fonts::efontJA_16, textdatum_t::bottom_right, fg);
     }
-    addButton(x, y, cw, ch, A_SWITCH, i);
+    addButton(x, y, cw, ch, A_SWITCH, (int)i);
   }
 }
 
