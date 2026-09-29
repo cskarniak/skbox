@@ -9,6 +9,7 @@ import {
 import { PrismaClient } from '@skbox/db';
 import { MqttService } from '../mqtt/mqtt.service';
 import { SettingsService } from '../settings/settings.service';
+import { computeDailyHeating, DailyHeating, heatingWindowStart, RelayTransition } from './boiler-heating';
 
 export type LevelKey = 'eco' | 'confort' | 'confort_plus' | 'vacances' | 'nuit';
 
@@ -345,6 +346,42 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
       programName: program?.name ?? null,
       nextChange: this.nextChange(state, activeOverride, activeLevel, now),
     };
+  }
+
+  // Décompte jour par jour du temps de chauffe, reconstitué depuis l'historique du relais
+  // (DeviceEvent, donc `trackHistory` doit être actif sur le relais avec le champ `state` suivi).
+  // On s'appuie sur l'état réellement rapporté par le relais plutôt que sur `lastCommandedState`,
+  // qui ne garde que la dernière commande et ignore les bascules manuelles.
+  async getHeatingHistory(days: number): Promise<{ deviceId: string | null; days: DailyHeating[] }> {
+    const span = Math.min(Math.max(Math.floor(days) || 30, 1), 365);
+    const state = await this.loadState();
+    if (!state.deviceId) return { deviceId: null, days: [] };
+
+    const now = new Date();
+    const windowStart = heatingWindowStart(now, span);
+    const [before, inWindow] = await Promise.all([
+      this.prisma.deviceEvent.findFirst({
+        where: { deviceId: state.deviceId, event: 'state_update', timestamp: { lt: windowStart } },
+        orderBy: { timestamp: 'desc' },
+      }),
+      this.prisma.deviceEvent.findMany({
+        where: { deviceId: state.deviceId, event: 'state_update', timestamp: { gte: windowStart } },
+        orderBy: { timestamp: 'asc' },
+      }),
+    ]);
+
+    const toTransition = (e: { timestamp: Date; data: string }): RelayTransition | null => {
+      try {
+        const s = JSON.parse(e.data).state;
+        return s === 'ON' || s === 'OFF' ? { timestamp: e.timestamp, state: s } : null;
+      } catch {
+        return null;
+      }
+    };
+
+    const initial = before ? toTransition(before)?.state ?? null : null;
+    const transitions = inWindow.map(toTransition).filter((t): t is RelayTransition => t !== null);
+    return { deviceId: state.deviceId, days: computeDailyHeating(transitions, initial, span, now) };
   }
 
   // Coupure d'urgence : arrête la régulation automatique (plus aucune commande envoyée) et

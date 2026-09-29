@@ -32,6 +32,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { AppNav } from '@/components/AppNav';
+import { HeatingHistoryCard } from './HeatingHistoryCard';
 
 type LevelKey = 'eco' | 'confort' | 'confort_plus' | 'vacances' | 'nuit';
 
@@ -512,6 +513,8 @@ export default function BoilerPage() {
               </Stack>
             </Card>
           )}
+
+          <HeatingHistoryCard />
 
           <Card shadow="sm" padding="lg" withBorder>
             <Text size="sm" c="dimmed" mb="sm">
