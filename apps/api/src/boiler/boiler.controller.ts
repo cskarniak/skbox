@@ -37,6 +37,11 @@ export class BoilerController {
     return this.boiler.setMode(mode);
   }
 
+  @Get('events')
+  getEvents(@Query('days') days?: string, @Query('limit') limit?: string) {
+    return this.boiler.getEvents(Number(days), Number(limit));
+  }
+
   @Post('boost')
   setBoost(@Body('level') level: LevelKey, @Body('minutes') minutes: number) {
     return this.boiler.setBoost(level, minutes);

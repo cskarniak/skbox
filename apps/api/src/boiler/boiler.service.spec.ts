@@ -7,10 +7,20 @@ type FakeDevice = { id: string; name: string; status: string; mqttTopic: string 
 
 function makeFakePrisma(devices: FakeDevice[]) {
   const byId = new Map(devices.map((d) => [d.id, d]));
+  const events: any[] = [];
   return {
     device: {
       findUnique: vi.fn(async ({ where: { id } }: { where: { id: string } }) => byId.get(id) ?? null),
     },
+    boilerEvent: {
+      create: vi.fn(async ({ data }: { data: any }) => {
+        events.push({ id: `e${events.length + 1}`, ...data });
+        return data;
+      }),
+      findMany: vi.fn(async () => [...events].reverse()),
+      deleteMany: vi.fn(async () => ({ count: 0 })),
+    },
+    __events: events,
   } as any;
 }
 
@@ -432,6 +442,103 @@ describe('BoilerService', () => {
       const status = await service.getStatus();
       expect(status.sensorStale).toBe(false);
       expect(status.commandedState).toBe('ON');
+    });
+  });
+
+  describe('journal des déclenchements', () => {
+    it('enregistre une régulation avec le contexte complet de la décision', async () => {
+      const config = baseConfig({
+        defaultLevel: 'eco',
+        programs: [{ id: 'p', name: 'Jour travaillé', slots: [{ from: '00:00', to: '23:59', level: 'confort' }] }],
+        dayPrograms: { 0: 'p', 1: 'p', 2: 'p', 3: 'p', 4: 'p', 5: 'p', 6: 'p' },
+      });
+      setSensorTemp(prisma, 18.2); // < 19 - 0,5
+      await service.setConfig(config);
+
+      expect(prisma.__events).toHaveLength(1);
+      expect(prisma.__events[0]).toMatchObject({
+        action: 'ON',
+        reason: 'regulation',
+        operatingMode: 'planning',
+        level: 'confort',
+        programName: 'Jour travaillé',
+        exceptionName: null,
+        targetTemp: 19,
+        currentTemp: 18.2,
+        hysteresis: 0.5,
+        overrideUntil: null,
+        previousStateMinutes: null, // premier déclenchement
+      });
+    });
+
+    it('indique la dérogation (forcé) et la durée passée dans l\'état précédent', async () => {
+      const config = baseConfig({ defaultLevel: 'confort', minOnMinutes: 0, minOffMinutes: 0 });
+      setSensorTemp(prisma, 18.2);
+      await service.setConfig(config); // ON à 10:00
+
+      vi.setSystemTime(new Date('2026-07-15T11:30:00'));
+      setSensorTemp(prisma, 21);
+      await service.setBoost('confort_plus', 60); // cible 21 + 0,5 : 21 n'est pas au-dessus, reste ON
+      setSensorTemp(prisma, 22); // > 21 + 0,5
+      await tick(service, config);
+
+      const last = prisma.__events[prisma.__events.length - 1];
+      expect(last).toMatchObject({ action: 'OFF', reason: 'regulation', operatingMode: 'forced', level: 'confort_plus', targetTemp: 21 });
+      expect(last.previousStateMinutes).toBe(90);
+      expect(last.overrideUntil).toBeInstanceOf(Date);
+    });
+
+    it('distingue les coupures par mode été, sonde périmée et arrêt d\'urgence', async () => {
+      const config = baseConfig({ defaultLevel: 'confort', minOnMinutes: 0 });
+      setSensorTemp(prisma, 15);
+      devicesById.get(SENSOR_ID)!.lastSeen = new Date('2026-07-15T09:59:00');
+      await service.setConfig(config); // ON
+
+      await service.setMode('summer');
+      expect(prisma.__events.at(-1)).toMatchObject({ action: 'OFF', reason: 'summer', operatingMode: 'summer', level: null, targetTemp: null });
+
+      await service.setMode('planning');
+      vi.setSystemTime(new Date('2026-07-15T10:30:00'));
+      devicesById.get(SENSOR_ID)!.lastSeen = new Date('2026-07-15T10:29:00');
+      await tick(service, config); // ON de nouveau
+      expect(prisma.__events.at(-1)).toMatchObject({ action: 'ON', reason: 'regulation' });
+
+      vi.setSystemTime(new Date('2026-07-15T13:00:00'));
+      devicesById.get(SENSOR_ID)!.lastSeen = new Date('2026-07-15T10:29:00'); // 151 min de silence
+      await tick(service, config);
+      expect(prisma.__events.at(-1)).toMatchObject({ action: 'OFF', reason: 'stale_sensor', sensorAgeMinutes: 151 });
+
+      devicesById.get(SENSOR_ID)!.lastSeen = new Date('2026-07-15T12:59:00');
+      await tick(service, config); // reprise : ON
+      await service.setEnabled(false);
+      expect(prisma.__events.at(-1)).toMatchObject({ action: 'OFF', reason: 'emergency_stop' });
+    });
+
+    it('n\'enregistre rien quand aucune commande n\'est envoyée', async () => {
+      const config = baseConfig({ defaultLevel: 'confort' });
+      setSensorTemp(prisma, 19); // zone morte, aucun état commandé : OFF initial
+      await service.setConfig(config);
+      const count = prisma.__events.length;
+      await tick(service, config);
+      await tick(service, config);
+      expect(prisma.__events).toHaveLength(count);
+    });
+
+    it('un échec d\'écriture du journal n\'empêche pas la régulation', async () => {
+      prisma.boilerEvent.create.mockRejectedValue(new Error('base indisponible'));
+      setSensorTemp(prisma, 15);
+      await service.setConfig(baseConfig({ defaultLevel: 'confort' }));
+      expect(mqtt.publish).toHaveBeenCalledWith('zigbee2mqtt/relais/set', JSON.stringify({ state: 'ON' }));
+      expect((await service.getStatus()).commandedState).toBe('ON');
+    });
+
+    it('getEvents renvoie les événements du plus récent au plus ancien', async () => {
+      setSensorTemp(prisma, 15);
+      await service.setConfig(baseConfig({ defaultLevel: 'confort' }));
+      const events = await service.getEvents(7, 100);
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({ action: 'ON', reason: 'regulation', level: 'confort', currentTemp: 15 });
+      expect(typeof events[0].at).toBe('string');
     });
   });
 });

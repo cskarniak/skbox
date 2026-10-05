@@ -286,3 +286,25 @@ model HistoryTemplate {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// Un déclenchement de la chaudière : chaque commande ON/OFF envoyée au relais, avec le contexte de
+// la décision (mode, programme, niveau, cible, mesure...) tel qu'il était à cet instant, pour
+// pouvoir comprendre après coup pourquoi la chaudière s'est allumée ou éteinte.
+model BoilerEvent {
+  id                   String    @id @default(cuid())
+  at                   DateTime  @default(now())
+  action               String // "ON" | "OFF"
+  reason               String // "regulation" | "summer" | "stale_sensor" | "emergency_stop"
+  operatingMode        String // "planning" | "away" | "forced" | "summer"
+  level                String?
+  programName          String?
+  exceptionName        String? // période dérogatoire active
+  targetTemp           Float?
+  currentTemp          Float?
+  hysteresis           Float?
+  sensorAgeMinutes     Int?
+  overrideUntil        DateTime?
+  previousStateMinutes Int? // durée passée dans l'état précédent (ON ou OFF)
+
+  @@index([at])
+}

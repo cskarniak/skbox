@@ -136,6 +136,28 @@ export interface BoilerStatus {
 // alertes tout en limitant le temps passé sur une mesure périmée.
 const SENSOR_STALE_MS = 90 * 60_000;
 
+// Les déclenchements (BoilerEvent) sont conservés un an : quelques dizaines par jour au plus.
+const EVENT_RETENTION_DAYS = 365;
+
+export type BoilerEventReason = 'regulation' | 'summer' | 'stale_sensor' | 'emergency_stop';
+
+export interface BoilerEventDto {
+  id: string;
+  at: string;
+  action: 'ON' | 'OFF';
+  reason: BoilerEventReason;
+  operatingMode: OperatingMode;
+  level: LevelKey | null;
+  programName: string | null;
+  exceptionName: string | null;
+  targetTemp: number | null;
+  currentTemp: number | null;
+  hysteresis: number | null;
+  sensorAgeMinutes: number | null;
+  overrideUntil: string | null;
+  previousStateMinutes: number | null;
+}
+
 const STATE_KEY = 'boiler';
 const TICK_MS = 60_000;
 // Horizon de recherche du prochain changement : une semaine couvre tout planning hebdomadaire.
@@ -179,6 +201,7 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     this.timer = setInterval(() => this.evaluate(), TICK_MS);
     await this.evaluate();
+    await this.pruneEvents();
   }
 
   onModuleDestroy() {
@@ -425,6 +448,81 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
     return { deviceId: state.deviceId, days: computeDailyHeating(transitions, initial, span, now) };
   }
 
+  // Journal des déclenchements : une ligne par commande ON/OFF envoyée au relais, avec le contexte
+  // de la décision. À appeler avant de mettre à jour lastChangeAt (sert à calculer la durée de l'état
+  // précédent). Un échec d'écriture ne doit jamais empêcher la régulation : on journalise et on continue.
+  private async recordEvent(
+    state: BoilerState,
+    action: 'ON' | 'OFF',
+    reason: BoilerEventReason,
+    currentTemp: number | null,
+    sensorAgeMs: number | null,
+  ): Promise<void> {
+    try {
+      const now = new Date();
+      const activeOverride = this.activeOverride(state);
+      const summer = state.baseMode === 'summer';
+      const level = this.computeActiveLevel(state, activeOverride);
+      await this.prisma.boilerEvent.create({
+        data: {
+          at: now,
+          action,
+          reason,
+          operatingMode: activeOverride ? 'forced' : state.baseMode,
+          level: summer && !activeOverride ? null : level,
+          programName: this.programForDate(state, now)?.name ?? null,
+          exceptionName: this.activeDateException(state, now)?.name ?? null,
+          targetTemp: summer && !activeOverride ? null : state.levels[level],
+          currentTemp,
+          hysteresis: state.hysteresis,
+          sensorAgeMinutes: sensorAgeMs === null ? null : Math.floor(sensorAgeMs / 60_000),
+          overrideUntil: activeOverride ? new Date(activeOverride.until) : null,
+          previousStateMinutes: state.lastChangeAt
+            ? Math.max(0, Math.round((now.getTime() - new Date(state.lastChangeAt).getTime()) / 60_000))
+            : null,
+        },
+      });
+    } catch (err) {
+      this.logger.error(`Chaudière : journal des déclenchements indisponible (${(err as Error).message})`);
+    }
+  }
+
+  async getEvents(days: number, limit: number): Promise<BoilerEventDto[]> {
+    const span = Math.min(Math.max(Math.floor(days) || 7, 1), EVENT_RETENTION_DAYS);
+    const take = Math.min(Math.max(Math.floor(limit) || 200, 1), 1000);
+    const rows = await this.prisma.boilerEvent.findMany({
+      where: { at: { gte: new Date(Date.now() - span * 86_400_000) } },
+      orderBy: { at: 'desc' },
+      take,
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      at: r.at.toISOString(),
+      action: r.action as 'ON' | 'OFF',
+      reason: r.reason as BoilerEventReason,
+      operatingMode: r.operatingMode as OperatingMode,
+      level: r.level as LevelKey | null,
+      programName: r.programName,
+      exceptionName: r.exceptionName,
+      targetTemp: r.targetTemp,
+      currentTemp: r.currentTemp,
+      hysteresis: r.hysteresis,
+      sensorAgeMinutes: r.sensorAgeMinutes,
+      overrideUntil: r.overrideUntil ? r.overrideUntil.toISOString() : null,
+      previousStateMinutes: r.previousStateMinutes,
+    }));
+  }
+
+  private async pruneEvents(): Promise<void> {
+    try {
+      await this.prisma.boilerEvent.deleteMany({
+        where: { at: { lt: new Date(Date.now() - EVENT_RETENTION_DAYS * 86_400_000) } },
+      });
+    } catch (err) {
+      this.logger.error(`Chaudière : purge du journal impossible (${(err as Error).message})`);
+    }
+  }
+
   // Coupure d'urgence : arrête la régulation automatique (plus aucune commande envoyée) et
   // coupe immédiatement le relais, utile pour isoler un bug sans devoir désactiver l'appareil
   // ou débrancher la sonde. La réactivation reprend la régulation au prochain cycle.
@@ -436,6 +534,7 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
       const device = await this.prisma.device.findUnique({ where: { id: state.deviceId } });
       if (device?.mqttTopic) {
         this.mqtt.publish(`${device.mqttTopic}/set`, JSON.stringify({ state: 'OFF' }));
+        await this.recordEvent(state, 'OFF', 'emergency_stop', await this.readCurrentTemp(state), await this.sensorAgeMs(state));
         next.lastCommandedState = 'OFF';
         next.lastChangeAt = new Date().toISOString();
         this.logger.log(`Chaudière : arrêt d'urgence, ${device.name} → OFF`);
@@ -615,6 +714,7 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
         }
         this.mqtt.publish(`${device.mqttTopic}/set`, JSON.stringify({ state: 'OFF' }));
         this.logger.log(`Chaudière : mode été, ${device.name} → OFF`);
+        await this.recordEvent(state, 'OFF', 'summer', await this.readCurrentTemp(state), await this.sensorAgeMs(state));
         state.lastCommandedState = 'OFF';
         state.lastChangeAt = new Date().toISOString();
         await this.saveState(state);
@@ -640,6 +740,7 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
         }
         this.mqtt.publish(`${device.mqttTopic}/set`, JSON.stringify({ state: 'OFF' }));
         this.logger.log(`Chaudière : sonde périmée, ${device.name} → OFF`);
+        await this.recordEvent(state, 'OFF', 'stale_sensor', await this.readCurrentTemp(state), sensorAgeMs);
         state.lastCommandedState = 'OFF';
         state.lastChangeAt = new Date().toISOString();
         await this.saveState(state);
@@ -685,6 +786,7 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
       `Chaudière : ${device.name} → ${desired} (niveau ${activeLevel}, cible ${state.levels[activeLevel]}°C, mesure ${currentTemp}°C)`,
     );
 
+    await this.recordEvent(state, desired, 'regulation', currentTemp, sensorAgeMs);
     state.lastCommandedState = desired;
     state.lastChangeAt = new Date(now).toISOString();
     await this.saveState(state);

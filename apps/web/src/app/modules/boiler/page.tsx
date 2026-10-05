@@ -38,6 +38,7 @@ import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { AppNav } from '@/components/AppNav';
 import { HeatingHistoryCard } from './HeatingHistoryCard';
+import { BoilerEventsCard } from './BoilerEventsCard';
 
 type BaseMode = 'summer' | 'away' | 'planning';
 type OperatingMode = BaseMode | 'forced';
@@ -611,6 +612,8 @@ export default function BoilerPage() {
           )}
 
           <HeatingHistoryCard />
+
+          <BoilerEventsCard levelLabels={levelLabels} />
 
           <Card shadow="sm" padding="lg" withBorder>
             <Text size="sm" c="dimmed" mb="sm">
