@@ -30,6 +30,7 @@ import {
   IconPlaneDeparture,
   IconCalendarEvent,
   IconBolt,
+  IconChartBar,
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -37,8 +38,6 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { AppNav } from '@/components/AppNav';
-import { HeatingHistoryCard } from './HeatingHistoryCard';
-import { BoilerEventsCard } from './BoilerEventsCard';
 
 type BaseMode = 'summer' | 'away' | 'planning';
 type OperatingMode = BaseMode | 'forced';
@@ -611,10 +610,6 @@ export default function BoilerPage() {
             </Card>
           )}
 
-          <HeatingHistoryCard />
-
-          <BoilerEventsCard levelLabels={levelLabels} />
-
           <Card shadow="sm" padding="lg" withBorder>
             <Text size="sm" c="dimmed" mb="sm">
               Niveaux de chauffe
@@ -848,6 +843,16 @@ export default function BoilerPage() {
               Enregistrer
             </Button>
           </Group>
+
+          <Button
+            variant="light"
+            color="gray"
+            fullWidth
+            leftSection={<IconChartBar size={16} />}
+            onClick={() => router.push('/modules/boiler/history')}
+          >
+            Analyse des temps de chauffe et historique
+          </Button>
         </Stack>
       </AppShell.Main>
     </AppShell>
