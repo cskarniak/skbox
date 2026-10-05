@@ -25,6 +25,7 @@
 - Dongle: Sonoff ZBDongle-E (Silicon Labs EFR32MG21) on `/dev/cu.usbserial-14220`
 - UI: http://localhost:8080
 - Runs natively (not Docker) because macOS doesn't support USB passthrough in Docker
+- **Seuil d'envoi de la température des Sonoff SNZB-02D** : par défaut Zigbee2MQTT ne fait envoyer la température qu'à partir de 1 °C d'écart (au plus tard toutes les heures), trop grossier pour la chaudière (hystérésis 0,3 °C). `zigbee2mqtt/external_converters/sonoff-snzb-02d.js` redéfinit ce modèle avec un seuil de 0,2 °C, appliqué automatiquement à l'appairage d'un nouveau capteur. À installer sur chaque hôte : copier le fichier dans `~/zigbee2mqtt/data/`, ajouter `external_converters: [sonoff-snzb-02d.js]` dans `configuration.yaml`, redémarrer Z2M (`skbox-z2m`). Un capteur déjà appairé garde ses anciens réglages jusqu'à reconfiguration (appui sur son bouton + onglet Rapports > Appliquer, ou « Reconfigurer »).
 
 ## rfxcom2mqtt (native)
 - Install: git clone of https://github.com/rfxcom2mqtt/backend (`~/rfxcom2mqtt` on skbox-mini), run via `ts-node src/index.ts` under systemd (`skbox-rfxcom.service`) — not the npm package.

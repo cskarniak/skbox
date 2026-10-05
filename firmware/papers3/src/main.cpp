@@ -634,13 +634,19 @@ static void drawBoilerCard(int x, int y) {
     text("ne chauffe pas", x + 12, y + 38, &fonts::efontJA_16, textdatum_t::middle_left, C_BLACK);
   }
 
-  // Mode ou niveau actif, juste au-dessus de la cible : « Été » / « Absent » / « Forcé · Confort »,
-  // sinon le niveau du planning (Éco, Confort...). En été il n'y a pas de cible à afficher.
-  String line = modeSummer() ? String("Été") : modeAway() ? String("Absent")
-                : (modeForced() && boiler.operatingMode.length()) ? "Forcé · " + boiler.activeLabel
-                                                                  : boiler.activeLabel;
-  text(fit(line, cw - 24), x + 12, y + 47, &fonts::efontJA_16, textdatum_t::top_left, C_BLACK);
-  if (!modeSummer()) bigTemp(boiler.targetTemp, x + 12, y + 64, C_BLACK, 1.3f);
+  // Mode ou niveau actif, juste au-dessus de la cible : « Absent » / « Forcé · Confort », sinon le niveau
+  // du planning (Éco, Confort...). En été il n'y a pas de cible : « Été » occupe sa place, en grand.
+  if (modeSummer()) {
+    // « Été » en grand, à la place de la cible. FreeSans (bigTemp) n'a pas les accents : police efontJA
+    // agrandie pour une hauteur comparable à celle de la température.
+    text("Été", x + 12, y + 62, &fonts::efontJA_24, textdatum_t::top_left, C_BLACK, 2.0f);
+  } else {
+    String line = modeAway() ? String("Absent")
+                  : (modeForced() && boiler.operatingMode.length()) ? "Forcé · " + boiler.activeLabel
+                                                                    : boiler.activeLabel;
+    text(fit(line, cw - 24), x + 12, y + 47, &fonts::efontJA_16, textdatum_t::top_left, C_BLACK);
+    bigTemp(boiler.targetTemp, x + 12, y + 64, C_BLACK, 1.3f);
+  }
 }
 
 static void drawSensors() {
