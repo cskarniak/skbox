@@ -4,7 +4,10 @@
 // Par défaut, Zigbee2MQTT configure ce capteur pour n'envoyer la température qu'à partir de 1 °C
 // d'écart (change: 100, en centièmes de °C), au plus tard toutes les heures : trop grossier pour
 // piloter la chaudière (hystérésis 0,3 °C). On descend à 0,2 °C (change: 20), comme les capteurs
-// déjà appairés avec l'ancienne version.
+// déjà appairés avec l'ancienne version. L'intervalle maximum passe aussi à 15 min (max: 900) : le
+// capteur envoie une mesure au moins toutes les 15 min même sans variation, ce qui permet à la garde
+// « sonde périmée » de la chaudière de détecter une panne rapidement (pas de clé « 15_MINUTES » dans
+// Zigbee2MQTT, d'où la valeur en secondes).
 //
 // Appliqué automatiquement à la configuration d'un capteur à l'appairage. Un capteur déjà appairé
 // garde ses anciens réglages tant qu'on ne le reconfigure pas (bouton du capteur + « Reconfigurer »
@@ -22,7 +25,7 @@ module.exports = {
     description: 'Temperature and humidity sensor with screen',
     extend: [
         m.battery(),
-        m.temperature({reporting: {min: '10_SECONDS', max: '1_HOUR', change: 20}}),
+        m.temperature({reporting: {min: '10_SECONDS', max: 900, change: 20}}),
         m.humidity(),
         m.bindCluster({cluster: 'genPollCtrl', clusterType: 'input'}),
     ],
