@@ -21,6 +21,13 @@ export const LEVEL_LABELS: Record<LevelKey, string> = {
   nuit: 'Nuit',
 };
 
+// Mode de fond : « planning » applique les programmes, « absent » ignore tout planning et maintient
+// le niveau Vacances (hors-gel), « été » ne déclenche jamais la chaudière. Le mode « forcé » n'est
+// pas stocké ici : c'est la dérogation (override) temporaire qui se superpose au mode de fond.
+export type BaseMode = 'summer' | 'away' | 'planning';
+export type OperatingMode = BaseMode | 'forced';
+const BASE_MODES: BaseMode[] = ['summer', 'away', 'planning'];
+
 const LEVEL_KEYS: LevelKey[] = ['eco', 'confort', 'confort_plus', 'vacances', 'nuit'];
 
 const DEFAULT_LEVEL_TEMPS: Record<LevelKey, number> = {
@@ -72,6 +79,7 @@ interface BoilerState {
   dateExceptions: DateException[];
   minOnMinutes: number;
   minOffMinutes: number;
+  baseMode: BaseMode;
   override: BoilerOverride | null;
   lastChangeAt: string | null;
   lastCommandedState: 'ON' | 'OFF' | null;
@@ -115,6 +123,8 @@ export interface BoilerStatus {
   enabled: boolean;
   activeDateException: { id: string; name: string } | null;
   mode: BoilerMode;
+  baseMode: BaseMode;
+  operatingMode: OperatingMode; // été | absent | planning | forcé (dérogation active)
   programName: string | null; // programme qui régit la journée (période dérogatoire comprise)
   nextChange: BoilerNextChange | null; // prochain changement de niveau (ou fin de dérogation)
 }
@@ -140,6 +150,7 @@ const DEFAULT_STATE: BoilerState = {
   dateExceptions: [],
   minOnMinutes: 10,
   minOffMinutes: 5,
+  baseMode: 'planning',
   override: null,
   lastChangeAt: null,
   lastCommandedState: null,
@@ -303,8 +314,21 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
   async setBoost(level: LevelKey, minutes: number): Promise<BoilerStatus> {
     if (!LEVEL_KEYS.includes(level)) throw new BadRequestException(`Niveau invalide: ${level}`);
     const state = await this.loadState();
+    if (state.baseMode === 'summer') {
+      throw new BadRequestException('Mode été actif : la chaudière ne peut pas être forcée');
+    }
     const until = new Date(Date.now() + minutes * 60_000).toISOString();
     await this.saveState({ ...state, override: { level, until } });
+    await this.evaluate();
+    return this.getStatus();
+  }
+
+  // Changer de mode de fond annule la dérogation en cours : le nouveau mode s'applique tel quel.
+  // L'évaluation qui suit coupe immédiatement le relais en mode été.
+  async setMode(mode: BaseMode): Promise<BoilerStatus> {
+    if (!BASE_MODES.includes(mode)) throw new BadRequestException(`Mode invalide: ${mode}`);
+    const state = await this.loadState();
+    await this.saveState({ ...state, baseMode: mode, override: null });
     await this.evaluate();
     return this.getStatus();
   }
@@ -327,13 +351,14 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
     const activeOverride = this.activeOverride(state);
     const activeLevel = this.computeActiveLevel(state, activeOverride);
     const program = this.programForDate(state, now);
+    const summer = state.baseMode === 'summer';
 
     return {
       deviceId: state.deviceId,
       deviceName: device?.name ?? null,
       deviceOnline: device?.status === 'online',
       commandedState: state.lastCommandedState,
-      desiredState: this.computeDesiredState(state, activeLevel, currentTemp),
+      desiredState: summer ? 'OFF' : this.computeDesiredState(state, activeLevel, currentTemp),
       activeLevel,
       targetTemp: state.levels[activeLevel],
       currentTemp,
@@ -343,6 +368,8 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
       enabled: state.enabled,
       activeDateException: this.activeDateException(state, now),
       mode: activeOverride ? 'override' : program ? 'program' : 'default',
+      baseMode: state.baseMode,
+      operatingMode: activeOverride ? 'forced' : state.baseMode,
       programName: program?.name ?? null,
       nextChange: this.nextChange(state, activeOverride, activeLevel, now),
     };
@@ -446,7 +473,13 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
 
   private computeActiveLevel(state: BoilerState, activeOverride: BoilerOverride | null): LevelKey {
     if (activeOverride) return activeOverride.level;
-    return this.levelFromProgram(state, new Date()) ?? state.defaultLevel;
+    return this.baselineLevel(state, new Date());
+  }
+
+  // Niveau sans dérogation : en mode absent le planning est ignoré (hors-gel), sinon programme du jour.
+  private baselineLevel(state: BoilerState, at: Date): LevelKey {
+    if (state.baseMode === 'away') return 'vacances';
+    return this.levelFromProgram(state, at) ?? state.defaultLevel;
   }
 
   // Le jour est au format "YYYY-MM-DD" local (pas UTC) pour correspondre au sens calendaire
@@ -456,12 +489,14 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private activeDateException(state: BoilerState, now: Date): { id: string; name: string } | null {
+    if (state.baseMode !== 'planning') return null;
     const today = this.todayDateString(now);
     const match = state.dateExceptions.find((ex) => ex.startDate <= today && today <= ex.endDate);
     return match ? { id: match.id, name: match.name } : null;
   }
 
   private programForDate(state: BoilerState, now: Date): BoilerProgram | null {
+    if (state.baseMode !== 'planning') return null;
     const today = this.todayDateString(now);
     const exception = state.dateExceptions.find((ex) => ex.startDate <= today && today <= ex.endDate);
     // Une période dérogatoire (vacances...) remplace le planning hebdomadaire habituel tant
@@ -483,8 +518,10 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
   ): BoilerNextChange | null {
     if (activeOverride) {
       const until = new Date(activeOverride.until);
-      return { at: until.toISOString(), level: this.levelFromProgram(state, until) ?? state.defaultLevel };
+      return { at: until.toISOString(), level: this.baselineLevel(state, until) };
     }
+    // Hors mode planning, aucun changement de niveau programmé.
+    if (state.baseMode !== 'planning') return null;
     const t = new Date(now);
     t.setSeconds(0, 0);
     for (let i = 0; i < NEXT_CHANGE_HORIZON_MIN; i++) {
@@ -542,6 +579,24 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
     if (state.override && !activeOverride) {
       state.override = null;
       await this.saveState(state);
+    }
+
+    // Mode été : aucun déclenchement, quelle que soit la température. On s'assure juste que le
+    // relais est coupé (sans anti-cycle : l'arrêt est immédiat) puis on ne fait plus rien.
+    if (state.baseMode === 'summer') {
+      if (state.lastCommandedState !== 'OFF') {
+        const device = await this.prisma.device.findUnique({ where: { id: state.deviceId } });
+        if (!device?.mqttTopic) {
+          this.logger.warn(`Chaudière : device ${state.deviceId} introuvable ou sans topic MQTT`);
+          return;
+        }
+        this.mqtt.publish(`${device.mqttTopic}/set`, JSON.stringify({ state: 'OFF' }));
+        this.logger.log(`Chaudière : mode été, ${device.name} → OFF`);
+        state.lastCommandedState = 'OFF';
+        state.lastChangeAt = new Date().toISOString();
+        await this.saveState(state);
+      }
+      return;
     }
 
     const activeLevel = this.computeActiveLevel(state, activeOverride);

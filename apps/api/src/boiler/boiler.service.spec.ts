@@ -301,4 +301,73 @@ describe('BoilerService', () => {
       expect(status).toMatchObject({ mode: 'default', programName: null, nextChange: null });
     });
   });
+
+  describe('modes été / absent / planning / forcé', () => {
+    const OFF = JSON.stringify({ state: 'OFF' });
+
+    it('mode été : coupe le relais immédiatement, même en anti-cycle, et ne déclenche plus', async () => {
+      const config = baseConfig({ defaultLevel: 'confort', minOnMinutes: 10 });
+      setSensorTemp(prisma, 15);
+      await service.setConfig(config); // ON commandé
+      expect((await service.getStatus()).commandedState).toBe('ON');
+
+      (mqtt.publish as any).mockClear();
+      const status = await service.setMode('summer');
+      expect(mqtt.publish).toHaveBeenCalledWith('zigbee2mqtt/relais/set', OFF);
+      expect(status.commandedState).toBe('OFF');
+      expect(status.operatingMode).toBe('summer');
+      expect(status.desiredState).toBe('OFF');
+
+      (mqtt.publish as any).mockClear();
+      await tick(service, config); // température très basse : toujours aucun déclenchement
+      expect(mqtt.publish).not.toHaveBeenCalled();
+    });
+
+    it('mode été : refuse le forçage', async () => {
+      await service.setConfig(baseConfig());
+      await service.setMode('summer');
+      await expect(service.setBoost('confort', 60)).rejects.toThrow(/été/);
+    });
+
+    it('mode absent : ignore le planning et maintient le niveau Vacances', async () => {
+      const config = baseConfig({
+        programs: [{ id: 'p', name: 'Jour', slots: [{ from: '00:00', to: '23:59', level: 'confort_plus' }] }],
+        dayPrograms: { 0: 'p', 1: 'p', 2: 'p', 3: 'p', 4: 'p', 5: 'p', 6: 'p' },
+      });
+      setSensorTemp(prisma, 15);
+      await service.setConfig(config);
+      expect((await service.getStatus()).activeLevel).toBe('confort_plus');
+
+      const status = await service.setMode('away');
+      expect(status.operatingMode).toBe('away');
+      expect(status.activeLevel).toBe('vacances');
+      expect(status.programName).toBeNull();
+      expect(status.nextChange).toBeNull();
+      expect(status.desiredState).toBe('OFF'); // 15°C > 12°C (hors-gel) + hystérésis
+    });
+
+    it('forcé : la dérogation prime sur le mode de fond puis retour au mode de fond', async () => {
+      await service.setConfig(baseConfig());
+      await service.setMode('away');
+      const forced = await service.setBoost('confort', 60);
+      expect(forced.operatingMode).toBe('forced');
+      expect(forced.activeLevel).toBe('confort');
+      expect(forced.nextChange?.level).toBe('vacances');
+
+      const back = await service.clearBoost();
+      expect(back.operatingMode).toBe('away');
+    });
+
+    it('changer de mode annule la dérogation en cours', async () => {
+      await service.setConfig(baseConfig());
+      await service.setBoost('confort', 60);
+      const status = await service.setMode('planning');
+      expect(status.override).toBeNull();
+      expect(status.operatingMode).toBe('planning');
+    });
+
+    it('refuse un mode inconnu', async () => {
+      await expect(service.setMode('hiver' as any)).rejects.toThrow();
+    });
+  });
 });

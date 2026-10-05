@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Post, Put, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { BoilerConfig, BoilerService, LEVEL_LABELS, LevelKey } from './boiler.service';
+import { BaseMode, BoilerConfig, BoilerService, LEVEL_LABELS, LevelKey } from './boiler.service';
 
 @ApiTags('boiler')
 @Controller('boiler')
@@ -30,6 +30,11 @@ export class BoilerController {
   @Get('heating')
   getHeatingHistory(@Query('days') days?: string) {
     return this.boiler.getHeatingHistory(Number(days));
+  }
+
+  @Put('mode')
+  setMode(@Body('mode') mode: BaseMode) {
+    return this.boiler.setMode(mode);
   }
 
   @Post('boost')

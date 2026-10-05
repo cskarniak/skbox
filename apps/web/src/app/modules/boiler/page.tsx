@@ -15,6 +15,7 @@ import {
   ActionIcon,
   SimpleGrid,
   Popover,
+  SegmentedControl,
 } from '@mantine/core';
 import {
   IconSmartHome,
@@ -25,6 +26,10 @@ import {
   IconTemperature,
   IconPlayerStop,
   IconPlayerPlay,
+  IconSun,
+  IconPlaneDeparture,
+  IconCalendarEvent,
+  IconBolt,
 } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -33,6 +38,9 @@ import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { AppNav } from '@/components/AppNav';
 import { HeatingHistoryCard } from './HeatingHistoryCard';
+
+type BaseMode = 'summer' | 'away' | 'planning';
+type OperatingMode = BaseMode | 'forced';
 
 type LevelKey = 'eco' | 'confort' | 'confort_plus' | 'vacances' | 'nuit';
 
@@ -108,7 +116,23 @@ interface BoilerStatus {
   lastChangeAt: string | null;
   enabled: boolean;
   activeDateException: { id: string; name: string } | null;
+  baseMode: BaseMode;
+  operatingMode: OperatingMode;
 }
+
+const MODE_LABELS: Record<OperatingMode, string> = {
+  summer: 'Été',
+  away: 'Absent',
+  planning: 'Planning',
+  forced: 'Forcé',
+};
+
+const MODE_DESCRIPTIONS: Record<OperatingMode, string> = {
+  summer: 'La chaudière ne se déclenche jamais, quels que soient la température et les programmes.',
+  away: 'Tout planning est ignoré : la chaudière maintient seulement le niveau Vacances (hors-gel).',
+  planning: 'La chaudière suit les programmes hebdomadaires et les périodes dérogatoires.',
+  forced: 'Dérogation temporaire : le niveau choisi prime sur le mode de fond jusqu\'à son expiration.',
+};
 
 function StopModuleButton({ enabled, loading, onConfirm }: { enabled: boolean; loading: boolean; onConfirm: () => void }) {
   const [opened, setOpened] = useState(false);
@@ -255,6 +279,22 @@ export default function BoilerPage() {
       });
     },
   });
+
+  const setMode = useMutation({
+    mutationFn: (mode: BaseMode) => api.put('/boiler/mode', { mode }).then((r) => r.data),
+    onSuccess: (_, mode) => {
+      queryClient.invalidateQueries({ queryKey: ['boiler-status'] });
+      notifications.show({ color: 'teal', message: `Mode ${MODE_LABELS[mode].toLowerCase()} activé` });
+    },
+    onError: (error: any) => {
+      notifications.show({ color: 'red', title: 'Échec', message: error?.response?.data?.message ?? 'Changement de mode impossible' });
+    },
+  });
+
+  const handleModeChange = (value: string) => {
+    if (value === 'forced') boost.mutate();
+    else setMode.mutate(value as BaseMode);
+  };
 
   const handleSaveConfig = () => {
     saveConfig.mutate({
@@ -416,6 +456,39 @@ export default function BoilerPage() {
 
           {status && (
             <Card shadow="sm" padding="lg" withBorder>
+              <Text size="sm" c="dimmed" mb="xs">
+                Mode de fonctionnement
+              </Text>
+              <SegmentedControl
+                fullWidth
+                value={status.operatingMode}
+                onChange={handleModeChange}
+                disabled={setMode.isPending || boost.isPending || !status.enabled}
+                data={[
+                  { value: 'summer', label: <Group gap={6} justify="center" wrap="nowrap"><IconSun size={14} />Été</Group> },
+                  { value: 'away', label: <Group gap={6} justify="center" wrap="nowrap"><IconPlaneDeparture size={14} />Absent</Group> },
+                  { value: 'planning', label: <Group gap={6} justify="center" wrap="nowrap"><IconCalendarEvent size={14} />Planning</Group> },
+                  {
+                    value: 'forced',
+                    disabled: status.baseMode === 'summer',
+                    label: <Group gap={6} justify="center" wrap="nowrap"><IconBolt size={14} />Forcé</Group>,
+                  },
+                ]}
+              />
+              <Text size="xs" c="dimmed" mt={6}>
+                {MODE_DESCRIPTIONS[status.operatingMode]}
+                {status.operatingMode === 'forced' && ` (mode de fond : ${MODE_LABELS[status.baseMode].toLowerCase()})`}
+              </Text>
+              {status.operatingMode !== 'forced' && status.baseMode !== 'summer' && (
+                <Text size="xs" c="dimmed">
+                  « Forcé » applique le niveau {levelLabels?.[boostLevel] ?? boostLevel} pendant {boostMinutes} min (réglable dans la dérogation ci-dessous).
+                </Text>
+              )}
+            </Card>
+          )}
+
+          {status && (
+            <Card shadow="sm" padding="lg" withBorder>
               <Group justify="space-between" mb="xs">
                 <Group gap="xs">
                   <Text size="sm" c="dimmed">
@@ -442,7 +515,9 @@ export default function BoilerPage() {
                 <Group justify="space-between">
                   <Text size="sm">Niveau actif</Text>
                   <Badge color={LEVEL_COLORS[status.activeLevel]} variant="light">
-                    {levelLabels?.[status.activeLevel] ?? status.activeLevel} — cible {status.targetTemp}°C
+                    {status.baseMode === 'summer' && !status.override
+                      ? 'aucun (mode été)'
+                      : `${levelLabels?.[status.activeLevel] ?? status.activeLevel} — cible ${status.targetTemp}°C`}
                   </Badge>
                 </Group>
                 <Group justify="space-between">
@@ -453,12 +528,18 @@ export default function BoilerPage() {
                 </Group>
                 <Group justify="space-between">
                   <Text size="sm">Mode</Text>
-                  <Badge color={status.override ? 'orange' : status.activeDateException ? 'grape' : 'blue'} variant="light">
-                    {status.override
-                      ? 'dérogation manuelle'
-                      : status.activeDateException
-                        ? `période : ${status.activeDateException.name}`
-                        : 'planning'}
+                  <Badge
+                    color={
+                      status.operatingMode === 'forced' ? 'orange'
+                        : status.operatingMode === 'summer' ? 'yellow'
+                          : status.operatingMode === 'away' ? 'grape'
+                            : status.activeDateException ? 'grape' : 'blue'
+                    }
+                    variant="light"
+                  >
+                    {status.operatingMode === 'planning' && status.activeDateException
+                      ? `planning — période : ${status.activeDateException.name}`
+                      : MODE_LABELS[status.operatingMode].toLowerCase()}
                   </Badge>
                 </Group>
                 {status.override && (
@@ -495,6 +576,7 @@ export default function BoilerPage() {
                     color="orange"
                     variant="light"
                     loading={boost.isPending}
+                    disabled={status.baseMode === 'summer'}
                     onClick={() => boost.mutate()}
                   >
                     Forcer ce niveau
