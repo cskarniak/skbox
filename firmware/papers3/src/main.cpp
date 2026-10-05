@@ -69,6 +69,7 @@ struct Boiler {
   bool hasOverride = false;
   String overrideLevel, overrideLabel, overrideUntil;
   String mode, programName;  // mode : "override" | "program" | "default"
+  String operatingMode;      // "summer" | "away" | "planning" | "forced" (vide : skbox antérieur aux modes)
   bool hasNext = false;
   String nextDay, nextTime, nextLabel;  // nextDay : "" (aujourd'hui), "demain" ou "sam."
   float targetTemp = NAN, currentTemp = NAN;
@@ -482,6 +483,7 @@ static bool fetchSummaryOnce() {
   boiler.overrideLabel = (const char*)(b["override"]["label"] | "");
   boiler.overrideUntil = (const char*)(b["override"]["until"] | "");
   boiler.mode = (const char*)(b["mode"] | "");
+  boiler.operatingMode = (const char*)(b["operatingMode"] | "");
   boiler.programName = (const char*)(b["programName"] | "");
   boiler.hasNext = !b["next"].isNull();
   boiler.nextDay = (const char*)(b["next"]["day"] | "");
@@ -588,6 +590,14 @@ static void drawFreeCard(int x, int y) {
   text("libre", x + CARD_W / 2, y + CARD_H / 2, &fonts::efontJA_16, textdatum_t::middle_center, C_LIGHTGRAY);
 }
 
+// Mode de fonctionnement (été / absent / planning / forcé). Un skbox sans `operatingMode` retombe
+// sur l'ancienne déduction : dérogation = forcé, sinon planning.
+static bool modeSummer() { return boiler.operatingMode == "summer"; }
+static bool modeAway() { return boiler.operatingMode == "away"; }
+static bool modeForced() {
+  return boiler.operatingMode == "forced" || (boiler.operatingMode.length() == 0 && (boiler.hasOverride || boiler.mode == "override"));
+}
+
 // Carte compacte de l'état chaudière, dans la grille des températures (emplacement fixe) : de quoi
 // jeter un coup d'œil sans changer de page — mode, programme et cible. Pilotage et détail complet
 // (température mesurée, relais, dérogation...) restent sur l'onglet Chaudière.
@@ -624,9 +634,13 @@ static void drawBoilerCard(int x, int y) {
     text("ne chauffe pas", x + 12, y + 38, &fonts::efontJA_16, textdatum_t::middle_left, C_BLACK);
   }
 
-  // Niveau actif (Éco, Confort...), juste au-dessus de la cible.
-  text(fit(boiler.activeLabel, cw - 24), x + 12, y + 47, &fonts::efontJA_16, textdatum_t::top_left, C_BLACK);
-  bigTemp(boiler.targetTemp, x + 12, y + 64, C_BLACK, 1.3f);
+  // Mode ou niveau actif, juste au-dessus de la cible : « Été » / « Absent » / « Forcé · Confort »,
+  // sinon le niveau du planning (Éco, Confort...). En été il n'y a pas de cible à afficher.
+  String line = modeSummer() ? String("Été") : modeAway() ? String("Absent")
+                : (modeForced() && boiler.operatingMode.length()) ? "Forcé · " + boiler.activeLabel
+                                                                  : boiler.activeLabel;
+  text(fit(line, cw - 24), x + 12, y + 47, &fonts::efontJA_16, textdatum_t::top_left, C_BLACK);
+  if (!modeSummer()) bigTemp(boiler.targetTemp, x + 12, y + 64, C_BLACK, 1.3f);
 }
 
 static void drawSensors() {
@@ -735,19 +749,30 @@ static void drawBoilerPage() {
 
   // Températures
   int tw = bigTemp(boiler.currentTemp, x, ly + 66, C_BLACK, 2.0f);
-  text("cible", x + tw + 16, ly + 84, &fonts::efontJA_16, textdatum_t::top_left, C_GRAY);
-  text(fmtTemp(boiler.targetTemp) + "°", x + tw + 16, ly + 104, &fonts::efontJA_24, textdatum_t::top_left);
+  if (!modeSummer()) {
+    text("cible", x + tw + 16, ly + 84, &fonts::efontJA_16, textdatum_t::top_left, C_GRAY);
+    text(fmtTemp(boiler.targetTemp) + "°", x + tw + 16, ly + 104, &fonts::efontJA_24, textdatum_t::top_left);
+  }
 
-  // Mode actif : badge (FORCÉ / PROGRAMME / DÉFAUT / ARRÊT) + niveau, puis origine, puis prochain changement.
+  // Mode actif : badge (ÉTÉ / ABSENT / FORCÉ / PROGRAMME / DÉFAUT / ARRÊT) + niveau, puis origine,
+  // puis prochain changement.
   String tag, l2, l3;
-  bool forced = boiler.hasOverride || boiler.mode == "override";
+  bool forced = modeForced();
   if (!boiler.enabled) {
     tag = "ARRÊT";
     l2 = "Régulation arrêtée";
+  } else if (modeSummer()) {
+    tag = "ÉTÉ";
+    l2 = "Aucun déclenchement";
+    l3 = "relais coupé";
   } else if (forced) {
     tag = "FORCÉ";
     l2 = "jusqu'à " + boiler.overrideUntil;
-    if (boiler.hasNext) l3 = "ensuite " + boiler.nextLabel + " (programme)";
+    if (boiler.hasNext) l3 = "ensuite " + boiler.nextLabel + (modeAway() ? " (absent)" : " (programme)");
+  } else if (modeAway()) {
+    tag = "ABSENT";
+    l2 = "Planning ignoré";
+    l3 = "hors-gel maintenu";
   } else if (boiler.programName.length()) {
     tag = "PROGRAMME";
     l2 = boiler.exception.length() ? boiler.exception + " : " + boiler.programName : boiler.programName;
@@ -755,7 +780,7 @@ static void drawBoilerPage() {
     tag = "DÉFAUT";
     l2 = "aucun programme aujourd'hui";
   }
-  if (boiler.enabled && !forced && boiler.hasNext) {
+  if (boiler.enabled && !forced && !modeSummer() && !modeAway() && boiler.hasNext) {
     String when = boiler.nextDay.length() ? boiler.nextDay + " " + boiler.nextTime : "à " + boiler.nextTime;
     l3 = "puis " + boiler.nextLabel + " " + when;
   }
@@ -771,7 +796,7 @@ static void drawBoilerPage() {
     D.drawRoundRect(x + 1, ty + 1, tagW - 2, th - 2, 5, C_BLACK);
     text(tag, x + tagW / 2, ty + th / 2, &fonts::efontJA_24, textdatum_t::middle_center);
   }
-  if (boiler.enabled) {
+  if (boiler.enabled && !modeSummer()) {
     D.setFont(&fonts::efontJA_24);
     text(fit(boiler.activeLabel, w - tagW - 12), x + tagW + 12, ty + th / 2, &fonts::efontJA_24, textdatum_t::middle_left);
   }
@@ -795,13 +820,16 @@ static void drawBoilerPage() {
   text("Forcer un niveau", cx, ly + 108, &fonts::efontJA_16, textdatum_t::top_left, C_GRAY);
   const int lg = 8, lbw = (cw - 2 * lg) / 3, lbh = 72;
   int slot = 0;
-  for (size_t i = 0; i < levels.size() && slot < 6; ++i, ++slot) {
+  if (modeSummer()) {  // skbox refuse le forçage en été : pas de boutons, on explique pourquoi
+    text("Indisponible en mode été", cx, ly + 156, &fonts::efontJA_24, textdatum_t::top_left, C_GRAY);
+  }
+  for (size_t i = 0; i < levels.size() && slot < 6 && !modeSummer(); ++i, ++slot) {
     int bx = cx + (slot % 3) * (lbw + lg);
     int by = ly + 132 + (slot / 3) * (lbh + lg);
     bool active = levels[i].key == boiler.activeLevel;
     drawButton(bx, by, lbw, lbh, levels[i].label, fmtTemp(levels[i].temp) + "°", false, active, A_BOOST, (int)i);
   }
-  if (boiler.hasOverride && slot < 6) {
+  if (boiler.hasOverride && slot < 6 && !modeSummer()) {
     int bx = cx + (slot % 3) * (lbw + lg);
     int by = ly + 132 + (slot / 3) * (lbh + lg);
     drawButton(bx, by, lbw, lbh, "Annuler", "dérogation", true, false, A_CANCEL);
@@ -855,7 +883,7 @@ static String displaySig() {  // tout l'affiché sauf les mesures de températur
   sig += "|" + String((int)boiler.configured) + (int)boiler.enabled + (int)boiler.relayOnline +
          (int)boiler.heating + (int)boiler.scheduleActive + boiler.activeLevel + boiler.exception +
          boiler.overrideLevel + boiler.overrideUntil + fmtTemp(boiler.targetTemp) + boiler.mode +
-         boiler.programName + boiler.nextDay + boiler.nextTime + boiler.nextLabel;
+         boiler.operatingMode + boiler.programName + boiler.nextDay + boiler.nextTime + boiler.nextLabel;
   return sig;
 }
 

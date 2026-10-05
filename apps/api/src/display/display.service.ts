@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { PrismaClient } from '@skbox/db';
-import { BoilerMode, BoilerService, LEVEL_LABELS, LevelKey } from '../boiler/boiler.service';
+import { BoilerMode, BoilerService, OperatingMode, LEVEL_LABELS, LevelKey } from '../boiler/boiler.service';
 import { SettingsService } from '../settings/settings.service';
 
 // Réglage skbox (PUT /api/settings/displayRefreshSeconds { value }) : intervalle de rafraîchissement
@@ -46,12 +46,13 @@ export interface DisplaySummary {
     heating: boolean; // dernier ordre envoyé au relais = ON
     activeLevel: LevelKey;
     activeLabel: string;
-    targetTemp: number;
+    targetTemp: number | null; // null en mode été : aucune cible, la chaudière ne se déclenche pas
     currentTemp: number | null;
     scheduleActive: boolean;
     exception: string | null; // nom de la période dérogatoire active
     override: { level: LevelKey; label: string; until: string } | null; // until = "HH:MM"
     mode: BoilerMode;
+    operatingMode: OperatingMode; // "summer" | "away" | "planning" | "forced"
     programName: string | null;
     // day = "" (aujourd'hui), "demain" ou jour abrégé ("sam.") ; time = "HH:MM"
     next: { day: string; time: string; level: LevelKey; label: string } | null;
@@ -118,7 +119,7 @@ export class DisplayService {
         heating: status.commandedState === 'ON',
         activeLevel: status.activeLevel,
         activeLabel: LEVEL_LABELS[status.activeLevel],
-        targetTemp: status.targetTemp,
+        targetTemp: status.operatingMode === 'summer' ? null : status.targetTemp,
         currentTemp: status.currentTemp,
         scheduleActive: status.scheduleActive,
         exception: status.activeDateException?.name ?? null,
@@ -130,6 +131,7 @@ export class DisplayService {
             }
           : null,
         mode: status.mode,
+        operatingMode: status.operatingMode,
         programName: status.programName,
         next: status.nextChange
           ? {

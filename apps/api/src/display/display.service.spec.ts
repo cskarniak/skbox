@@ -17,7 +17,7 @@ const devices = [
   { id: 's2', name: 'Prise RF', room: null, state: '{"command":"Off"}', status: 'offline', lastSeen: new Date(), visible: true, active: true },
 ];
 
-function makeService() {
+function makeService(statusOverrides: Record<string, unknown> = {}) {
   const prisma = {
     device: {
       findMany: vi.fn(async ({ where }: any) =>
@@ -42,8 +42,11 @@ function makeService() {
       enabled: true,
       activeDateException: null,
       mode: 'override',
+      baseMode: 'planning',
+      operatingMode: 'forced',
       programName: 'Semaine',
       nextChange: { at: new Date(Date.now() + 3_600_000).toISOString(), level: 'eco' },
+      ...statusOverrides,
     })),
     getConfig: vi.fn(async () => ({
       levels: { eco: 17, confort: 19, confort_plus: 21, vacances: 12, nuit: 16 },
@@ -95,9 +98,38 @@ describe('DisplayService', () => {
       override: { level: 'confort_plus', label: 'Confort+' },
     });
     expect(summary.boiler.override!.until).toMatch(/^\d{2}:\d{2}$/);
-    expect(summary.boiler).toMatchObject({ mode: 'override', programName: 'Semaine' });
+    expect(summary.boiler).toMatchObject({ mode: 'override', operatingMode: 'forced', programName: 'Semaine' });
     expect(summary.boiler.next).toMatchObject({ level: 'eco', label: 'Éco', time: summary.boiler.override!.until });
     expect(summary.levels).toHaveLength(5);
     expect(summary.levels.find((l) => l.key === 'eco')).toEqual({ key: 'eco', label: 'Éco', temp: 17 });
+  });
+
+  it('mode été : pas de cible ni de changement programmé', async () => {
+    const summary = await makeService({
+      baseMode: 'summer',
+      operatingMode: 'summer',
+      override: null,
+      commandedState: 'OFF',
+      activeLevel: 'vacances',
+      targetTemp: 12,
+      mode: 'default',
+      programName: null,
+      nextChange: null,
+    }).getSummary();
+    expect(summary.boiler).toMatchObject({ operatingMode: 'summer', targetTemp: null, heating: false, next: null });
+  });
+
+  it('mode absent : expose le mode et le niveau Vacances maintenu', async () => {
+    const summary = await makeService({
+      baseMode: 'away',
+      operatingMode: 'away',
+      override: null,
+      activeLevel: 'vacances',
+      targetTemp: 12,
+      mode: 'default',
+      programName: null,
+      nextChange: null,
+    }).getSummary();
+    expect(summary.boiler).toMatchObject({ operatingMode: 'away', activeLabel: 'Vacances', targetTemp: 12, next: null });
   });
 });

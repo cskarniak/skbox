@@ -10,12 +10,12 @@ Quatre pages, choisies par les onglets de l'en-tête. L'en-tête affiche aussi l
 
 - **Maison** :
   Grille de 4 colonnes × 3 cartes, remplie colonne par colonne. Libellés : 16 caractères environ par carte, au-delà ils sont tronqués par « ... ».
-  - *Chaudière* (dernier emplacement de la 2e colonne, fixe) : chauffe / ne chauffe pas / arrêt, température cible, et le mode en cours (programme, dérogation, défaut, arrêt). Détail complet et pilotage sur l'onglet Chaudière.
+  - *Chaudière* (dernier emplacement de la 2e colonne, fixe) : chauffe / ne chauffe pas / arrêt, température cible, et le mode en cours (été, absent, forcé, programme, défaut, arrêt). Détail complet et pilotage sur l'onglet Chaudière.
   - *Températures* (colonnes 1-2, `SENSOR_IDS`, 6 au plus) : actuellement Extérieur, Sous-sol et Séjour dans la 1re colonne. Un capteur hors ligne apparaît en gris avec l'heure de son dernier message. Le niveau de pile s'affiche quand il passe sous 20 %.
   - *Prises et lumières* (colonnes 3-4, `SWITCH_IDS`, 5 au plus — le dernier emplacement de la 4e colonne, en haut, est réservé à la chaudière, liste explicite : ni ventilation ni relais de chaudière) : carte noire quand c'est allumé, blanche quand c'est éteint, grise quand l'appareil est hors ligne. Un toucher sur la carte allume ou éteint (`POST /api/devices/:id/command`) ; l'état s'affiche tout de suite, puis il est relu 3 s plus tard.
-  - *Chaudière* (dernier emplacement de la 4e colonne, en haut, fixe) : chauffe / ne chauffe pas / arrêt, niveau actif et température cible. Détail complet et pilotage sur l'onglet Chaudière.
+  - *Chaudière* (dernier emplacement de la 4e colonne, en haut, fixe) : chauffe / ne chauffe pas / arrêt, mode ou niveau actif (« Été », « Absent », « Forcé · Confort », sinon le niveau du planning) et température cible (aucune cible en été). Détail complet et pilotage sur l'onglet Chaudière.
 - **Chaudière** (plein écran) :
-  - *État* : température mesurée et cible, état du brûleur (badge *CHAUFFE* quand le brûleur est commandé, sinon « ne chauffe pas » en texte simple ; ce n'est pas un bouton), mode (*FORCÉ* / *PROGRAMME* / *DÉFAUT* / *ARRÊT*) avec le programme et le prochain changement, alerte si le relais est hors ligne.
+  - *État* : température mesurée et cible, état du brûleur (badge *CHAUFFE* quand le brûleur est commandé, sinon « ne chauffe pas » en texte simple ; ce n'est pas un bouton), mode (*ÉTÉ* / *ABSENT* / *FORCÉ* / *PROGRAMME* / *DÉFAUT* / *ARRÊT*, champ `boiler.operatingMode` de `/api/display/summary`) avec le programme et le prochain changement ; en mode été, les boutons de forçage sont remplacés par « Indisponible en mode été » (l'API refuse le forçage), alerte si le relais est hors ligne.
   - *Pilotage* :
     - choisir une durée (1 h, 2 h, 4 h ou 8 h), puis toucher un niveau : `POST /api/boiler/boost` ;
     - pendant une dérogation, toucher une autre durée la prolonge ou la raccourcit tout de suite (même niveau, durée comptée à partir de maintenant) ;
