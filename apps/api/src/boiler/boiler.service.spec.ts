@@ -3,7 +3,7 @@ import { BoilerService, BoilerConfig, LevelKey } from './boiler.service';
 import { MqttService } from '../mqtt/mqtt.service';
 import { SettingsService } from '../settings/settings.service';
 
-type FakeDevice = { id: string; name: string; status: string; mqttTopic: string | null; state: string };
+type FakeDevice = { id: string; name: string; status: string; mqttTopic: string | null; state: string; lastSeen?: Date };
 
 function makeFakePrisma(devices: FakeDevice[]) {
   const byId = new Map(devices.map((d) => [d.id, d]));
@@ -368,6 +368,70 @@ describe('BoilerService', () => {
 
     it('refuse un mode inconnu', async () => {
       await expect(service.setMode('hiver' as any)).rejects.toThrow();
+    });
+  });
+
+  describe('sonde périmée (garde)', () => {
+    const OFF = JSON.stringify({ state: 'OFF' });
+    const setSensorLastSeen = (iso: string) => {
+      devicesById.get(SENSOR_ID)!.lastSeen = new Date(iso);
+    };
+
+    it('coupe le relais sans attendre l\'anti-cycle quand la dernière mesure a plus de 90 min', async () => {
+      const config = baseConfig({ defaultLevel: 'confort', minOnMinutes: 10 });
+      setSensorTemp(prisma, 15);
+      setSensorLastSeen('2026-07-15T09:59:00'); // fraîche
+      await service.setConfig(config); // ON commandé
+      expect((await service.getStatus()).commandedState).toBe('ON');
+
+      (mqtt.publish as any).mockClear();
+      vi.setSystemTime(new Date('2026-07-15T10:03:00')); // +3 min : anti-cycle encore actif
+      setSensorLastSeen('2026-07-15T08:00:00'); // 123 min de silence
+      await tick(service, config);
+
+      expect(mqtt.publish).toHaveBeenCalledWith('zigbee2mqtt/relais/set', OFF);
+      const status = await service.getStatus();
+      expect(status.commandedState).toBe('OFF');
+      expect(status.sensorStale).toBe(true);
+      expect(status.sensorAgeMinutes).toBe(123);
+      expect(status.desiredState).toBe('OFF');
+    });
+
+    it('ne renvoie pas de commande tant que la sonde reste périmée et le relais coupé', async () => {
+      const config = baseConfig({ defaultLevel: 'confort' });
+      setSensorTemp(prisma, 15);
+      setSensorLastSeen('2026-07-15T07:00:00');
+      await service.setConfig(config);
+      expect((await service.getStatus()).commandedState).toBe('OFF');
+
+      (mqtt.publish as any).mockClear();
+      await tick(service, config);
+      await tick(service, config);
+      expect(mqtt.publish).not.toHaveBeenCalled();
+    });
+
+    it('reprend la régulation dès qu\'une mesure fraîche arrive', async () => {
+      const config = baseConfig({ defaultLevel: 'confort', minOffMinutes: 0 });
+      setSensorTemp(prisma, 15);
+      setSensorLastSeen('2026-07-15T07:00:00');
+      await service.setConfig(config);
+      expect((await service.getStatus()).commandedState).toBe('OFF');
+
+      setSensorLastSeen('2026-07-15T09:59:30'); // mesure reçue à l'instant
+      await tick(service, config);
+      const status = await service.getStatus();
+      expect(status.sensorStale).toBe(false);
+      expect(status.commandedState).toBe('ON'); // 15°C < 19 - 0,5
+    });
+
+    it('le seuil est de 90 min : une mesure de 89 min reste valable', async () => {
+      const config = baseConfig({ defaultLevel: 'confort' });
+      setSensorTemp(prisma, 15);
+      setSensorLastSeen('2026-07-15T08:31:00'); // 89 min
+      await service.setConfig(config);
+      const status = await service.getStatus();
+      expect(status.sensorStale).toBe(false);
+      expect(status.commandedState).toBe('ON');
     });
   });
 });

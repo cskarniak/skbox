@@ -118,6 +118,8 @@ interface BoilerStatus {
   activeDateException: { id: string; name: string } | null;
   baseMode: BaseMode;
   operatingMode: OperatingMode;
+  sensorStale: boolean;
+  sensorAgeMinutes: number | null;
 }
 
 const MODE_LABELS: Record<OperatingMode, string> = {
@@ -499,6 +501,11 @@ export default function BoilerPage() {
                       Module arrêté
                     </Badge>
                   )}
+                  {status.sensorStale && (
+                    <Badge color="red" variant="filled">
+                      Sonde périmée
+                    </Badge>
+                  )}
                 </Group>
                 <Group gap="xs">
                   <Badge color={status.commandedState === 'ON' ? 'teal' : 'gray'} variant="light">
@@ -522,10 +529,17 @@ export default function BoilerPage() {
                 </Group>
                 <Group justify="space-between">
                   <Text size="sm">Température mesurée</Text>
-                  <Text size="sm" c="dimmed">
+                  <Text size="sm" c={status.sensorStale ? 'red' : 'dimmed'}>
                     {status.currentTemp !== null ? `${status.currentTemp}°C` : 'indisponible'}
+                    {status.sensorAgeMinutes !== null && status.sensorStale && ` (il y a ${status.sensorAgeMinutes} min)`}
                   </Text>
                 </Group>
+                {status.sensorStale && (
+                  <Text size="xs" c="red">
+                    La sonde n'a rien envoyé depuis plus de 90 min : la chaudière est coupée et la régulation reste suspendue
+                    jusqu'à une nouvelle mesure (pile, portée du capteur à vérifier).
+                  </Text>
+                )}
                 <Group justify="space-between">
                   <Text size="sm">Mode</Text>
                   <Badge

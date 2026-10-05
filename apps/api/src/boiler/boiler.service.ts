@@ -117,6 +117,8 @@ export interface BoilerStatus {
   activeLevel: LevelKey;
   targetTemp: number;
   currentTemp: number | null;
+  sensorStale: boolean; // dernière mesure de la sonde trop ancienne : régulation coupée
+  sensorAgeMinutes: number | null; // âge de la dernière mesure, null si pas de sonde
   scheduleActive: boolean;
   override: BoilerOverride | null;
   lastChangeAt: string | null;
@@ -128,6 +130,11 @@ export interface BoilerStatus {
   programName: string | null; // programme qui régit la journée (période dérogatoire comprise)
   nextChange: BoilerNextChange | null; // prochain changement de niveau (ou fin de dérogation)
 }
+
+// Au-delà de cet âge, la dernière mesure de la sonde n'est plus fiable : la chaudière est coupée.
+// Un capteur Zigbee sur pile envoie au plus tard toutes les heures ; 90 min évitent les fausses
+// alertes tout en limitant le temps passé sur une mesure périmée.
+const SENSOR_STALE_MS = 90 * 60_000;
 
 const STATE_KEY = 'boiler';
 const TICK_MS = 60_000;
@@ -161,6 +168,7 @@ const DEFAULT_STATE: BoilerState = {
 export class BoilerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(BoilerService.name);
   private timer: ReturnType<typeof setInterval> | null = null;
+  private staleLogged = false;
 
   constructor(
     @Inject('PRISMA') private readonly prisma: PrismaClient,
@@ -346,6 +354,7 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
       ? await this.prisma.device.findUnique({ where: { id: state.deviceId } })
       : null;
     const currentTemp = await this.readCurrentTemp(state);
+    const sensorAgeMs = await this.sensorAgeMs(state);
 
     const now = new Date();
     const activeOverride = this.activeOverride(state);
@@ -358,10 +367,15 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
       deviceName: device?.name ?? null,
       deviceOnline: device?.status === 'online',
       commandedState: state.lastCommandedState,
-      desiredState: summer ? 'OFF' : this.computeDesiredState(state, activeLevel, currentTemp),
+      desiredState:
+        summer || (sensorAgeMs !== null && sensorAgeMs > SENSOR_STALE_MS)
+          ? 'OFF'
+          : this.computeDesiredState(state, activeLevel, currentTemp),
       activeLevel,
       targetTemp: state.levels[activeLevel],
       currentTemp,
+      sensorStale: sensorAgeMs !== null && sensorAgeMs > SENSOR_STALE_MS,
+      sensorAgeMinutes: sensorAgeMs === null ? null : Math.floor(sensorAgeMs / 60_000),
       scheduleActive: this.levelFromProgram(state, new Date()) !== null,
       override: activeOverride,
       lastChangeAt: state.lastChangeAt,
@@ -544,6 +558,15 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
     return slot?.level ?? null;
   }
 
+  // Âge de la dernière mesure reçue de la sonde (Device.lastSeen n'est mis à jour que par ses
+  // messages d'état, pas par les pings de disponibilité). null sans sonde ou sans date connue.
+  private async sensorAgeMs(state: BoilerState): Promise<number | null> {
+    if (!state.temperatureSensorId) return null;
+    const sensor = await this.prisma.device.findUnique({ where: { id: state.temperatureSensorId } });
+    if (!sensor?.lastSeen) return null;
+    return Date.now() - new Date(sensor.lastSeen).getTime();
+  }
+
   private async readCurrentTemp(state: BoilerState): Promise<number | null> {
     if (!state.temperatureSensorId) return null;
     const sensor = await this.prisma.device.findUnique({ where: { id: state.temperatureSensorId } });
@@ -597,6 +620,35 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
         await this.saveState(state);
       }
       return;
+    }
+
+    // Sonde muette depuis trop longtemps : on ne régule pas sur une mesure périmée. Le relais est
+    // coupé tout de suite (sans anti-cycle) et reste coupé jusqu'au retour d'une mesure fraîche.
+    const sensorAgeMs = await this.sensorAgeMs(state);
+    if (sensorAgeMs !== null && sensorAgeMs > SENSOR_STALE_MS) {
+      if (!this.staleLogged) {
+        this.logger.warn(
+          `Chaudière : sonde sans mesure depuis ${Math.floor(sensorAgeMs / 60_000)} min, régulation coupée`,
+        );
+        this.staleLogged = true;
+      }
+      if (state.lastCommandedState !== 'OFF') {
+        const device = await this.prisma.device.findUnique({ where: { id: state.deviceId } });
+        if (!device?.mqttTopic) {
+          this.logger.warn(`Chaudière : device ${state.deviceId} introuvable ou sans topic MQTT`);
+          return;
+        }
+        this.mqtt.publish(`${device.mqttTopic}/set`, JSON.stringify({ state: 'OFF' }));
+        this.logger.log(`Chaudière : sonde périmée, ${device.name} → OFF`);
+        state.lastCommandedState = 'OFF';
+        state.lastChangeAt = new Date().toISOString();
+        await this.saveState(state);
+      }
+      return;
+    }
+    if (this.staleLogged) {
+      this.logger.log('Chaudière : mesure de la sonde de nouveau à jour, régulation reprise');
+      this.staleLogged = false;
     }
 
     const activeLevel = this.computeActiveLevel(state, activeOverride);
