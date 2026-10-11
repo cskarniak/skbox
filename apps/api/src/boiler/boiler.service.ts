@@ -139,7 +139,7 @@ const SENSOR_STALE_MS = 90 * 60_000;
 // Les déclenchements (BoilerEvent) sont conservés un an : quelques dizaines par jour au plus.
 const EVENT_RETENTION_DAYS = 365;
 
-export type BoilerEventReason = 'regulation' | 'summer' | 'stale_sensor' | 'emergency_stop';
+export type BoilerEventReason = 'regulation' | 'summer' | 'stale_sensor' | 'emergency_stop' | 'resync';
 
 export interface BoilerEventDto {
   id: string;
@@ -157,6 +157,12 @@ export interface BoilerEventDto {
   overrideUntil: string | null;
   previousStateMinutes: number | null;
 }
+
+// Renvoi de l'ordre : si le relais rapporte un état différent du dernier ordre (relais redémarré
+// éteint après une coupure, ordre perdu pendant qu'il était hors ligne), on le renvoie. Délais pour
+// laisser au relais le temps de confirmer un ordre récent et ne pas harceler un relais capricieux.
+const RESYNC_GRACE_MS = 2 * 60_000;
+const RESYNC_MIN_INTERVAL_MS = 5 * 60_000;
 
 const STATE_KEY = 'boiler';
 const TICK_MS = 60_000;
@@ -191,6 +197,7 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(BoilerService.name);
   private timer: ReturnType<typeof setInterval> | null = null;
   private staleLogged = false;
+  private lastResyncAt = 0;
 
   constructor(
     @Inject('PRISMA') private readonly prisma: PrismaClient,
@@ -446,6 +453,32 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
     const initial = before ? toTransition(before)?.state ?? null : null;
     const transitions = inWindow.map(toTransition).filter((t): t is RelayTransition => t !== null);
     return { deviceId: state.deviceId, days: computeDailyHeating(transitions, initial, span, now) };
+  }
+
+  // Renvoie le dernier ordre quand le relais (en ligne) rapporte l'état inverse. Ne touche jamais au
+  // dernier ordre mémorisé ni à lastChangeAt : c'est le même ordre, simplement redélivré.
+  private async resyncRelay(state: BoilerState, currentTemp: number | null, sensorAgeMs: number | null): Promise<void> {
+    const ordered = state.lastCommandedState;
+    if (!state.deviceId || !ordered) return;
+    const device = await this.prisma.device.findUnique({ where: { id: state.deviceId } });
+    if (!device?.mqttTopic || device.status !== 'online') return;
+
+    let reported: unknown;
+    try {
+      reported = JSON.parse(device.state || '{}').state;
+    } catch {
+      return;
+    }
+    if ((reported !== 'ON' && reported !== 'OFF') || reported === ordered) return;
+
+    const now = Date.now();
+    if (state.lastChangeAt && now - new Date(state.lastChangeAt).getTime() < RESYNC_GRACE_MS) return;
+    if (now - this.lastResyncAt < RESYNC_MIN_INTERVAL_MS) return;
+    this.lastResyncAt = now;
+
+    this.mqtt.publish(`${device.mqttTopic}/set`, JSON.stringify({ state: ordered }));
+    this.logger.warn(`Chaudière : ${device.name} rapporte ${reported} alors que l'ordre est ${ordered}, ordre renvoyé`);
+    await this.recordEvent(state, ordered, 'resync', currentTemp, sensorAgeMs);
   }
 
   // Journal des déclenchements : une ligne par commande ON/OFF envoyée au relais, avec le contexte
@@ -718,6 +751,8 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
         state.lastCommandedState = 'OFF';
         state.lastChangeAt = new Date().toISOString();
         await this.saveState(state);
+      } else {
+        await this.resyncRelay(state, await this.readCurrentTemp(state), await this.sensorAgeMs(state));
       }
       return;
     }
@@ -744,6 +779,8 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
         state.lastCommandedState = 'OFF';
         state.lastChangeAt = new Date().toISOString();
         await this.saveState(state);
+      } else {
+        await this.resyncRelay(state, await this.readCurrentTemp(state), sensorAgeMs);
       }
       return;
     }
@@ -762,7 +799,10 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
     const desired = this.computeDesiredState(state, activeLevel, currentTemp);
     const current = state.lastCommandedState;
 
-    if (current === desired) return;
+    if (current === desired) {
+      await this.resyncRelay(state, currentTemp, sensorAgeMs);
+      return;
+    }
 
     const now = Date.now();
     const sinceChange = state.lastChangeAt ? now - new Date(state.lastChangeAt).getTime() : Infinity;

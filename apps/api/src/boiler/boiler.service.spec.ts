@@ -541,4 +541,82 @@ describe('BoilerService', () => {
       expect(typeof events[0].at).toBe('string');
     });
   });
+
+  describe('renvoi de l\'ordre au relais', () => {
+    const relay = () => devicesById.get(RELAY_ID)!;
+    const ON = JSON.stringify({ state: 'ON' });
+    const OFF = JSON.stringify({ state: 'OFF' });
+
+    async function orderOn() {
+      const config = baseConfig({ defaultLevel: 'confort', minOnMinutes: 0, minOffMinutes: 0 });
+      setSensorTemp(prisma, 15);
+      await service.setConfig(config); // ordre ON
+      return config;
+    }
+
+    it('renvoie l\'ordre ON quand le relais rapporte OFF (relais redémarré éteint)', async () => {
+      const config = await orderOn();
+      vi.setSystemTime(new Date('2026-07-15T10:10:00'));
+      relay().state = JSON.stringify({ state: 'OFF' });
+      (mqtt.publish as any).mockClear();
+      await tick(service, config);
+
+      expect(mqtt.publish).toHaveBeenCalledWith('zigbee2mqtt/relais/set', ON);
+      expect(prisma.__events.at(-1)).toMatchObject({ action: 'ON', reason: 'resync' });
+      expect((await service.getStatus()).commandedState).toBe('ON'); // l'ordre mémorisé est inchangé
+    });
+
+    it('ne renvoie rien quand le relais confirme l\'ordre', async () => {
+      const config = await orderOn();
+      vi.setSystemTime(new Date('2026-07-15T10:10:00'));
+      relay().state = JSON.stringify({ state: 'ON' });
+      (mqtt.publish as any).mockClear();
+      await tick(service, config);
+      expect(mqtt.publish).not.toHaveBeenCalled();
+    });
+
+    it('laisse 2 min au relais pour confirmer un ordre récent', async () => {
+      const config = await orderOn();
+      vi.setSystemTime(new Date('2026-07-15T10:01:00'));
+      relay().state = JSON.stringify({ state: 'OFF' });
+      (mqtt.publish as any).mockClear();
+      await tick(service, config);
+      expect(mqtt.publish).not.toHaveBeenCalled();
+    });
+
+    it('ne renvoie rien si le relais est hors ligne', async () => {
+      const config = await orderOn();
+      vi.setSystemTime(new Date('2026-07-15T10:10:00'));
+      relay().state = JSON.stringify({ state: 'OFF' });
+      relay().status = 'offline';
+      (mqtt.publish as any).mockClear();
+      await tick(service, config);
+      expect(mqtt.publish).not.toHaveBeenCalled();
+    });
+
+    it('espace les renvois d\'au moins 5 min', async () => {
+      const config = await orderOn();
+      vi.setSystemTime(new Date('2026-07-15T10:10:00'));
+      relay().state = JSON.stringify({ state: 'OFF' });
+      (mqtt.publish as any).mockClear();
+      await tick(service, config);
+      vi.setSystemTime(new Date('2026-07-15T10:12:00'));
+      await tick(service, config);
+      expect(mqtt.publish).toHaveBeenCalledTimes(1);
+      vi.setSystemTime(new Date('2026-07-15T10:16:00'));
+      await tick(service, config);
+      expect(mqtt.publish).toHaveBeenCalledTimes(2);
+    });
+
+    it('mode été : coupe de nouveau un relais qui rapporte ON', async () => {
+      const config = await orderOn();
+      await service.setMode('summer'); // ordre OFF
+      vi.setSystemTime(new Date('2026-07-15T10:10:00'));
+      relay().state = JSON.stringify({ state: 'ON' });
+      (mqtt.publish as any).mockClear();
+      await tick(service, config);
+      expect(mqtt.publish).toHaveBeenCalledWith('zigbee2mqtt/relais/set', OFF);
+      expect(prisma.__events.at(-1)).toMatchObject({ action: 'OFF', reason: 'resync' });
+    });
+  });
 });

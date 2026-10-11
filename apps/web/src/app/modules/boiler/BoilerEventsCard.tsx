@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { api } from '@/lib/api';
 
 type OperatingMode = 'summer' | 'away' | 'planning' | 'forced';
-type Reason = 'regulation' | 'summer' | 'stale_sensor' | 'emergency_stop';
+type Reason = 'regulation' | 'summer' | 'stale_sensor' | 'emergency_stop' | 'resync';
 
 interface BoilerEvent {
   id: string;
@@ -37,6 +37,7 @@ const REASONS: Record<Reason, string> = {
   summer: 'Mode été',
   stale_sensor: 'Sonde périmée',
   emergency_stop: 'Arrêt du module',
+  resync: 'Ordre renvoyé (relais désynchronisé)',
 };
 
 const MODES: Record<OperatingMode, string> = {
