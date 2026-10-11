@@ -23,6 +23,10 @@ const PERIODS = [
   { value: '90', label: '90 j' },
 ];
 
+// Une barre pleine = 24 h de chauffe : la longueur est proportionnelle au temps de chauffe cumulé
+// du jour rapporté à la journée entière, et non au jour le plus chargé de la période.
+const MINUTES_PER_DAY = 24 * 60;
+
 function formatDuration(minutes: number): string {
   if (minutes === 0) return '0 min';
   const h = Math.floor(minutes / 60);
@@ -50,7 +54,6 @@ export function HeatingHistoryCard() {
   // Du plus récent au plus ancien : c'est le jour en cours qu'on veut voir en premier.
   const days = [...data.days].reverse();
   const total = days.reduce((sum, d) => sum + d.minutes, 0);
-  const max = Math.max(...days.map((d) => d.minutes), 1);
   const average = Math.round(total / Math.max(days.length, 1));
 
   return (
@@ -62,7 +65,7 @@ export function HeatingHistoryCard() {
         <SegmentedControl size="xs" value={period} onChange={setPeriod} data={PERIODS} />
       </Group>
       <Text size="xs" c="dimmed" mb="sm">
-        Total {formatDuration(total)} · moyenne {formatDuration(average)} / jour
+        Total {formatDuration(total)} · moyenne {formatDuration(average)} / jour · barre pleine = 24 h
       </Text>
       <Stack gap={6}>
         {days.map((d) => (
@@ -70,7 +73,7 @@ export function HeatingHistoryCard() {
             <Text size="xs" w={78} style={{ flexShrink: 0 }}>
               {formatDay(d.date)}
             </Text>
-            <Progress value={(d.minutes / max) * 100} color="orange" size="md" style={{ flex: 1 }} />
+            <Progress value={Math.min(100, (d.minutes / MINUTES_PER_DAY) * 100)} color="orange" size="md" style={{ flex: 1 }} />
             <Text size="xs" w={62} ta="right" style={{ flexShrink: 0 }}>
               {formatDuration(d.minutes)}
             </Text>
