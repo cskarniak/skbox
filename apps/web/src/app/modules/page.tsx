@@ -11,7 +11,7 @@ import {
   ThemeIcon,
   UnstyledButton,
 } from '@mantine/core';
-import { IconSmartHome, IconFlame, IconChevronRight, IconChartLine, IconVideo, IconAlertTriangle, IconCloudRain, IconAntenna, IconBulb, IconTemperature } from '@tabler/icons-react';
+import { IconSmartHome, IconFlame, IconChevronRight, IconChartLine, IconVideo, IconAlertTriangle, IconCloudRain, IconAntenna, IconBulb, IconTemperature, IconBolt } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import { AppNav } from '@/components/AppNav';
 
@@ -30,6 +30,13 @@ const MODULES: ModuleEntry[] = [
     description: 'Planning hebdomadaire, dérogation manuelle et protection anti-cycle court pour le relais de la chaudière.',
     icon: <IconFlame size={24} />,
     href: '/modules/boiler',
+  },
+  {
+    key: 'energy',
+    label: 'Analyse énergie',
+    description: 'Consommation électrique et temps de chauffe de la chaudière, jour par jour.',
+    icon: <IconBolt size={24} />,
+    href: '/modules/energy',
   },
   {
     key: 'history',

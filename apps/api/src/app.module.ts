@@ -13,6 +13,7 @@ import { SystemModule } from './system/system.module';
 import { SettingsModule } from './settings/settings.module';
 import { BackupModule } from './backup/backup.module';
 import { BoilerModule } from './boiler/boiler.module';
+import { EnergyModule } from './energy/energy.module';
 import { HistoryTemplatesModule } from './history-templates/history-templates.module';
 import { CameraModule } from './camera/camera.module';
 import { PrismaModule } from './prisma.module';
@@ -42,6 +43,7 @@ import { DisplayModule } from './display/display.module';
     SettingsModule,
     BackupModule,
     BoilerModule,
+    EnergyModule,
     HistoryTemplatesModule,
     CameraModule,
     WeatherModule,

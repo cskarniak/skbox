@@ -851,7 +851,7 @@ export default function BoilerPage() {
             leftSection={<IconChartBar size={16} />}
             onClick={() => router.push('/modules/boiler/history')}
           >
-            Analyse des temps de chauffe et historique
+            Historique des déclenchements
           </Button>
         </Stack>
       </AppShell.Main>

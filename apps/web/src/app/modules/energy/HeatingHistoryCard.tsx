@@ -60,7 +60,7 @@ export function HeatingHistoryCard() {
     <Card shadow="sm" padding="lg" withBorder>
       <Group justify="space-between" mb="xs">
         <Text size="sm" c="dimmed">
-          Temps de chauffe par jour
+          Temps de chauffe de la chaudière par jour
         </Text>
         <SegmentedControl size="xs" value={period} onChange={setPeriod} data={PERIODS} />
       </Group>

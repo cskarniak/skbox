@@ -6,11 +6,11 @@ import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { AppNav } from '@/components/AppNav';
-import { HeatingHistoryCard } from '../HeatingHistoryCard';
 import { BoilerEventsCard } from '../BoilerEventsCard';
 
-// Analyse des temps de chauffe et historique des déclenchements : séparés de la page Chaudière
-// pour que le planning et la régulation (l'essentiel) restent lisibles sans défiler.
+// Historique des déclenchements (changements de programme, cause, mesure...) : séparé de la page
+// Chaudière pour que le planning et la régulation restent lisibles sans défiler. L'analyse des temps
+// de chauffe est dans le module Analyse énergie.
 export default function BoilerHistoryPage() {
   const router = useRouter();
 
@@ -53,10 +53,8 @@ export default function BoilerHistoryPage() {
             <Text size="sm" c="dimmed">
               /
             </Text>
-            <Title order={4}>Analyse et historique</Title>
+            <Title order={4}>Historique</Title>
           </Group>
-
-          <HeatingHistoryCard />
 
           <BoilerEventsCard levelLabels={levelLabels} />
         </Stack>
