@@ -6,12 +6,12 @@ import { useState } from 'react';
 import { api } from '@/lib/api';
 
 type OperatingMode = 'summer' | 'away' | 'planning' | 'forced';
-type Reason = 'regulation' | 'summer' | 'stale_sensor' | 'emergency_stop' | 'resync';
+type Reason = 'regulation' | 'summer' | 'stale_sensor' | 'emergency_stop' | 'resync' | 'level_change';
 
 interface BoilerEvent {
   id: string;
   at: string;
-  action: 'ON' | 'OFF';
+  action: 'ON' | 'OFF' | 'CHANGE';
   reason: Reason;
   operatingMode: OperatingMode;
   level: string | null;
@@ -23,6 +23,8 @@ interface BoilerEvent {
   sensorAgeMinutes: number | null;
   overrideUntil: string | null;
   previousStateMinutes: number | null;
+  previousLevel: string | null;
+  previousOperatingMode: OperatingMode | null;
 }
 
 const PERIODS = [
@@ -38,6 +40,7 @@ const REASONS: Record<Reason, string> = {
   stale_sensor: 'Sonde périmée',
   emergency_stop: 'Arrêt du module',
   resync: 'Ordre renvoyé (relais désynchronisé)',
+  level_change: 'Changement de niveau',
 };
 
 const MODES: Record<OperatingMode, string> = {
@@ -105,8 +108,8 @@ export function BoilerEventsCard({ levelLabels }: { levelLabels?: Record<string,
                     {new Date(e.at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                   </Table.Td>
                   <Table.Td>
-                    <Badge size="sm" color={e.action === 'ON' ? 'orange' : 'gray'} variant="light">
-                      {e.action === 'ON' ? 'Allumée' : 'Éteinte'}
+                    <Badge size="sm" color={e.action === 'ON' ? 'orange' : e.action === 'CHANGE' ? 'blue' : 'gray'} variant="light">
+                      {e.action === 'ON' ? 'Allumée' : e.action === 'CHANGE' ? 'Changement' : 'Éteinte'}
                     </Badge>
                   </Table.Td>
                   <Table.Td>
@@ -114,6 +117,9 @@ export function BoilerEventsCard({ levelLabels }: { levelLabels?: Record<string,
                     {e.reason === 'stale_sensor' && e.sensorAgeMinutes !== null && ` (${formatDuration(e.sensorAgeMinutes)} sans mesure)`}
                   </Table.Td>
                   <Table.Td>
+                    {e.action === 'CHANGE' && e.previousOperatingMode && e.previousOperatingMode !== e.operatingMode
+                      ? `${MODES[e.previousOperatingMode] ?? e.previousOperatingMode} → `
+                      : ''}
                     {MODES[e.operatingMode] ?? e.operatingMode}
                     {e.overrideUntil && ` jusqu'à ${new Date(e.overrideUntil).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`}
                   </Table.Td>
@@ -121,7 +127,12 @@ export function BoilerEventsCard({ levelLabels }: { levelLabels?: Record<string,
                     {e.programName ?? '—'}
                     {e.exceptionName && ` (période : ${e.exceptionName})`}
                   </Table.Td>
-                  <Table.Td>{e.level ? (levelLabels?.[e.level] ?? e.level) : '—'}</Table.Td>
+                  <Table.Td>
+                    {e.action === 'CHANGE' && e.previousLevel !== e.level
+                      ? `${e.previousLevel ? (levelLabels?.[e.previousLevel] ?? e.previousLevel) : '—'} → `
+                      : ''}
+                    {e.level ? (levelLabels?.[e.level] ?? e.level) : '—'}
+                  </Table.Td>
                   <Table.Td ta="right">{formatTemp(e.targetTemp)}</Table.Td>
                   <Table.Td ta="right">{formatTemp(e.currentTemp)}</Table.Td>
                   <Table.Td ta="right">{e.hysteresis === null ? '—' : `±${e.hysteresis.toLocaleString('fr-FR')}`}</Table.Td>

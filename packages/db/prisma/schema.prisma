@@ -293,8 +293,8 @@ model HistoryTemplate {
 model BoilerEvent {
   id                   String    @id @default(cuid())
   at                   DateTime  @default(now())
-  action               String // "ON" | "OFF"
-  reason               String // "regulation" | "summer" | "stale_sensor" | "emergency_stop"
+  action               String // "ON" | "OFF" | "CHANGE" (changement de niveau/mode, sans commande au relais)
+  reason               String // "regulation" | "summer" | "stale_sensor" | "emergency_stop" | "resync" | "level_change"
   operatingMode        String // "planning" | "away" | "forced" | "summer"
   level                String?
   programName          String?
@@ -305,6 +305,8 @@ model BoilerEvent {
   sensorAgeMinutes     Int?
   overrideUntil        DateTime?
   previousStateMinutes Int? // durée passée dans l'état précédent (ON ou OFF)
+  previousLevel         String? // changement de niveau/mode : niveau précédent
+  previousOperatingMode String? // changement de niveau/mode : mode précédent
 
   @@index([at])
 }

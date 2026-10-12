@@ -684,4 +684,83 @@ describe('BoilerService', () => {
       expect(status.nextChange).toEqual({ at: new Date('2026-07-15T20:01:00').toISOString(), level: 'confort' });
     });
   });
+
+  describe('journal des changements de niveau', () => {
+    const allDays = { 0: 'p', 1: 'p', 2: 'p', 3: 'p', 4: 'p', 5: 'p', 6: 'p' };
+    const programs = [
+      {
+        id: 'p',
+        name: 'Semaine',
+        slots: [
+          { from: '06:00', to: '22:00', level: 'confort' as LevelKey },
+          { from: '22:01', to: '05:59', level: 'nuit' as LevelKey },
+        ],
+      },
+    ];
+    const changes = () => prisma.__events.filter((e: any) => e.reason === 'level_change');
+
+    it('journalise le passage Confort -> Nuit à 22:01 même sans commande au relais', async () => {
+      vi.setSystemTime(new Date('2026-07-15T21:59:00'));
+      setSensorTemp(prisma, 20.5); // au-dessus de toutes les cibles : relais éteint, aucune commande
+      const config = baseConfig({ programs, dayPrograms: allDays });
+      await service.setConfig(config);
+      expect(changes()).toHaveLength(0); // premier relevé : mémorisé seulement
+
+      vi.setSystemTime(new Date('2026-07-15T22:01:00'));
+      await tick(service, config);
+
+      expect(changes()).toHaveLength(1);
+      expect(changes()[0]).toMatchObject({
+        action: 'CHANGE',
+        reason: 'level_change',
+        operatingMode: 'planning',
+        level: 'nuit',
+        previousLevel: 'confort',
+        previousOperatingMode: 'planning',
+        programName: 'Semaine',
+        targetTemp: 16,
+        currentTemp: 20.5,
+        previousStateMinutes: null,
+      });
+    });
+
+    it('n\'ajoute rien tant que le niveau ne change pas', async () => {
+      vi.setSystemTime(new Date('2026-07-15T10:00:00'));
+      setSensorTemp(prisma, 20.5);
+      const config = baseConfig({ programs, dayPrograms: allDays });
+      await service.setConfig(config);
+      vi.setSystemTime(new Date('2026-07-15T10:01:00'));
+      await tick(service, config);
+      vi.setSystemTime(new Date('2026-07-15T10:02:00'));
+      await tick(service, config);
+      expect(changes()).toHaveLength(0);
+    });
+
+    it('journalise l\'entrée et la sortie d\'une dérogation (forcé) et d\'un changement de mode', async () => {
+      vi.setSystemTime(new Date('2026-07-15T10:00:00'));
+      setSensorTemp(prisma, 20.5);
+      await service.setConfig(baseConfig({ programs, dayPrograms: allDays }));
+
+      await service.setBoost('confort_plus', 60);
+      expect(changes().at(-1)).toMatchObject({ operatingMode: 'forced', level: 'confort_plus', previousLevel: 'confort', previousOperatingMode: 'planning' });
+
+      await service.clearBoost();
+      expect(changes().at(-1)).toMatchObject({ operatingMode: 'planning', level: 'confort', previousLevel: 'confort_plus', previousOperatingMode: 'forced' });
+
+      await service.setMode('summer');
+      expect(changes().at(-1)).toMatchObject({ operatingMode: 'summer', level: null, targetTemp: null, previousLevel: 'confort', previousOperatingMode: 'planning' });
+      expect(changes()).toHaveLength(3);
+    });
+
+    it('un changement de niveau n\'envoie aucune commande au relais', async () => {
+      vi.setSystemTime(new Date('2026-07-15T21:59:00'));
+      setSensorTemp(prisma, 20.5);
+      const config = baseConfig({ programs, dayPrograms: allDays });
+      await service.setConfig(config);
+      (mqtt.publish as any).mockClear();
+      vi.setSystemTime(new Date('2026-07-15T22:01:00'));
+      await tick(service, config);
+      expect(mqtt.publish).not.toHaveBeenCalledWith('zigbee2mqtt/relais/set', expect.stringContaining('ON'));
+    });
+  });
 });

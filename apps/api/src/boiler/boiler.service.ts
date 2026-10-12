@@ -83,6 +83,9 @@ interface BoilerState {
   override: BoilerOverride | null;
   lastChangeAt: string | null;
   lastCommandedState: 'ON' | 'OFF' | null;
+  // Dernier « mode|niveau » constaté (ex. "planning|confort"), pour détecter et journaliser les
+  // changements de niveau même quand ils ne provoquent aucune commande au relais.
+  lastLevelKey: string | null;
   enabled: boolean;
 }
 
@@ -139,12 +142,12 @@ const SENSOR_STALE_MS = 90 * 60_000;
 // Les déclenchements (BoilerEvent) sont conservés un an : quelques dizaines par jour au plus.
 const EVENT_RETENTION_DAYS = 365;
 
-export type BoilerEventReason = 'regulation' | 'summer' | 'stale_sensor' | 'emergency_stop' | 'resync';
+export type BoilerEventReason = 'regulation' | 'summer' | 'stale_sensor' | 'emergency_stop' | 'resync' | 'level_change';
 
 export interface BoilerEventDto {
   id: string;
   at: string;
-  action: 'ON' | 'OFF';
+  action: 'ON' | 'OFF' | 'CHANGE'; // CHANGE : changement de niveau/mode, sans commande au relais
   reason: BoilerEventReason;
   operatingMode: OperatingMode;
   level: LevelKey | null;
@@ -156,6 +159,8 @@ export interface BoilerEventDto {
   sensorAgeMinutes: number | null;
   overrideUntil: string | null;
   previousStateMinutes: number | null;
+  previousLevel: LevelKey | null;
+  previousOperatingMode: OperatingMode | null;
 }
 
 // Renvoi de l'ordre : si le relais rapporte un état différent du dernier ordre (relais redémarré
@@ -189,6 +194,7 @@ const DEFAULT_STATE: BoilerState = {
   override: null,
   lastChangeAt: null,
   lastCommandedState: null,
+  lastLevelKey: null,
   enabled: true,
 };
 
@@ -455,6 +461,38 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
     return { deviceId: state.deviceId, days: computeDailyHeating(transitions, initial, span, now) };
   }
 
+  // Journalise les changements de niveau ou de mode (ex. Confort -> Nuit à 22:01), qu'ils provoquent
+  // ou non une commande au relais : à 22 h la chaudière est souvent déjà éteinte, et sans cela le
+  // passage en Nuit ne laisserait aucune trace. Le premier relevé après le déploiement est seulement
+  // mémorisé. Appelée à chaque évaluation, avant les branches qui sortent tôt (été, sonde périmée).
+  private async trackLevelChange(state: BoilerState): Promise<void> {
+    const activeOverride = this.activeOverride(state);
+    const mode: OperatingMode = activeOverride ? 'forced' : state.baseMode;
+    const level: LevelKey | null =
+      state.baseMode === 'summer' && !activeOverride ? null : this.computeActiveLevel(state, activeOverride);
+    const key = `${mode}|${level ?? '-'}`;
+    if (state.lastLevelKey === key) return;
+
+    const previousKey = state.lastLevelKey;
+    state.lastLevelKey = key;
+    await this.saveState(state);
+    if (previousKey === null) return;
+
+    const [prevMode, prevLevel] = previousKey.split('|');
+    await this.recordEvent(
+      state,
+      'CHANGE',
+      'level_change',
+      await this.readCurrentTemp(state),
+      await this.sensorAgeMs(state),
+      {
+        level: prevLevel && prevLevel !== '-' ? (prevLevel as LevelKey) : null,
+        operatingMode: prevMode as OperatingMode,
+      },
+    );
+    this.logger.log(`Chaudière : changement ${previousKey} -> ${key}`);
+  }
+
   // Renvoie le dernier ordre quand le relais (en ligne) rapporte l'état inverse. Ne touche jamais au
   // dernier ordre mémorisé ni à lastChangeAt : c'est le même ordre, simplement redélivré.
   private async resyncRelay(state: BoilerState, currentTemp: number | null, sensorAgeMs: number | null): Promise<void> {
@@ -486,10 +524,11 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
   // précédent). Un échec d'écriture ne doit jamais empêcher la régulation : on journalise et on continue.
   private async recordEvent(
     state: BoilerState,
-    action: 'ON' | 'OFF',
+    action: 'ON' | 'OFF' | 'CHANGE',
     reason: BoilerEventReason,
     currentTemp: number | null,
     sensorAgeMs: number | null,
+    previous?: { level: LevelKey | null; operatingMode: OperatingMode | null },
   ): Promise<void> {
     try {
       const now = new Date();
@@ -510,9 +549,12 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
           hysteresis: state.hysteresis,
           sensorAgeMinutes: sensorAgeMs === null ? null : Math.floor(sensorAgeMs / 60_000),
           overrideUntil: activeOverride ? new Date(activeOverride.until) : null,
-          previousStateMinutes: state.lastChangeAt
-            ? Math.max(0, Math.round((now.getTime() - new Date(state.lastChangeAt).getTime()) / 60_000))
-            : null,
+          previousStateMinutes:
+            action !== 'CHANGE' && state.lastChangeAt
+              ? Math.max(0, Math.round((now.getTime() - new Date(state.lastChangeAt).getTime()) / 60_000))
+              : null,
+          previousLevel: previous?.level ?? null,
+          previousOperatingMode: previous?.operatingMode ?? null,
         },
       });
     } catch (err) {
@@ -531,7 +573,7 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
     return rows.map((r) => ({
       id: r.id,
       at: r.at.toISOString(),
-      action: r.action as 'ON' | 'OFF',
+      action: r.action as 'ON' | 'OFF' | 'CHANGE',
       reason: r.reason as BoilerEventReason,
       operatingMode: r.operatingMode as OperatingMode,
       level: r.level as LevelKey | null,
@@ -543,6 +585,8 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
       sensorAgeMinutes: r.sensorAgeMinutes,
       overrideUntil: r.overrideUntil ? r.overrideUntil.toISOString() : null,
       previousStateMinutes: r.previousStateMinutes,
+      previousLevel: r.previousLevel as LevelKey | null,
+      previousOperatingMode: r.previousOperatingMode as OperatingMode | null,
     }));
   }
 
@@ -741,6 +785,8 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
       state.override = null;
       await this.saveState(state);
     }
+
+    await this.trackLevelChange(state);
 
     // Mode été : aucun déclenchement, quelle que soit la température. On s'assure juste que le
     // relais est coupé (sans anti-cycle : l'arrêt est immédiat) puis on ne fait plus rien.
