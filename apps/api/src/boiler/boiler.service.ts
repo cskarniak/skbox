@@ -683,10 +683,16 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
     if (!program) return null;
 
     const current = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const slot = program.slots.find((s) => {
-      if (s.from <= s.to) return current >= s.from && current < s.to;
-      return current >= s.from || current < s.to; // créneau traversant minuit
-    });
+    // L'heure de fin d'un créneau est comprise : « 19:01 – 20:00 » couvre toute la minute 20:00, sinon
+    // un créneau suivant qui commence à 20:01 laisserait un trou d'une minute où le niveau par défaut
+    // (Éco) s'appliquerait entre deux niveaux de confort. Si deux créneaux se touchent exactement
+    // (fin 08:00, début 08:00 : permis par assertNoOverlap), celui qui commence à cette minute prime.
+    const matches = (s: ProgramSlot) =>
+      s.from <= s.to
+        ? current >= s.from && current <= s.to
+        : current >= s.from || current <= s.to; // créneau traversant minuit
+    const candidates = program.slots.filter(matches);
+    const slot = candidates.find((s) => s.from === current) ?? candidates[0];
     return slot?.level ?? null;
   }
 

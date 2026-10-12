@@ -619,4 +619,69 @@ describe('BoilerService', () => {
       expect(prisma.__events.at(-1)).toMatchObject({ action: 'OFF', reason: 'resync' });
     });
   });
+
+  describe('jonction des créneaux (fin comprise)', () => {
+    const allDays = { 0: 'p', 1: 'p', 2: 'p', 3: 'p', 4: 'p', 5: 'p', 6: 'p' };
+    async function levelAt(time: string, slots: { from: string; to: string; level: LevelKey }[]) {
+      vi.setSystemTime(new Date(`2026-07-15T${time}`));
+      setSensorTemp(prisma, 18);
+      await service.setConfig(baseConfig({ programs: [{ id: 'p', name: 'P', slots }], dayPrograms: allDays, defaultLevel: 'eco' }));
+      return (await service.getStatus()).activeLevel;
+    }
+
+    it('ne laisse pas de trou d\'une minute entre 19:01–20:00 et 20:01–22:00', async () => {
+      const slots = [
+        { from: '19:01', to: '20:00', level: 'confort_plus' as LevelKey },
+        { from: '20:01', to: '22:00', level: 'confort' as LevelKey },
+      ];
+      expect(await levelAt('20:00:40', slots)).toBe('confort_plus'); // avant : eco (niveau par défaut)
+      expect(await levelAt('20:01:00', slots)).toBe('confort');
+      expect(await levelAt('22:00:30', slots)).toBe('confort'); // fin comprise
+      expect(await levelAt('22:01:00', slots)).toBe('eco'); // plus aucun créneau
+    });
+
+    it('un enchaînement exact (fin = début suivant) donne la main au créneau qui commence', async () => {
+      const slots = [
+        { from: '06:00', to: '08:00', level: 'confort' as LevelKey },
+        { from: '08:00', to: '10:00', level: 'nuit' as LevelKey },
+      ];
+      expect(await levelAt('07:59:00', slots)).toBe('confort');
+      expect(await levelAt('08:00:10', slots)).toBe('nuit');
+      expect(await levelAt('10:00:10', slots)).toBe('nuit'); // fin comprise du dernier
+    });
+
+    it('couvre la jonction autour de minuit : 22:01–05:59 puis 06:00', async () => {
+      const slots = [
+        { from: '22:01', to: '05:59', level: 'nuit' as LevelKey },
+        { from: '06:00', to: '22:00', level: 'confort' as LevelKey },
+      ];
+      expect(await levelAt('05:59:30', slots)).toBe('nuit');
+      expect(await levelAt('06:00:00', slots)).toBe('confort');
+      expect(await levelAt('22:00:30', slots)).toBe('confort');
+      expect(await levelAt('23:30:00', slots)).toBe('nuit');
+    });
+
+    it('le prochain changement affiché tombe à la minute qui suit la fin du créneau', async () => {
+      vi.setSystemTime(new Date('2026-07-15T19:30:00'));
+      setSensorTemp(prisma, 18);
+      await service.setConfig(
+        baseConfig({
+          programs: [
+            {
+              id: 'p',
+              name: 'P',
+              slots: [
+                { from: '19:01', to: '20:00', level: 'confort_plus' },
+                { from: '20:01', to: '22:00', level: 'confort' },
+              ],
+            },
+          ],
+          dayPrograms: allDays,
+        }),
+      );
+      const status = await service.getStatus();
+      expect(status.activeLevel).toBe('confort_plus');
+      expect(status.nextChange).toEqual({ at: new Date('2026-07-15T20:01:00').toISOString(), level: 'confort' });
+    });
+  });
 });
