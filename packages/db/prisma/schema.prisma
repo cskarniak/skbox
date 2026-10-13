@@ -307,6 +307,8 @@ model BoilerEvent {
   previousStateMinutes Int? // durée passée dans l'état précédent (ON ou OFF)
   previousLevel         String? // changement de niveau/mode : niveau précédent
   previousOperatingMode String? // changement de niveau/mode : mode précédent
+  relayStatus           String? // ordre ON/OFF : "pending" | "confirmed" | "unconfirmed" (null : pas d'ordre, ou avant cette fonction)
+  relayConfirmedAt      DateTime? // instant où le relais a rapporté le nouvel état
 
   @@index([at])
 }

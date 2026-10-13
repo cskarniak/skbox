@@ -25,6 +25,8 @@ interface BoilerEvent {
   previousStateMinutes: number | null;
   previousLevel: string | null;
   previousOperatingMode: OperatingMode | null;
+  relayStatus: 'pending' | 'confirmed' | 'unconfirmed' | null;
+  relayConfirmedAt: string | null;
 }
 
 const PERIODS = [
@@ -57,6 +59,33 @@ function formatDuration(minutes: number | null): string {
   return h === 0 ? `${m} min` : `${h} h ${String(m).padStart(2, '0')}`;
 }
 
+// Colonne « Relais » : le relais a-t-il accusé réception de l'ordre (et en combien de temps) ?
+function RelayCell({ e }: { e: BoilerEvent }) {
+  if (e.relayStatus === 'confirmed') {
+    const seconds = e.relayConfirmedAt ? Math.max(0, Math.round((new Date(e.relayConfirmedAt).getTime() - new Date(e.at).getTime()) / 1000)) : null;
+    return (
+      <Badge size="sm" color="teal" variant="light">
+        Confirmé{seconds !== null ? ` (${seconds < 60 ? `${seconds} s` : `${Math.round(seconds / 60)} min`})` : ''}
+      </Badge>
+    );
+  }
+  if (e.relayStatus === 'unconfirmed') {
+    return (
+      <Badge size="sm" color="red" variant="filled">
+        Sans réponse
+      </Badge>
+    );
+  }
+  if (e.relayStatus === 'pending') {
+    return (
+      <Badge size="sm" color="gray" variant="light">
+        En attente
+      </Badge>
+    );
+  }
+  return <>—</>;
+}
+
 function formatTemp(value: number | null): string {
   return value === null ? '—' : `${value.toLocaleString('fr-FR', { maximumFractionDigits: 1 })}°`;
 }
@@ -85,7 +114,7 @@ export function BoilerEventsCard({ levelLabels }: { levelLabels?: Record<string,
           Aucun déclenchement sur la période.
         </Text>
       ) : (
-        <Table.ScrollContainer minWidth={820}>
+        <Table.ScrollContainer minWidth={920}>
           <Table striped highlightOnHover verticalSpacing={4} fz="xs">
             <Table.Thead>
               <Table.Tr>
@@ -99,6 +128,7 @@ export function BoilerEventsCard({ levelLabels }: { levelLabels?: Record<string,
                 <Table.Th ta="right">Mesurée</Table.Th>
                 <Table.Th ta="right">Hystérésis</Table.Th>
                 <Table.Th ta="right">État précédent</Table.Th>
+                <Table.Th>Relais</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -137,6 +167,9 @@ export function BoilerEventsCard({ levelLabels }: { levelLabels?: Record<string,
                   <Table.Td ta="right">{formatTemp(e.currentTemp)}</Table.Td>
                   <Table.Td ta="right">{e.hysteresis === null ? '—' : `±${e.hysteresis.toLocaleString('fr-FR')}`}</Table.Td>
                   <Table.Td ta="right">{formatDuration(e.previousStateMinutes)}</Table.Td>
+                  <Table.Td>
+                    <RelayCell e={e} />
+                  </Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>

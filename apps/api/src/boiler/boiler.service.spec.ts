@@ -17,7 +17,16 @@ function makeFakePrisma(devices: FakeDevice[]) {
         events.push({ id: `e${events.length + 1}`, ...data });
         return data;
       }),
-      findMany: vi.fn(async () => [...events].reverse()),
+      findMany: vi.fn(async (args: any = {}) => {
+        let rows = [...events];
+        if (args.where?.relayStatus) rows = rows.filter((e) => e.relayStatus === args.where.relayStatus);
+        return args.orderBy?.at === 'asc' ? rows : rows.reverse();
+      }),
+      update: vi.fn(async ({ where: { id }, data }: { where: { id: string }; data: any }) => {
+        const e = events.find((x) => x.id === id);
+        if (e) Object.assign(e, data);
+        return e;
+      }),
       deleteMany: vi.fn(async () => ({ count: 0 })),
     },
     __events: events,
@@ -761,6 +770,79 @@ describe('BoilerService', () => {
       vi.setSystemTime(new Date('2026-07-15T22:01:00'));
       await tick(service, config);
       expect(mqtt.publish).not.toHaveBeenCalledWith('zigbee2mqtt/relais/set', expect.stringContaining('ON'));
+    });
+  });
+
+  describe('confirmation des ordres par le relais', () => {
+    const relay = () => devicesById.get(RELAY_ID)!;
+    const orders = () => prisma.__events.filter((e: any) => e.action !== 'CHANGE');
+
+    async function orderOn() {
+      const config = baseConfig({ defaultLevel: 'confort', minOnMinutes: 0, minOffMinutes: 0 });
+      setSensorTemp(prisma, 15);
+      await service.setConfig(config); // ordre ON à 10:00:00
+      return config;
+    }
+
+    it('l\'ordre est « en attente » à l\'envoi', async () => {
+      await orderOn();
+      expect(orders()[0]).toMatchObject({ action: 'ON', relayStatus: 'pending' });
+    });
+
+    it('confirme l\'ordre quand le relais rapporte l\'état ordonné après l\'envoi', async () => {
+      const config = await orderOn();
+      relay().state = JSON.stringify({ state: 'ON' });
+      relay().lastSeen = new Date('2026-07-15T10:00:03');
+      vi.setSystemTime(new Date('2026-07-15T10:01:00'));
+      await tick(service, config);
+      expect(orders()[0].relayStatus).toBe('confirmed');
+      expect(orders()[0].relayConfirmedAt).toEqual(new Date('2026-07-15T10:00:03'));
+    });
+
+    it('ne confirme pas avec un rapport antérieur à l\'ordre', async () => {
+      const config = await orderOn();
+      relay().state = JSON.stringify({ state: 'ON' });
+      relay().lastSeen = new Date('2026-07-15T09:30:00'); // avant l'ordre de 10:00
+      vi.setSystemTime(new Date('2026-07-15T10:01:00'));
+      await tick(service, config);
+      expect(orders()[0].relayStatus).toBe('pending');
+    });
+
+    it('marque « sans réponse » un ordre non confirmé au bout de 2 min', async () => {
+      const config = await orderOn();
+      relay().state = JSON.stringify({ state: 'OFF' }); // relais resté éteint, hors ligne
+      relay().lastSeen = new Date('2026-07-15T09:00:00');
+      vi.setSystemTime(new Date('2026-07-15T10:01:30'));
+      await tick(service, config);
+      expect(orders()[0].relayStatus).toBe('pending'); // < 2 min
+      vi.setSystemTime(new Date('2026-07-15T10:02:30'));
+      await tick(service, config);
+      expect(orders()[0].relayStatus).toBe('unconfirmed');
+    });
+
+    it('confirme aussi un ordre OFF et ne confond pas deux ordres successifs', async () => {
+      const config = await orderOn();
+      relay().state = JSON.stringify({ state: 'ON' });
+      relay().lastSeen = new Date('2026-07-15T10:00:02');
+      vi.setSystemTime(new Date('2026-07-15T10:05:00'));
+      setSensorTemp(prisma, 22);
+      await tick(service, config); // confirme ON puis ordonne OFF
+      expect(orders().map((e: any) => [e.action, e.relayStatus])).toEqual([['ON', 'confirmed'], ['OFF', 'pending']]);
+
+      relay().state = JSON.stringify({ state: 'OFF' });
+      relay().lastSeen = new Date('2026-07-15T10:05:02');
+      vi.setSystemTime(new Date('2026-07-15T10:06:00'));
+      await tick(service, config);
+      expect(orders().map((e: any) => e.relayStatus)).toEqual(['confirmed', 'confirmed']);
+    });
+
+    it('un changement de niveau n\'a pas de statut de relais', async () => {
+      vi.setSystemTime(new Date('2026-07-15T10:00:00'));
+      setSensorTemp(prisma, 20.5);
+      await service.setConfig(baseConfig());
+      await service.setBoost('confort_plus', 60);
+      const change = prisma.__events.find((e: any) => e.action === 'CHANGE');
+      expect(change.relayStatus).toBeNull();
     });
   });
 });

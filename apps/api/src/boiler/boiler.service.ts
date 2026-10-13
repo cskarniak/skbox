@@ -161,7 +161,14 @@ export interface BoilerEventDto {
   previousStateMinutes: number | null;
   previousLevel: LevelKey | null;
   previousOperatingMode: OperatingMode | null;
+  // Ordre ON/OFF : le relais a-t-il accusé réception ? (null : changement de niveau, sans ordre)
+  relayStatus: 'pending' | 'confirmed' | 'unconfirmed' | null;
+  relayConfirmedAt: string | null;
 }
+
+// Un ordre est confirmé quand le relais rapporte le nouvel état ; sans rapport au bout de ce délai
+// (relais hors ligne, ordre perdu), il est marqué « sans réponse » dans le journal.
+const RELAY_CONFIRM_TIMEOUT_MS = 2 * 60_000;
 
 // Renvoi de l'ordre : si le relais rapporte un état différent du dernier ordre (relais redémarré
 // éteint après une coupure, ordre perdu pendant qu'il était hors ligne), on le renvoie. Délais pour
@@ -461,6 +468,45 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
     return { deviceId: state.deviceId, days: computeDailyHeating(transitions, initial, span, now) };
   }
 
+  // Confirme dans le journal les ordres envoyés au relais : confirmé dès que le relais rapporte l'état
+  // ordonné (Zigbee2MQTT ne publie le nouvel état qu'après l'accusé du relais ; relais hors ligne, il
+  // ne publie rien), « sans réponse » si rien n'est revenu au bout de RELAY_CONFIRM_TIMEOUT_MS.
+  // Un échec ne doit jamais gêner la régulation.
+  private async checkRelayConfirmations(deviceId: string): Promise<void> {
+    try {
+      const pending = await this.prisma.boilerEvent.findMany({
+        where: { relayStatus: 'pending' },
+        orderBy: { at: 'asc' },
+        take: 20,
+      });
+      if (pending.length === 0) return;
+
+      const device = await this.prisma.device.findUnique({ where: { id: deviceId } });
+      let reported: unknown;
+      try {
+        reported = JSON.parse(device?.state || '{}').state;
+      } catch {
+        reported = undefined;
+      }
+      const lastSeen = device?.lastSeen ? new Date(device.lastSeen) : null;
+      const now = Date.now();
+
+      for (const e of pending) {
+        if (lastSeen && reported === e.action && lastSeen.getTime() >= e.at.getTime()) {
+          await this.prisma.boilerEvent.update({
+            where: { id: e.id },
+            data: { relayStatus: 'confirmed', relayConfirmedAt: lastSeen },
+          });
+        } else if (now - e.at.getTime() > RELAY_CONFIRM_TIMEOUT_MS) {
+          await this.prisma.boilerEvent.update({ where: { id: e.id }, data: { relayStatus: 'unconfirmed' } });
+          this.logger.warn(`Chaudière : le relais n'a pas confirmé l'ordre ${e.action} de ${e.at.toISOString()}`);
+        }
+      }
+    } catch (err) {
+      this.logger.error(`Chaudière : confirmation des ordres impossible (${(err as Error).message})`);
+    }
+  }
+
   // Journalise les changements de niveau ou de mode (ex. Confort -> Nuit à 22:01), qu'ils provoquent
   // ou non une commande au relais : à 22 h la chaudière est souvent déjà éteinte, et sans cela le
   // passage en Nuit ne laisserait aucune trace. Le premier relevé après le déploiement est seulement
@@ -555,6 +601,7 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
               : null,
           previousLevel: previous?.level ?? null,
           previousOperatingMode: previous?.operatingMode ?? null,
+          relayStatus: action === 'CHANGE' ? null : 'pending',
         },
       });
     } catch (err) {
@@ -587,6 +634,8 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
       previousStateMinutes: r.previousStateMinutes,
       previousLevel: r.previousLevel as LevelKey | null,
       previousOperatingMode: r.previousOperatingMode as OperatingMode | null,
+      relayStatus: r.relayStatus as 'pending' | 'confirmed' | 'unconfirmed' | null,
+      relayConfirmedAt: r.relayConfirmedAt ? r.relayConfirmedAt.toISOString() : null,
     }));
   }
 
@@ -777,6 +826,7 @@ export class BoilerService implements OnModuleInit, OnModuleDestroy {
 
   private async evaluate(): Promise<void> {
     const state = await this.loadState();
+    if (state.deviceId) await this.checkRelayConfirmations(state.deviceId);
     if (!state.deviceId || !state.enabled) return;
 
     const activeOverride = this.activeOverride(state);
