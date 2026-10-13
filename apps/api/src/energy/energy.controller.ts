@@ -7,6 +7,11 @@ import { EnergyService } from './energy.service';
 export class EnergyController {
   constructor(private readonly energy: EnergyService) {}
 
+  @Get('outages')
+  getOutages(@Query('days') days?: string) {
+    return this.energy.getPowerOutages(Number(days));
+  }
+
   @Get('electricity')
   getElectricity(@Query('days') days?: string) {
     return this.energy.getElectricityDaily(Number(days));

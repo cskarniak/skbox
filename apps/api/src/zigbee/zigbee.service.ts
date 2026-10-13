@@ -349,6 +349,14 @@ export class ZigbeeService implements OnModuleInit, OnModuleDestroy {
     }
     if (!device.active) return;
 
+    // Les passages en ligne / hors ligne sont conservés (événement « availability », ignoré par les
+    // historiques de valeurs) : ils servent à corroborer une coupure de courant, quand les appareils
+    // branchés sur le secteur deviennent muets en même temps que le compteur tombe à 0 W.
+    if (device.status !== state) {
+      await this.prisma.deviceEvent.create({
+        data: { deviceId: device.id, event: 'availability', data: JSON.stringify({ state }) },
+      });
+    }
     await this.prisma.device.update({
       where: { id: device.id },
       data: { status: state },

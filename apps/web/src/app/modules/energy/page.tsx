@@ -6,9 +6,10 @@ import { useRouter } from 'next/navigation';
 import { AppNav } from '@/components/AppNav';
 import { ElectricityCard } from './ElectricityCard';
 import { HeatingHistoryCard } from './HeatingHistoryCard';
+import { OutagesCard } from './OutagesCard';
 
-// Analyse de la consommation d'énergie : électricité (compteur du tableau) et chaudière (temps de
-// chauffe), jour par jour. L'historique des déclenchements de la chaudière reste dans son module.
+// Analyse de la consommation d'énergie : électricité (compteur du tableau), chaudière (temps de
+// chauffe) jour par jour, et coupures de courant. L'historique des déclenchements de la chaudière reste dans son module.
 export default function EnergyPage() {
   const router = useRouter();
 
@@ -45,6 +46,8 @@ export default function EnergyPage() {
           <ElectricityCard />
 
           <HeatingHistoryCard />
+
+          <OutagesCard />
         </Stack>
       </AppShell.Main>
     </AppShell>
